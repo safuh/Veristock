@@ -9,9 +9,9 @@ from veristock.core.database import Base
 from veristock.identity import (
     MembershipRole, Organization, OrganizationMembership, Permission,
     RefreshToken, Role, RolePermission, User,
-)
-from veristock.organizations.models import Branch, OrganizationContact
-from veristock.workforce.models import EmployeeProfile
+)  # noqa: F401
+from veristock.organizations.models import Branch, OrganizationContact  # noqa: F401
+from veristock.workforce.models import EmployeeProfile  # noqa: F401
 
 config = context.config
 settings = get_settings()
