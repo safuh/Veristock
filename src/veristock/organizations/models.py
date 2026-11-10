@@ -2,8 +2,10 @@
 """Tenant-owned branch and contact persistence models."""
 from datetime import datetime
 from uuid import uuid4
+
 from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
+
 from veristock.core.database import Base
 
 class Branch(Base):
