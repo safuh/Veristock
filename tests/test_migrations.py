@@ -44,7 +44,7 @@ async def test_alembic_upgrade_and_downgrade() -> None:
                 text("SELECT COUNT(*) FROM roles")
             )
             role_count = result.scalar_one()
-        assert {"id", "identifier", "password_hash", "created_at"} <= user_columns
+        assert {"id", "identifier", "password_hash", "status", "created_at"} <= user_columns
         assert {"token_id", "subject", "expires_at", "revoked"} <= refresh_token_columns
         assert permission_count > 0
         assert role_count == 10
