@@ -57,7 +57,7 @@ class Settings(BaseSettings):
         ]
     )
     cors_allow_headers: list[str] = Field(
-        default_factory=lambda: ["Authorization", "Content-Type", "X-Request-ID"]
+        default_factory=lambda: ["Authorization", "Content-Type", "X-Request-ID", "X-CSRF-Token"]
     )
 
     @model_validator(mode="after")
