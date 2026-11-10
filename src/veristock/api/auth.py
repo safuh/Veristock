@@ -1,5 +1,7 @@
 """HTTP transport for the password authentication lifecycle."""
 
+import hmac
+import secrets
 from collections.abc import Callable
 from typing import Annotated
 
@@ -16,9 +18,13 @@ from ..auth import (
     RegistrationRequest,
     TokenError,
 )
+from ..core.config import Environment
 from ..core.errors import BackboneError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+REFRESH_COOKIE = "veristock_refresh"
+CSRF_COOKIE = "veristock_csrf"
+CSRF_HEADER = "X-CSRF-Token"
 
 
 class CredentialsRequest(BaseModel):
@@ -167,3 +173,166 @@ async def logout(
     finally:
         await session.close()
     return Response(status_code=204)
+
+
+
+class BrowserTokenResponseModel(BaseModel):
+    """Browser login/refresh response; refresh token is cookie-only."""
+
+    subject: str
+    access_token: str
+
+
+def _cookie_security(request: Request) -> bool:
+    """Use Secure cookies in production; permit HTTP localhost development."""
+    return request.app.state.settings.environment is Environment.PRODUCTION
+
+
+def _set_browser_cookies(
+    response: Response, request: Request, refresh_token: str
+) -> None:
+    """Set the HttpOnly refresh cookie and double-submit CSRF cookie."""
+    settings = request.app.state.settings
+    secure = _cookie_security(request)
+    csrf_token = secrets.token_urlsafe(32)
+    cookie_options = {
+        "secure": secure,
+        "samesite": "lax",
+        "path": "/",
+        "max_age": settings.refresh_token_lifetime_seconds,
+    }
+    response.set_cookie(
+        REFRESH_COOKIE,
+        refresh_token,
+        httponly=True,
+        **cookie_options,
+    )
+    response.set_cookie(
+        CSRF_COOKIE,
+        csrf_token,
+        httponly=False,
+        **cookie_options,
+    )
+
+
+def _validate_browser_csrf(request: Request) -> None:
+    """Validate the double-submit CSRF token for cookie-authenticated actions."""
+    cookie_token = request.cookies.get(CSRF_COOKIE)
+    header_token = request.headers.get(CSRF_HEADER)
+    if (
+        not cookie_token
+        or not header_token
+        or not hmac.compare_digest(cookie_token, header_token)
+    ):
+        raise BackboneError(
+            "csrf_validation_failed",
+            "A valid CSRF token is required",
+            status.HTTP_403_FORBIDDEN,
+        )
+
+
+def _clear_browser_cookies(response: Response, request: Request) -> None:
+    """Clear browser authentication cookies after logout."""
+    secure = _cookie_security(request)
+    for name, httponly in ((REFRESH_COOKIE, True), (CSRF_COOKIE, False)):
+        response.delete_cookie(
+            name,
+            path="/",
+            secure=secure,
+            httponly=httponly,
+            samesite="lax",
+        )
+
+
+@router.post("/browser/login", response_model=BrowserTokenResponseModel)
+async def browser_login(
+    request: Request,
+    body: CredentialsRequest,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(_session)],
+) -> BrowserTokenResponseModel:
+    """Authenticate a browser and keep its refresh token out of JavaScript."""
+    try:
+        result = await _application(request, session).login(
+            LoginRequest(identifier=body.identifier, password=body.password)
+        )
+        await session.commit()
+    except AuthenticationError as exc:
+        await session.rollback()
+        raise BackboneError(
+            "invalid_credentials", "Invalid credentials", status.HTTP_401_UNAUTHORIZED
+        ) from exc
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
+
+    _set_browser_cookies(response, request, result.refresh_token)
+    return BrowserTokenResponseModel(
+        subject=result.subject,
+        access_token=result.access_token,
+    )
+
+
+@router.post("/browser/refresh", response_model=BrowserTokenResponseModel)
+async def browser_refresh(
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(_session)],
+) -> BrowserTokenResponseModel:
+    """Rotate the HttpOnly refresh cookie after CSRF validation."""
+    _validate_browser_csrf(request)
+    refresh_token = request.cookies.get(REFRESH_COOKIE)
+    if not refresh_token:
+        raise BackboneError(
+            "refresh_cookie_missing",
+            "Browser refresh session is unavailable",
+            status.HTTP_401_UNAUTHORIZED,
+        )
+    try:
+        result = await _application(request, session).refresh(refresh_token)
+        await session.commit()
+    except TokenError as exc:
+        await session.rollback()
+        raise BackboneError(
+            "invalid_refresh_token", "Invalid refresh token", status.HTTP_401_UNAUTHORIZED
+        ) from exc
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
+
+    _set_browser_cookies(response, request, result.refresh_token)
+    return BrowserTokenResponseModel(
+        subject=result.subject,
+        access_token=result.access_token,
+    )
+
+
+@router.post("/browser/logout", status_code=204)
+async def browser_logout(
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(_session)],
+) -> Response:
+    """Revoke the HttpOnly refresh cookie and clear browser auth cookies."""
+    _validate_browser_csrf(request)
+    refresh_token = request.cookies.get(REFRESH_COOKIE)
+    if refresh_token:
+        try:
+            await _application(request, session).logout(refresh_token)
+            await session.commit()
+        except TokenError as exc:
+            await session.rollback()
+            raise BackboneError(
+                "invalid_refresh_token", "Invalid refresh token", status.HTTP_401_UNAUTHORIZED
+            ) from exc
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+    _clear_browser_cookies(response, request)
+    return response
