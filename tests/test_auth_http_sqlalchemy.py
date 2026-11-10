@@ -72,3 +72,17 @@ async def test_auth_http_uses_sqlalchemy_composition(tmp_path: Path) -> None:
             json={"refresh_token": refreshed.json()["refresh_token"]},
         )
         assert revoked.status_code == 401
+
+
+def test_self_registration_is_disabled_by_default() -> None:
+    settings = Settings(
+        environment=Environment.TEST,
+        database_url="sqlite+aiosqlite:///:memory:",
+    )
+    with TestClient(create_app(settings)) as client:
+        response = client.post(
+            "/api/auth/register",
+            json={"identifier": "uninvited@example.com", "password": "correct horse"},
+        )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "registration_disabled"
