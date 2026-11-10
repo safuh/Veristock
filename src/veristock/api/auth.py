@@ -166,7 +166,6 @@ async def logout(
     return Response(status_code=204)
 
 
-
 class BrowserTokenResponseModel(BaseModel):
     """Browser login/refresh response; refresh token is cookie-only."""
 
