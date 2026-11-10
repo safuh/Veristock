@@ -12,6 +12,7 @@ from starlette.types import ExceptionHandler
 
 from .api.router import api_router
 from .auth.application import AuthenticationApplication
+from .auth.tokens import TokenService
 from .core.config import Settings, get_settings
 from .core.errors import (
     BackboneError,
@@ -30,11 +31,13 @@ AuthApplicationFactory = Callable[[AsyncSession], AuthenticationApplication]
 def create_app(
     settings: Settings | None = None,
     auth_application_factory: AuthApplicationFactory | None = None,
+    access_token_service: TokenService | None = None,
 ) -> FastAPI:
-    """Create a configured FastAPI application with optional auth composition.
+    """Create the API application with explicit authentication composition.
 
-    Authentication dependencies are supplied by the consuming application so
-    secrets, token lifetimes, and persistence remain explicit composition concerns.
+    The authentication application issues tokens; the access-token service
+    validates them on protected identity and business routes. Both are supplied
+    by the consuming application so the same secret and algorithm are deliberate.
     """
     resolved = settings or get_settings()
     configure_logging(resolved)
@@ -47,6 +50,7 @@ def create_app(
     )
     app.state.settings = resolved
     app.state.auth_application_factory = auth_application_factory
+    app.state.access_token_service = access_token_service
 
     app.add_middleware(RequestContextMiddleware)
     if resolved.cors_origins:
