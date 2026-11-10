@@ -1,17 +1,27 @@
 # ruff: noqa: E501
 """Tenant-owned branch and contact persistence models."""
+
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from veristock.core.database import Base
 
 
-
 class Branch(Base):
     """A physical or operational location owned by one organization."""
+
     __tablename__ = "branches"
     __table_args__ = (
         UniqueConstraint("organization_id", "code", name="uq_branches_org_code"),
@@ -32,9 +42,9 @@ class Branch(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
-
 class OrganizationContact(Base):
     """A named business contact belonging to a single tenant."""
+
     __tablename__ = "organization_contacts"
     __table_args__ = (
         CheckConstraint("status IN ('active', 'inactive')", name="ck_contacts_status"),
