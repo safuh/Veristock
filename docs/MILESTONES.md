@@ -120,14 +120,23 @@ Reference documents:
 
 ### M8 — Identity, tenancy and authorization
 
-- [ ] Reuse existing identity tables and JWT primitives without rewriting applied migrations.
-- [ ] Add organizations, memberships, roles, permissions and membership-role grants.
-- [ ] Make authentication mandatory for protected product APIs.
-- [ ] Implement organization context resolution and deny-by-default permission checks.
-- [ ] Enforce tenant filters and resource-level authorization in every repository/use case.
-- [ ] Implement browser-safe refresh-token handling, CSRF protections and logout.
+**Status: in progress — schema, seeded RBAC catalogue and initial identity endpoints implemented; full enforcement remains open.**
+
+- [x] Preserve existing identity tables and JWT primitives; add forward migrations only.
+- [x] Add organizations, memberships, roles, permissions and membership-role grants.
+- [x] Add active/suspended/disabled user account status.
+- [x] Add tenant-aware authorization queries and active organization-context dependency.
+- [x] Add authenticated `GET /api/identity/me` and `GET /api/identity/context` endpoints.
+- [x] Add one-time platform-owner bootstrap command; requires migrated database and environment-supplied credentials.
+- [x] Disable public self-registration by default; explicit opt-in remains available for controlled environments.
+- [x] Add initial repository and HTTP tests for membership, permission scope and cross-tenant denial.
+- [ ] Apply mandatory authentication and permission dependencies to every product API as those modules are introduced.
+- [ ] Enforce tenant filters and resource-level authorization in every business repository/use case.
+- [ ] Implement browser-safe refresh-token cookies, CSRF protections and logout integration.
 - [ ] Add login/invitation/password-recovery rate limits.
-- [ ] Add cross-tenant negative tests for all protected resource families.
+- [ ] Add cross-tenant negative tests for every protected business resource family.
+
+**Current limitation:** access-token validation is explicitly injected into the application composition root and must use the same signing configuration as the token issuer. The existing refresh endpoint still accepts a refresh token in the request body; secure browser cookie handling is not yet implemented. The bootstrap command creates the first platform owner but does not yet provide client-organization onboarding or invitations.
 
 ### M9 — Client organizations and workforce
 
