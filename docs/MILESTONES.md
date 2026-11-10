@@ -123,13 +123,13 @@ Reference documents:
 **Status: in progress — schema, seeded RBAC catalogue and initial identity endpoints implemented; full enforcement remains open.**
 
 - [x] Preserve existing identity tables and JWT primitives; add forward migrations only.
-- [x] Add organizations, memberships, roles, permissions and membership-role grants.
+- [x] Add organizations, memberships, roles, permissions and membership-role grants, including the restricted client-side field_counter role.
 - [x] Add active/suspended/disabled user account status.
 - [x] Add tenant-aware authorization queries and active organization-context dependency.
 - [x] Add authenticated `GET /api/identity/me` and `GET /api/identity/context` endpoints.
 - [x] Add one-time platform-owner bootstrap command; requires migrated database and environment-supplied credentials.
 - [x] Disable public self-registration by default; explicit opt-in remains available for controlled environments.
-- [x] Add initial repository and HTTP tests for membership, permission scope and cross-tenant denial.
+- [x] Add initial repository and HTTP tests for membership, permission scope, field-counter access and cross-tenant denial.
 - [ ] Apply mandatory authentication and permission dependencies to every product API as those modules are introduced.
 - [ ] Enforce tenant filters and resource-level authorization in every business repository/use case.
 - [ ] Implement browser-safe refresh-token cookies, CSRF protections and logout integration.
