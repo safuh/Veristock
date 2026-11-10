@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from veristock.auth import TokenError, TokenService
 from veristock.core.errors import BackboneError
 
-from .authorization import Organization, User
+from .authorization import Organization
+from .models import User
 from .authorization_repository import AuthorizationRepository
 
 bearer_scheme = HTTPBearer(auto_error=False)
