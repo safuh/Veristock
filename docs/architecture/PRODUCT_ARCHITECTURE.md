@@ -177,7 +177,7 @@ Platform roles:
 - Platform Owner
 - Operations Manager
 - Stocktaking Supervisor
-- Field Employee
+- Field Employee (internal workforce identity only)
 - Finance Officer
 
 Client roles:
@@ -185,6 +185,9 @@ Client roles:
 - Client Manager
 - Client Reviewer
 - Client Read-only
+- Field Counter (granted only for the duration/scope of assigned client work)
+
+A Veristock field employee receives a client-side Field Counter membership when assigned to that client's work. That membership permits entry to the client tenant, but assignment and branch-level APIs must additionally verify the employee's active AssignmentMember record. The role must not grant general client inventory or commercial access. Revoking the assignment must revoke or deactivate the corresponding scoped membership/grant.
 
 Roles are permission bundles, not hard-coded branches in route handlers. Permissions should be granular, for example:
 - `organization.read`, `organization.manage`
