@@ -1,6 +1,6 @@
 """Queries enforcing organization membership and role permissions."""
 
-from sqlalchemy import exists, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .authorization import (
@@ -26,44 +26,48 @@ class AuthorizationRepository:
 
     async def has_active_membership(self, user_id: str, organization_id: str) -> bool:
         statement = (
-            select(
-                exists().where(
-                    OrganizationMembership.user_id == user_id,
-                    OrganizationMembership.organization_id == organization_id,
-                    OrganizationMembership.status == "active",
-                    Organization.status == "active",
-                    Organization.id == OrganizationMembership.organization_id,
-                )
+            select(OrganizationMembership.id)
+            .join(
+                Organization,
+                Organization.id == OrganizationMembership.organization_id,
             )
+            .where(
+                OrganizationMembership.user_id == user_id,
+                OrganizationMembership.organization_id == organization_id,
+                OrganizationMembership.status == "active",
+                Organization.status == "active",
+            )
+            .limit(1)
         )
-        return bool(await self.session.scalar(statement))
+        return (await self.session.scalar(statement)) is not None
 
     async def has_permission(
         self, user_id: str, organization_id: str, permission_code: str
     ) -> bool:
         statement = (
-            select(
-                exists()
-                .where(
-                    OrganizationMembership.user_id == user_id,
-                    OrganizationMembership.organization_id == organization_id,
-                    OrganizationMembership.status == "active",
-                    Organization.status == "active",
-                    MembershipRole.membership_id == OrganizationMembership.id,
-                    Role.id == MembershipRole.role_id,
-                    Role.scope == Organization.kind,
-                    RolePermission.role_id == Role.id,
-                    Permission.id == RolePermission.permission_id,
-                    Permission.code == permission_code,
-                )
-            )
-            .select_from(OrganizationMembership)
+            select(OrganizationMembership.id)
             .join(
                 Organization,
                 Organization.id == OrganizationMembership.organization_id,
             )
+            .join(
+                MembershipRole,
+                MembershipRole.membership_id == OrganizationMembership.id,
+            )
+            .join(Role, Role.id == MembershipRole.role_id)
+            .join(RolePermission, RolePermission.role_id == Role.id)
+            .join(Permission, Permission.id == RolePermission.permission_id)
+            .where(
+                OrganizationMembership.user_id == user_id,
+                OrganizationMembership.organization_id == organization_id,
+                OrganizationMembership.status == "active",
+                Organization.status == "active",
+                Role.scope == Organization.kind,
+                Permission.code == permission_code,
+            )
+            .limit(1)
         )
-        return bool(await self.session.scalar(statement))
+        return (await self.session.scalar(statement)) is not None
 
     async def list_active_organizations(self, user_id: str) -> list[Organization]:
         statement = (
