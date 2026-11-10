@@ -10,7 +10,15 @@ from veristock.app import create_app
 from veristock.auth.tokens import TokenService
 from veristock.core.config import Environment, Settings
 from veristock.core.database import Base
-from veristock.identity import MembershipRole, Organization, OrganizationMembership, Permission, Role, RolePermission, User
+from veristock.identity import (
+    MembershipRole,
+    Organization,
+    OrganizationMembership,
+    Permission,
+    Role,
+    RolePermission,
+    User,
+)
 from veristock.organizations.models import Branch
 
 @pytest.mark.asyncio
