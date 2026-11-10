@@ -22,7 +22,7 @@
 ### User
 A global login identity.
 
-Key attributes: `id`, `email`, `password_hash`, `display_name`, `status`, `created_at`, `updated_at`.
+Key attributes: `id`, `identifier` (email for the current login flow), `password_hash`, `status` (active/suspended/disabled), `created_at`. The current schema retains the original `identifier` column to preserve the foundation migration history.
 
 Email uniqueness should be normalized consistently (case-insensitive). A user can belong to multiple organizations.
 
@@ -41,7 +41,7 @@ Key attributes: `id`, `organization_id`, `user_id`, `status`, `joined_at`, `invi
 Unique constraint: `(organization_id, user_id)`.
 
 ### Role, Permission, MembershipRole, RolePermission
-Roles are assigned to memberships, not globally to users. Permissions are stable codes and roles are permission bundles. Platform roles and client roles have different scopes. Avoid a single `is_admin` boolean.
+Roles are assigned to memberships, not globally to users. Permissions are stable codes and roles are permission bundles. Platform roles and client roles have different scopes. The initial role/permission catalogue is seeded by migration `0004_tenancy_rbac`. The authorization query requires role scope to match organization kind, preventing a client role from being used in the platform organization or vice versa. Avoid a single `is_admin` boolean.
 
 ### Branch
 A physical client location.
