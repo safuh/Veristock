@@ -1,7 +1,8 @@
 """One-time bootstrap for the initial Veristock platform owner.
 
 Run after applying Alembic migrations:
-    BOOTSTRAP_ADMIN_EMAIL=... BOOTSTRAP_ADMIN_PASSWORD=... uv run python scripts/bootstrap_platform_admin.py
+    BOOTSTRAP_ADMIN_EMAIL=... BOOTSTRAP_ADMIN_PASSWORD=... \\
+        uv run python scripts/bootstrap_platform_admin.py
 
 The password is read only from the environment; it is never accepted as a CLI
 argument or printed. The operation is idempotent for the same account.
