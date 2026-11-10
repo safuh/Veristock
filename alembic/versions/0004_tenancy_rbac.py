@@ -87,6 +87,10 @@ ROLE_PERMISSIONS = {
         "organization.read", "branch.read", "inventory.read", "assignment.read",
         "stocktake.read", "report.read", "asset.read",
     ],
+    "field_counter": [
+        "assignment.read", "stocktake.read", "stocktake.count", "stocktake.submit",
+        "asset.verify",
+    ],
 }
 
 ROLES = {
@@ -99,6 +103,7 @@ ROLES = {
     "client_manager": ("Client Manager", "client"),
     "client_reviewer": ("Client Reviewer", "client"),
     "client_readonly": ("Client Read-only", "client"),
+    "field_counter": ("Field Counter", "client"),
 }
 
 
