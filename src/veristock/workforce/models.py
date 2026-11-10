@@ -1,17 +1,27 @@
 # ruff: noqa: E501
 """Veristock employee profile persistence."""
+
 from datetime import date, datetime
 from uuid import uuid4
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Index, String, UniqueConstraint, func
+from sqlalchemy import (
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from veristock.core.database import Base
 
 
-
 class EmployeeProfile(Base):
     """Employment profile for an active member of the platform organization."""
+
     __tablename__ = "employee_profiles"
     __table_args__ = (
         UniqueConstraint("user_id", name="uq_employee_profiles_user"),
