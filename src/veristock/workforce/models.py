@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Veristock employee profile persistence."""
 from datetime import date, datetime
 from uuid import uuid4
