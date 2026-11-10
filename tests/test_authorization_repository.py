@@ -34,8 +34,10 @@ async def test_authorization_is_scoped_to_active_membership_and_org_kind() -> No
             platform_membership_id = str(uuid4())
             client_role_id = str(uuid4())
             platform_role_id = str(uuid4())
+            field_role_id = str(uuid4())
             read_permission_id = str(uuid4())
             manage_permission_id = str(uuid4())
+            count_permission_id = str(uuid4())
 
             user = User(
                 id=user_id,
@@ -81,6 +83,12 @@ async def test_authorization_is_scoped_to_active_membership_and_org_kind() -> No
                 name="Platform Test Admin",
                 scope="platform",
             )
+            field_role = Role(
+                id=field_role_id,
+                code="field_test_counter",
+                name="Field Test Counter",
+                scope="client",
+            )
             read_permission = Permission(
                 id=read_permission_id,
                 code="inventory.read",
@@ -90,6 +98,11 @@ async def test_authorization_is_scoped_to_active_membership_and_org_kind() -> No
                 id=manage_permission_id,
                 code="organization.manage",
                 description="Manage organization",
+            )
+            count_permission = Permission(
+                id=count_permission_id,
+                code="stocktake.count",
+                description="Record physical counts",
             )
             session.add_all(
                 [
@@ -102,19 +115,30 @@ async def test_authorization_is_scoped_to_active_membership_and_org_kind() -> No
                     platform_membership,
                     client_role,
                     platform_role,
+                    field_role,
                     read_permission,
                     manage_permission,
+                    count_permission,
                     MembershipRole(
                         membership_id=client_membership_id, role_id=client_role_id
                     ),
                     MembershipRole(
                         membership_id=platform_membership_id, role_id=platform_role_id
                     ),
+                    MembershipRole(
+                        membership_id=client_membership_id, role_id=platform_role_id
+                    ),
+                    MembershipRole(
+                        membership_id=client_membership_id, role_id=field_role_id
+                    ),
                     RolePermission(
                         role_id=client_role_id, permission_id=read_permission_id
                     ),
                     RolePermission(
                         role_id=platform_role_id, permission_id=manage_permission_id
+                    ),
+                    RolePermission(
+                        role_id=field_role_id, permission_id=count_permission_id
                     ),
                 ]
             )
@@ -130,6 +154,9 @@ async def test_authorization_is_scoped_to_active_membership_and_org_kind() -> No
             )
             assert not await authorization.has_permission(
                 user_id, client_id, "organization.manage"
+            )
+            assert await authorization.has_permission(
+                user_id, client_id, "stocktake.count"
             )
             assert await authorization.has_permission(
                 user_id, platform_id, "organization.manage"
