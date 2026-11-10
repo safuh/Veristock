@@ -24,6 +24,7 @@ async def test_auth_http_uses_sqlalchemy_composition(tmp_path: Path) -> None:
     settings = Settings(
         environment=Environment.TEST,
         database_url=database_url,
+        allow_self_registration=True,
     )
 
     def application_factory(session):
