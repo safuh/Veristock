@@ -208,7 +208,7 @@ Reuse the existing password hashing, access/refresh token and refresh-token rota
 
 Current implementation status and target browser design:
 - Existing access/refresh JWT issuance and refresh-token rotation are retained.
-- Access-token validation is injected into the FastAPI composition root as a `TokenService`; the issuer and validator must use the same secret and algorithm.
+- When JWT_SECRET_KEY is configured, the FastAPI composition root automatically creates the SQLAlchemy authentication application and matching TokenService; custom implementations can be injected. The issuer and validator use the same configured secret and algorithm.
 - Protected identity endpoints currently use short-lived bearer access tokens.
 - Active organization context is selected with `X-Organization-ID`, then verified against persisted active membership. The header selects context; it does not grant access.
 - Public self-registration is disabled by default. Controlled environments may explicitly enable it; production onboarding should use invitations.
