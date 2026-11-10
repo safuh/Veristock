@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .authorization import Organization, User
+from .authorization import Organization
+from .models import User
 from .authorization_dependencies import get_current_organization, get_current_user, get_db_session
 from .authorization_repository import AuthorizationRepository
 
