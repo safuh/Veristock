@@ -133,11 +133,11 @@ Reference documents:
 - [x] Add initial repository and HTTP tests for membership, permission scope, field-counter access and cross-tenant denial.
 - [ ] Apply mandatory authentication and permission dependencies to every product API as those modules are introduced.
 - [ ] Enforce tenant filters and resource-level authorization in every business repository/use case.
-- [ ] Implement browser-safe refresh-token cookies, CSRF protections and logout integration.
+- [x] Implement browser-safe HttpOnly refresh-token cookies, CSRF validation and browser logout endpoints.
 - [ ] Add login/invitation/password-recovery rate limits.
 - [ ] Add cross-tenant negative tests for every protected business resource family.
 
-**Current limitation:** the standard issuer and validator are composed from JWT_SECRET_KEY when configured, or may be explicitly injected; custom implementations must share the same signing configuration. The existing refresh endpoint still accepts a refresh token in the request body; secure browser cookie handling is not yet implemented. The bootstrap command creates the first platform owner but does not yet provide client-organization onboarding or invitations.
+**Current limitation:** the standard issuer and validator are composed from JWT_SECRET_KEY when configured, or may be explicitly injected; custom implementations must share the same signing configuration. Browser endpoints now use HttpOnly refresh cookies and CSRF validation; legacy JSON-body token endpoints remain for non-browser clients. Rate limiting, invitation/password-recovery flows and business-resource authorization remain open. The bootstrap command creates the first platform owner but does not yet provide client-organization onboarding or invitations.
 
 ### M9 — Client organizations and workforce
 
