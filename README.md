@@ -63,10 +63,11 @@ The bootstrap command is idempotent for the same active account. It creates the 
 
 - JWT issuer and access-token validator are composed from JWT_SECRET_KEY when configured.
 - Protected identity routes require a valid bearer access token.
+- Browser login/refresh/logout use HttpOnly refresh cookies and CSRF validation; browser responses do not expose refresh tokens.
 - Select an organization with X-Organization-ID; the API verifies active membership before returning context.
 - Role scope must match organization kind.
 - Self-registration is disabled by default. Production onboarding will use controlled invitations.
-- Browser refresh-token cookie/CSRF handling and rate limiting remain implementation requirements before production release.
+- Rate limiting and invitation/password-recovery flows remain implementation requirements before production release.
 
 Review [SECURITY.md](SECURITY.md) before deployment.
 
