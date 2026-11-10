@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     environment: Environment = Environment.DEVELOPMENT
     debug: bool = False
     api_prefix: str = "/api"
+    allow_self_registration: bool = False
     database_url: str = "sqlite+aiosqlite:///./backbone.db"
     database_echo: bool = False
     database_pool_size: int = Field(default=5, ge=1)
