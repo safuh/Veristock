@@ -3,11 +3,13 @@
 from datetime import date
 from typing import Annotated
 from uuid import uuid4
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from veristock.identity.authorization import Organization, OrganizationMembership
 from veristock.identity.authorization_dependencies import get_db_session, require_permission
 from veristock.identity.models import User
