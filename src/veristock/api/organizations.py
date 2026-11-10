@@ -16,6 +16,8 @@ from veristock.organizations.models import Branch, OrganizationContact
 
 router = APIRouter(tags=["organizations"])
 
+
+
 class OrganizationCreate(BaseModel):
     legal_name: str = Field(min_length=2, max_length=240)
     trading_name: str | None = Field(default=None, max_length=240)
@@ -29,6 +31,8 @@ class OrganizationCreate(BaseModel):
             raise ValueError("Unknown IANA timezone") from exc
         return value
 
+
+
 class OrganizationRead(BaseModel):
     id: str
     kind: str
@@ -36,6 +40,8 @@ class OrganizationRead(BaseModel):
     trading_name: str | None
     timezone: str
     status: str
+
+
 
 class OrganizationUpdate(BaseModel):
     legal_name: str | None = Field(default=None, min_length=2, max_length=240)
@@ -53,6 +59,8 @@ class OrganizationUpdate(BaseModel):
         return value
 
 
+
+
 class BranchCreate(BaseModel):
     code: str = Field(min_length=1, max_length=40)
     name: str = Field(min_length=2, max_length=180)
@@ -67,6 +75,8 @@ class BranchCreate(BaseModel):
     def normalize_code(cls, value: str) -> str:
         return value.strip().upper()
 
+
+
 class BranchUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=180)
     address_line_1: str | None = Field(default=None, max_length=240)
@@ -76,6 +86,8 @@ class BranchUpdate(BaseModel):
     postal_code: str | None = Field(default=None, max_length=24)
     phone: str | None = Field(default=None, max_length=40)
     status: str | None = None
+
+
 
 class BranchRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -91,6 +103,8 @@ class BranchRead(BaseModel):
     phone: str | None
     status: str
 
+
+
 class ContactCreate(BaseModel):
     full_name: str = Field(min_length=2, max_length=180)
     title: str | None = Field(default=None, max_length=120)
@@ -104,6 +118,8 @@ class ContactCreate(BaseModel):
             raise ValueError("A valid email address is required")
         return value
 
+
+
 class ContactUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=180)
     title: str | None = Field(default=None, max_length=120)
@@ -111,6 +127,8 @@ class ContactUpdate(BaseModel):
     phone: str | None = Field(default=None, max_length=40)
     is_primary: bool | None = None
     status: str | None = None
+
+
 
 class ContactRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -127,6 +145,8 @@ PlatformOrganization = Annotated[Organization, Depends(require_permission("organ
 TenantOrganization = Annotated[Organization, Depends(require_permission("organization.read"))]
 BranchManager = Annotated[Organization, Depends(require_permission("branch.manage"))]
 
+
+
 @router.post("/organizations", response_model=OrganizationRead, status_code=201)
 async def create_client_organization(payload: OrganizationCreate, platform: PlatformOrganization, session: Annotated[AsyncSession, Depends(get_db_session)]) -> OrganizationRead:
     """Provision a client tenant from an authorized platform context."""
@@ -138,9 +158,13 @@ async def create_client_organization(payload: OrganizationCreate, platform: Plat
     await session.refresh(organization)
     return OrganizationRead.model_validate(organization, from_attributes=True)
 
+
+
 @router.get("/organizations/current", response_model=OrganizationRead)
 async def read_current_organization(organization: TenantOrganization) -> OrganizationRead:
     return OrganizationRead.model_validate(organization, from_attributes=True)
+
+
 
 @router.patch("/organizations/current", response_model=OrganizationRead)
 async def update_current_organization(
@@ -159,10 +183,14 @@ async def update_current_organization(
     return OrganizationRead.model_validate(organization, from_attributes=True)
 
 
+
+
 @router.get("/branches", response_model=list[BranchRead])
 async def list_branches(organization: Annotated[Organization, Depends(get_current_organization)], _: Annotated[Organization, Depends(require_permission("branch.read"))], session: Annotated[AsyncSession, Depends(get_db_session)]) -> list[Branch]:
     result = await session.scalars(select(Branch).where(Branch.organization_id == organization.id).order_by(Branch.code))
     return list(result.all())
+
+
 
 @router.post("/branches", response_model=BranchRead, status_code=201)
 async def create_branch(payload: BranchCreate, organization: BranchManager, session: Annotated[AsyncSession, Depends(get_db_session)]) -> Branch:
@@ -175,6 +203,8 @@ async def create_branch(payload: BranchCreate, organization: BranchManager, sess
         raise HTTPException(status_code=409, detail="Branch code already exists") from exc
     await session.refresh(branch)
     return branch
+
+
 
 @router.patch("/branches/{branch_id}", response_model=BranchRead)
 async def update_branch(branch_id: str, payload: BranchUpdate, organization: BranchManager, session: Annotated[AsyncSession, Depends(get_db_session)]) -> Branch:
@@ -192,10 +222,14 @@ async def update_branch(branch_id: str, payload: BranchUpdate, organization: Bra
     await session.refresh(branch)
     return branch
 
+
+
 @router.get("/contacts", response_model=list[ContactRead])
 async def list_contacts(organization: Annotated[Organization, Depends(get_current_organization)], _: TenantOrganization, session: Annotated[AsyncSession, Depends(get_db_session)]) -> list[OrganizationContact]:
     result = await session.scalars(select(OrganizationContact).where(OrganizationContact.organization_id == organization.id).order_by(OrganizationContact.is_primary.desc(), OrganizationContact.full_name))
     return list(result.all())
+
+
 
 @router.post("/contacts", response_model=ContactRead, status_code=201)
 async def create_contact(payload: ContactCreate, organization: PlatformOrganization, session: Annotated[AsyncSession, Depends(get_db_session)]) -> OrganizationContact:
@@ -204,6 +238,8 @@ async def create_contact(payload: ContactCreate, organization: PlatformOrganizat
     await session.commit()
     await session.refresh(contact)
     return contact
+
+
 
 @router.patch("/contacts/{contact_id}", response_model=ContactRead)
 async def update_contact(contact_id: str, payload: ContactUpdate, organization: PlatformOrganization, session: Annotated[AsyncSession, Depends(get_db_session)]) -> OrganizationContact:
