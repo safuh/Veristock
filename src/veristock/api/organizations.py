@@ -150,6 +150,8 @@ async def update_current_organization(
 ) -> OrganizationRead:
     """Update the selected tenant profile without allowing kind/status mutation."""
     changes = payload.model_dump(exclude_unset=True)
+    if any(changes.get(field) is None for field in ("legal_name", "timezone") if field in changes):
+        raise HTTPException(status_code=422, detail="Required organization fields cannot be null")
     for field, value in changes.items():
         setattr(organization, field, value)
     await session.commit()
@@ -180,6 +182,8 @@ async def update_branch(branch_id: str, payload: BranchUpdate, organization: Bra
     if branch is None:
         raise HTTPException(status_code=404, detail="Branch not found")
     changes = payload.model_dump(exclude_unset=True)
+    if "name" in changes and changes["name"] is None:
+        raise HTTPException(status_code=422, detail="Branch name cannot be null")
     if changes.get("status") not in (None, "active", "inactive"):
         raise HTTPException(status_code=422, detail="Invalid branch status")
     for field, value in changes.items():
@@ -207,6 +211,8 @@ async def update_contact(contact_id: str, payload: ContactUpdate, organization: 
     if contact is None:
         raise HTTPException(status_code=404, detail="Contact not found")
     changes = payload.model_dump(exclude_unset=True)
+    if "full_name" in changes and changes["full_name"] is None:
+        raise HTTPException(status_code=422, detail="Contact name cannot be null")
     if changes.get("status") not in (None, "active", "inactive"):
         raise HTTPException(status_code=422, detail="Invalid contact status")
     for field, value in changes.items():
