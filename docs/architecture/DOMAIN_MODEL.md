@@ -41,7 +41,7 @@ Key attributes: `id`, `organization_id`, `user_id`, `status`, `joined_at`, `invi
 Unique constraint: `(organization_id, user_id)`.
 
 ### Role, Permission, MembershipRole, RolePermission
-Roles are assigned to memberships, not globally to users. Permissions are stable codes and roles are permission bundles. Platform roles and client roles have different scopes. The initial role/permission catalogue is seeded by migration `0004_tenancy_rbac`. The authorization query requires role scope to match organization kind, preventing a client role from being used in the platform organization or vice versa. Avoid a single `is_admin` boolean.
+Roles are assigned to memberships, not globally to users. Permissions are stable codes and roles are permission bundles. Platform roles and client roles have different scopes. The initial role/permission catalogue is seeded by migration `0004_tenancy_rbac`. The authorization query requires role scope to match organization kind, preventing a client role from being used in the platform organization or vice versa. The seeded `field_counter` client role is granted only for assigned client work; assignment and branch-level use cases must also validate the employee's AssignmentMember scope. Avoid a single `is_admin` boolean.
 
 ### Branch
 A physical client location.
