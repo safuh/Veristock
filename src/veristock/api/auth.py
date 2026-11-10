@@ -119,8 +119,6 @@ async def login(
     except Exception:
         await session.rollback()
         raise
-    finally:
-        await session.close()
     return TokenResponseModel(
         subject=result.subject,
         access_token=result.access_token,
@@ -143,8 +141,6 @@ async def refresh(
     except Exception:
         await session.rollback()
         raise
-    finally:
-        await session.close()
     return TokenResponseModel(
         subject=result.subject,
         access_token=result.access_token,
@@ -167,8 +163,6 @@ async def logout(
     except Exception:
         await session.rollback()
         raise
-    finally:
-        await session.close()
     return Response(status_code=204)
 
 
@@ -308,8 +302,6 @@ async def browser_refresh(
     except Exception:
         await session.rollback()
         raise
-    finally:
-        await session.close()
 
     _set_browser_cookies(response, request, result.refresh_token)
     return BrowserTokenResponseModel(
@@ -339,7 +331,5 @@ async def browser_logout(
         except Exception:
             await session.rollback()
             raise
-        finally:
-            await session.close()
     _clear_browser_cookies(response, request)
     return response
