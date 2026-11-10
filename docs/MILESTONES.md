@@ -127,6 +127,7 @@ Reference documents:
 - [x] Add active/suspended/disabled user account status.
 - [x] Add tenant-aware authorization queries and active organization-context dependency.
 - [x] Add authenticated `GET /api/identity/me` and `GET /api/identity/context` endpoints.
+- [x] Compose the standard SQLAlchemy authentication application and access-token validator from JWT settings; retain explicit custom-service injection.
 - [x] Add one-time platform-owner bootstrap command; requires migrated database and environment-supplied credentials.
 - [x] Disable public self-registration by default; explicit opt-in remains available for controlled environments.
 - [x] Add initial repository and HTTP tests for membership, permission scope, field-counter access and cross-tenant denial.
@@ -136,7 +137,7 @@ Reference documents:
 - [ ] Add login/invitation/password-recovery rate limits.
 - [ ] Add cross-tenant negative tests for every protected business resource family.
 
-**Current limitation:** access-token validation is explicitly injected into the application composition root and must use the same signing configuration as the token issuer. The existing refresh endpoint still accepts a refresh token in the request body; secure browser cookie handling is not yet implemented. The bootstrap command creates the first platform owner but does not yet provide client-organization onboarding or invitations.
+**Current limitation:** the standard issuer and validator are composed from JWT_SECRET_KEY when configured, or may be explicitly injected; custom implementations must share the same signing configuration. The existing refresh endpoint still accepts a refresh token in the request body; secure browser cookie handling is not yet implemented. The bootstrap command creates the first platform owner but does not yet provide client-organization onboarding or invitations.
 
 ### M9 — Client organizations and workforce
 
