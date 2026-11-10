@@ -11,8 +11,9 @@ Veristock One is the inventory verification and stocktaking platform for Veristo
 The repository began as a reusable FastAPI foundation. The product architecture and domain model are documented, and the first identity/tenancy/RBAC foundation is being implemented.
 
 - Existing application factory, async persistence, migrations, JWT primitives, Docker assets and tests are retained.
-- Organization, membership, role and permission schema is being added through forward migrations.
-- Authenticated identity and organization-context endpoints are being added.
+- Organization, membership, role and permission schema is added through forward migrations.
+- Authenticated identity and organization-context endpoints are available.
+- Initial M9 APIs cover client-tenant provisioning, tenant-scoped branches and contacts, and internal employee profiles.
 - Management, field and client browser interfaces and the inventory business modules are not yet implemented.
 
 See [Product Architecture](docs/architecture/PRODUCT_ARCHITECTURE.md), [Domain Model](docs/architecture/DOMAIN_MODEL.md), and [MVP Acceptance Tracker](docs/MILESTONES.md).
