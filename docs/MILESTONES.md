@@ -1,14 +1,18 @@
-# MVP Acceptance Tracker
+# Veristock One — MVP Acceptance Tracker
 
-This tracker describes the supported Veristock MVP. A checkbox means the criterion has been verified; implementation alone is not verification.
+This tracker defines the full browser-based Veristock One MVP. A checkbox means the criterion has been verified; implementation alone is not verification.
 
 ## Product scope
 
-**Included:** FastAPI, Pydantic/Pydantic Settings, SQLAlchemy 2.x, Alembic, PostgreSQL, optional JWT identity, Docker, Docker Compose, Kubernetes/Kustomize.
+**Included:** FastAPI backend, React + TypeScript browser application, management workspace, field operations workspace, client portal, PostgreSQL, tenant isolation, RBAC, inventory onboarding, stocktaking, reconciliation, fixed asset verification, reporting and basic billing.
 
-**Excluded:** PydanticAI, AI agents/providers, Flutter/mobile clients, frontend, project generator/CLI, and product-specific business modules.
+**Explicitly excluded:** all AI integration and scaffolding (PydanticAI, LLM providers, agents, embeddings, vector databases and AI-generated outputs), native Android/iOS apps, microservices, and advanced accounting/POS integrations.
 
-## M1 — Application foundation
+## Foundation milestones retained from the backend repository
+
+The following milestones describe the existing backend foundation. Their historical verification status is retained; they do not constitute completion of the Veristock One product MVP.
+
+### M1 — Application foundation
 
 **Status: complete and verified.**
 
@@ -22,7 +26,7 @@ This tracker describes the supported Veristock MVP. A checkbox means the criteri
 - [x] Liveness and database-backed readiness endpoints.
 - [x] Deterministic application lifespan and engine disposal.
 
-## M2 — Persistence and migrations
+### M2 — Persistence and migrations
 
 **Status: complete and verified.**
 
@@ -37,9 +41,9 @@ This tracker describes the supported Veristock MVP. A checkbox means the criteri
 - [x] PostgreSQL integration test in CI.
 - [x] Explicit migration-before-rollout deployment contract.
 
-## M3 — Optional identity and JWT
+### M3 — Identity and JWT foundation
 
-**Status: implemented and verified; consumers must explicitly configure it.**
+**Status: implemented and verified as reusable primitives; product authorization is not complete.**
 
 - [x] Password hashing with Argon2.
 - [x] Generic invalid-credential behavior.
@@ -49,13 +53,10 @@ This tracker describes the supported Veristock MVP. A checkbox means the criteri
 - [x] Registration, login, refresh, and logout HTTP endpoints.
 - [x] Structured authentication audit events.
 - [x] SQLAlchemy identity repositories and composition helper.
-- [x] Security regression and integration tests.
-- [ ] RBAC/OAuth2 scopes — intentionally excluded from MVP.
-- [ ] Built-in rate limiting — intentionally excluded; apply at the edge or in the consuming application.
+- [ ] Mandatory product authentication and browser security configuration.
+- [ ] Organization memberships, RBAC, tenant context and resource-level authorization.
 
-Authentication remains optional at the composition root. Production applications must provide high-entropy signing secrets and deliberate token lifetimes.
-
-## M4 — Docker and local development
+### M4 — Docker and local development
 
 **Status: complete and verified.**
 
@@ -69,7 +70,7 @@ Authentication remains optional at the composition root. Production applications
 - [x] Docker smoke-test script.
 - [x] Docker smoke test passes on the release branch.
 
-## M5 — Kubernetes deployment
+### M5 — Kubernetes deployment foundation
 
 **Status: complete and verified.**
 
@@ -85,9 +86,9 @@ Authentication remains optional at the composition root. Production applications
 - [x] Rollout and rollback instructions.
 - [x] Production, migration, and HPA overlays render successfully in CI.
 
-## M6 — Release verification
+### M6 — Foundation release verification
 
-**Status: complete and verified on the release candidate commit.**
+**Status: complete and verified on the foundation release candidate.**
 
 - [x] Ruff passes.
 - [x] Mypy passes with no application errors.
@@ -97,15 +98,119 @@ Authentication remains optional at the composition root. Production applications
 - [x] Docker smoke test passes.
 - [x] Production, migration, and HPA Kustomize overlays render successfully.
 - [x] Secret scanning and dependency security workflows pass.
-- [x] Documentation commands match the actual repository.
-- [x] No PydanticAI, Flutter, or stale duplicate Kubernetes implementation remains.
+- [x] Foundation documentation commands match the repository.
 
-## MVP release definition
+## Veristock One product milestones
 
-The MVP is ready for release when every M6 gate is green on the release commit. The release candidate CI run passed all test matrices, package checks, Docker smoke, Kubernetes rendering, secret scanning, and dependency audit.
+### M7 — Architecture and domain model
 
-The MVP does not promise that every consuming application is automatically production-secure. Applications must still configure secrets, TLS, database access, CORS, backups, monitoring, rate limits, and authorization policy for their deployment environment.
+**Status: drafted; review and acceptance pending.**
+
+- [ ] Approve modular-monolith architecture and browser workspace boundaries.
+- [ ] Approve platform/client organization and membership model.
+- [ ] Approve tenant isolation and authorization rules.
+- [ ] Approve business entities and relationships.
+- [ ] Approve stocktake, count-round, reconciliation and approval state machines.
+- [ ] Approve role/permission matrix and separation-of-duties rules.
+- [ ] Confirm MVP exclusions and delivery sequence.
+
+Reference documents:
+- [Product architecture](architecture/PRODUCT_ARCHITECTURE.md)
+- [Domain model](architecture/DOMAIN_MODEL.md)
+
+### M8 — Identity, tenancy and authorization
+
+- [ ] Reuse existing identity tables and JWT primitives without rewriting applied migrations.
+- [ ] Add organizations, memberships, roles, permissions and membership-role grants.
+- [ ] Make authentication mandatory for protected product APIs.
+- [ ] Implement organization context resolution and deny-by-default permission checks.
+- [ ] Enforce tenant filters and resource-level authorization in every repository/use case.
+- [ ] Implement browser-safe refresh-token handling, CSRF protections and logout.
+- [ ] Add login/invitation/password-recovery rate limits.
+- [ ] Add cross-tenant negative tests for all protected resource families.
+
+### M9 — Client organizations and workforce
+
+- [ ] Client organization profile, branches and contacts.
+- [ ] User invitations and membership lifecycle.
+- [ ] Veristock employee profiles and availability.
+- [ ] Role assignment and employee access administration.
+- [ ] Assignment membership and branch-scope enforcement.
+
+### M10 — Commercial and operational management
+
+- [ ] Quotation creation, versioning, sending and acceptance/rejection.
+- [ ] Engagement creation from accepted scope and terms snapshot.
+- [ ] Assignment planning, scheduling, location and team allocation.
+- [ ] Assignment status transitions and audit events.
+- [ ] Basic invoice and payment tracking.
+
+### M11 — Inventory onboarding
+
+- [ ] Tenant-owned item catalogue, categories and units of measure.
+- [ ] Branch and optional warehouse location hierarchy.
+- [ ] Inventory file upload and mapping.
+- [ ] Import validation, duplicate detection and error reporting.
+- [ ] Immutable import provenance and expected-stock snapshots.
+- [ ] Tenant-scoped inventory search and maintenance.
+
+### M12 — Physical stocktaking
+
+- [ ] Stocktake creation and scope definition.
+- [ ] Count task allocation by branch/location/scope.
+- [ ] Blind-count API and UI behavior.
+- [ ] Barcode/manual item identification and quantity capture.
+- [ ] Batch, serial, expiry and condition capture.
+- [ ] Evidence upload and authorized retrieval.
+- [ ] Idempotent count submission and immutable rounds.
+- [ ] Recount workflow and supervisor queue.
+- [ ] Assignment/stocktake completion controls.
+
+### M13 — Reconciliation and quality assurance
+
+- [ ] Reconciliation against frozen expected-stock snapshots.
+- [ ] Configurable matching grain and unit validation.
+- [ ] Shortage, surplus, missing, unrecognized and condition exceptions.
+- [ ] Quantity variance and verified-cost financial variance.
+- [ ] Exception resolution and recount handoff.
+- [ ] Reviewer approval and separation-of-duties enforcement.
+- [ ] Immutable, versioned reconciliation runs.
+
+### M14 — Fixed assets and reporting
+
+- [ ] Fixed asset register and physical verification.
+- [ ] Missing, unregistered, moved and damaged asset exceptions.
+- [ ] Draft, approved and published report lifecycle.
+- [ ] PDF and spreadsheet exports from approved data.
+- [ ] Report provenance, version and file checksum.
+- [ ] Client report access and historical engagement views.
+
+### M15 — Browser workspaces
+
+- [ ] React + TypeScript application and shared component system.
+- [ ] Management workspace flows.
+- [ ] Field workspace responsive count flows.
+- [ ] Client portal inventory and report flows.
+- [ ] Typed API integration and loading/error/empty states.
+- [ ] Browser authentication and permission-aware navigation.
+- [ ] End-to-end tests for core management, field and client journeys.
+- [ ] PWA/offline support only if its own conflict, encryption, retry and sync acceptance gate is approved.
+
+### M16 — Production hardening and release
+
+- [ ] Full unit, integration, tenant-isolation, authorization and browser test suites pass.
+- [ ] PostgreSQL migration upgrade/downgrade and rollback procedures verified.
+- [ ] Upload limits, file authorization and storage lifecycle verified.
+- [ ] Backup and restore drill completed.
+- [ ] Secrets, TLS, CORS, rate limits and operational configuration reviewed.
+- [ ] Logs, metrics, health checks and alerting configured.
+- [ ] Deployment and operator runbooks complete.
+- [ ] Release acceptance signed off against all required product workflows.
+
+## Release definition
+
+The Veristock One MVP is releasable only when required M8–M16 acceptance criteria are verified, the critical client-to-report workflow works end to end, and tenant-isolation/security tests pass. Foundation M1–M6 completion is necessary but not sufficient.
 
 ## Change control
 
-Keep this project backend-focused. New features must not expand the MVP silently. PydanticAI, Flutter, frontend work, generators, RBAC, and observability extensions require a separate decision and acceptance criteria.
+No AI integration or AI scaffolding may be introduced into the MVP. Changes to the agreed product scope, data ownership, authorization model or immutable count/reconciliation rules require an explicit architecture decision and updated acceptance criteria.
