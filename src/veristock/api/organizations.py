@@ -37,6 +37,22 @@ class OrganizationRead(BaseModel):
     timezone: str
     status: str
 
+class OrganizationUpdate(BaseModel):
+    legal_name: str | None = Field(default=None, min_length=2, max_length=240)
+    trading_name: str | None = Field(default=None, max_length=240)
+    timezone: str | None = Field(default=None, max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str | None) -> str | None:
+        if value is not None:
+            try:
+                ZoneInfo(value)
+            except ZoneInfoNotFoundError as exc:
+                raise ValueError("Unknown IANA timezone") from exc
+        return value
+
+
 class BranchCreate(BaseModel):
     code: str = Field(min_length=1, max_length=40)
     name: str = Field(min_length=2, max_length=180)
@@ -125,6 +141,21 @@ async def create_client_organization(payload: OrganizationCreate, platform: Plat
 @router.get("/organizations/current", response_model=OrganizationRead)
 async def read_current_organization(organization: TenantOrganization) -> OrganizationRead:
     return OrganizationRead.model_validate(organization, from_attributes=True)
+
+@router.patch("/organizations/current", response_model=OrganizationRead)
+async def update_current_organization(
+    payload: OrganizationUpdate,
+    organization: PlatformOrganization,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> OrganizationRead:
+    """Update the selected tenant profile without allowing kind/status mutation."""
+    changes = payload.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(organization, field, value)
+    await session.commit()
+    await session.refresh(organization)
+    return OrganizationRead.model_validate(organization, from_attributes=True)
+
 
 @router.get("/branches", response_model=list[BranchRead])
 async def list_branches(organization: Annotated[Organization, Depends(get_current_organization)], _: Annotated[Organization, Depends(require_permission("branch.read"))], session: Annotated[AsyncSession, Depends(get_db_session)]) -> list[Branch]:
