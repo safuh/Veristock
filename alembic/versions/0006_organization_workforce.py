@@ -4,6 +4,7 @@ Revision ID: 0006_organization_workforce
 Revises: 0005_user_status
 """
 from collections.abc import Sequence
+
 import sqlalchemy as sa
 from alembic import op
 
