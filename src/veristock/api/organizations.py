@@ -11,7 +11,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from veristock.identity.authorization import Organization
-from veristock.identity.authorization_dependencies import get_current_organization, get_db_session, require_permission
+from veristock.identity.authorization_dependencies import (
+    get_current_organization,
+    get_db_session,
+    require_permission,
+)
 from veristock.organizations.models import Branch, OrganizationContact
 
 router = APIRouter(tags=["organizations"])
