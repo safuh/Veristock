@@ -1,5 +1,6 @@
 """Top-level API router."""
 from fastapi import APIRouter
+
 from .auth import router as auth_router
 from .health import router as health_router
 from .identity import router as identity_router
