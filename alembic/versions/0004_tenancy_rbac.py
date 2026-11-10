@@ -112,9 +112,17 @@ def upgrade() -> None:
         sa.Column("trading_name", sa.String(length=240), nullable=True),
         sa.Column("status", sa.String(length=16), nullable=False),
         sa.Column("timezone", sa.String(length=64), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+            nullable=False,
+        ),
         sa.CheckConstraint("kind IN ('platform', 'client')", name="ck_organizations_kind"),
-        sa.CheckConstraint("status IN ('active', 'suspended', 'archived')", name="ck_organizations_status"),
+        sa.CheckConstraint(
+            "status IN ('active', 'suspended', 'archived')",
+            name="ck_organizations_status",
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_organizations_kind_status", "organizations", ["kind", "status"])
@@ -125,15 +133,33 @@ def upgrade() -> None:
         sa.Column("organization_id", sa.String(length=36), nullable=False),
         sa.Column("user_id", sa.String(length=36), nullable=False),
         sa.Column("status", sa.String(length=16), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
-        sa.CheckConstraint("status IN ('invited', 'active', 'suspended', 'revoked')", name="ck_memberships_status"),
-        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "status IN ('invited', 'active', 'suspended', 'revoked')",
+            name="ck_memberships_status",
+        ),
+        sa.ForeignKeyConstraint(
+            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
+        ),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("organization_id", "user_id", name="uq_membership_org_user"),
     )
-    op.create_index("ix_memberships_user_status", "organization_memberships", ["user_id", "status"])
-    op.create_index("ix_memberships_org_status", "organization_memberships", ["organization_id", "status"])
+    op.create_index(
+        "ix_memberships_user_status",
+        "organization_memberships",
+        ["user_id", "status"],
+    )
+    op.create_index(
+        "ix_memberships_org_status",
+        "organization_memberships",
+        ["organization_id", "status"],
+    )
 
     op.create_table(
         "roles",
@@ -141,7 +167,12 @@ def upgrade() -> None:
         sa.Column("code", sa.String(length=80), nullable=False),
         sa.Column("name", sa.String(length=120), nullable=False),
         sa.Column("scope", sa.String(length=16), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+            nullable=False,
+        ),
         sa.CheckConstraint("scope IN ('platform', 'client')", name="ck_roles_scope"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("code", name="uq_roles_code"),
@@ -161,7 +192,9 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("membership_id", sa.String(length=36), nullable=False),
         sa.Column("role_id", sa.String(length=36), nullable=False),
-        sa.ForeignKeyConstraint(["membership_id"], ["organization_memberships.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["membership_id"], ["organization_memberships.id"], ondelete="CASCADE"
+        ),
         sa.ForeignKeyConstraint(["role_id"], ["roles.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("membership_id", "role_id", name="uq_membership_role"),
@@ -191,12 +224,13 @@ def upgrade() -> None:
             {"id": permission_id, "code": code, "description": description},
         )
 
-    role_ids: dict[str, str] = {}
     for code, (name, scope) in ROLES.items():
         role_id = str(uuid4())
-        role_ids[code] = role_id
         bind.execute(
-            sa.text("INSERT INTO roles (id, code, name, scope) VALUES (:id, :code, :name, :scope)"),
+            sa.text(
+                "INSERT INTO roles (id, code, name, scope) "
+                "VALUES (:id, :code, :name, :scope)"
+            ),
             {"id": role_id, "code": code, "name": name, "scope": scope},
         )
         for permission_code in ROLE_PERMISSIONS[code]:
