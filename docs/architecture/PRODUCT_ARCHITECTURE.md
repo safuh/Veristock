@@ -214,14 +214,20 @@ Current implementation status and target browser design:
 - Public self-registration is disabled by default. Controlled environments may explicitly enable it; production onboarding should use invitations.
 - A one-time `scripts/bootstrap_platform_admin.py` command creates the initial platform organization and owner membership after migrations are applied.
 
-Before browser production release:
-- move refresh tokens to Secure, HttpOnly cookies with an appropriate SameSite policy;
-- add CSRF protection for cookie-authenticated refresh/logout flows;
-- enforce HTTPS;
-- add login, invitation and password-recovery rate limiting;
-- implement single-use, hashed and time-limited invitation/password-reset tokens.
+Browser cookie flow implemented:
+- Browser clients use POST /api/auth/browser/login, /api/auth/browser/refresh and /api/auth/browser/logout.
+- Refresh tokens are stored in an HttpOnly cookie and are never returned in browser endpoint responses.
+- Browser refresh/logout require a double-submit CSRF token in the X-CSRF-Token header matching the CSRF cookie.
+- In production, cookies are Secure, SameSite=Lax, host-only and use the __Host- prefix. Local development uses non-Secure cookies over localhost HTTP.
+- The legacy JSON-body refresh/logout endpoints remain for non-browser clients. Browser applications must not use them or store refresh tokens in localStorage.
 
-Do not store long-lived bearer or refresh tokens in localStorage. Do not expose password hashes, token hashes or internal security metadata through API schemas. The current JSON-body refresh endpoint is a transitional API and is not the final browser security design.
+Remaining before production:
+- enforce HTTPS and same-origin deployment policy;
+- add login, invitation and password-recovery rate limiting;
+- implement single-use, hashed and time-limited invitation/password-reset tokens;
+- verify cookie, CSRF and CORS behavior in the production browser deployment.
+
+Do not expose password hashes, token hashes or internal security metadata through API schemas.
 
 ## 7. Core business workflows
 
