@@ -331,4 +331,5 @@ async def browser_logout(
             await session.rollback()
             raise
     _clear_browser_cookies(response, request)
+    response.status_code = status.HTTP_204_NO_CONTENT
     return response
