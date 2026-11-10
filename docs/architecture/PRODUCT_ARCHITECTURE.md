@@ -203,17 +203,22 @@ The initial role-to-permission matrix is a product configuration to verify durin
 
 Reuse the existing password hashing, access/refresh token and refresh-token rotation primitives after reviewing their current implementation and tests. Make identity mandatory for all application routes except health/readiness and explicitly public invitation/activation endpoints.
 
-Browser authentication design:
-- short-lived access token;
-- refresh token stored in a Secure, HttpOnly cookie;
-- appropriate SameSite policy and CSRF protection for cookie-authenticated refresh/logout flows;
-- strict HTTPS in production;
-- refresh-token rotation and replay rejection;
-- explicit logout/revocation;
-- rate limiting at the edge or application layer for login, invitation and password recovery;
-- password reset and invitation tokens stored hashed, single-use and time-limited.
+Current implementation status and target browser design:
+- Existing access/refresh JWT issuance and refresh-token rotation are retained.
+- Access-token validation is injected into the FastAPI composition root as a `TokenService`; the issuer and validator must use the same secret and algorithm.
+- Protected identity endpoints currently use short-lived bearer access tokens.
+- Active organization context is selected with `X-Organization-ID`, then verified against persisted active membership. The header selects context; it does not grant access.
+- Public self-registration is disabled by default. Controlled environments may explicitly enable it; production onboarding should use invitations.
+- A one-time `scripts/bootstrap_platform_admin.py` command creates the initial platform organization and owner membership after migrations are applied.
 
-Do not store long-lived bearer or refresh tokens in localStorage. Do not expose password hashes, token hashes or internal security metadata through API schemas.
+Before browser production release:
+- move refresh tokens to Secure, HttpOnly cookies with an appropriate SameSite policy;
+- add CSRF protection for cookie-authenticated refresh/logout flows;
+- enforce HTTPS;
+- add login, invitation and password-recovery rate limiting;
+- implement single-use, hashed and time-limited invitation/password-reset tokens.
+
+Do not store long-lived bearer or refresh tokens in localStorage. Do not expose password hashes, token hashes or internal security metadata through API schemas. The current JSON-body refresh endpoint is a transitional API and is not the final browser security design.
 
 ## 7. Core business workflows
 
