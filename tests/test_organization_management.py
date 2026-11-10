@@ -14,6 +14,8 @@ from veristock.identity import MembershipRole, Organization, OrganizationMembers
 from veristock.organizations.models import Branch
 
 @pytest.mark.asyncio
+
+
 async def test_branch_api_is_tenant_scoped(tmp_path) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'tenant-admin.db'}"
     engine = create_async_engine(database_url)
