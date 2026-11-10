@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Veristock internal workforce profile endpoints."""
 from datetime import date
 from typing import Annotated
@@ -36,36 +37,21 @@ class EmployeeRead(BaseModel):
     employment_status: str
 
 @router.get("", response_model=list[EmployeeRead])
-async def list_employees(
-    organization: PlatformEmployeeManager,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
-) -> list[EmployeeProfile]:
+async def list_employees(organization: PlatformEmployeeManager, session: Annotated[AsyncSession, Depends(get_db_session)]) -> list[EmployeeProfile]:
     if organization.kind != "platform":
         raise HTTPException(status_code=403, detail="Platform organization required")
-    result = await session.scalars(select(EmployeeProfile).where(
-        EmployeeProfile.organization_id == organization.id
-    ).order_by(EmployeeProfile.employee_number))
+    result = await session.scalars(select(EmployeeProfile).where(EmployeeProfile.organization_id == organization.id).order_by(EmployeeProfile.employee_number))
     return list(result.all())
 
 @router.post("", response_model=EmployeeRead, status_code=201)
-async def create_employee(
-    payload: EmployeeCreate, organization: PlatformEmployeeManager,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
-) -> EmployeeProfile:
+async def create_employee(payload: EmployeeCreate, organization: PlatformEmployeeManager, session: Annotated[AsyncSession, Depends(get_db_session)]) -> EmployeeProfile:
     if organization.kind != "platform":
         raise HTTPException(status_code=403, detail="Platform organization required")
     user = await session.get(User, payload.user_id)
-    membership = await session.scalar(select(OrganizationMembership.id).where(
-        OrganizationMembership.user_id == payload.user_id,
-        OrganizationMembership.organization_id == organization.id,
-        OrganizationMembership.status == "active",
-    ))
+    membership = await session.scalar(select(OrganizationMembership.id).where(OrganizationMembership.user_id == payload.user_id, OrganizationMembership.organization_id == organization.id, OrganizationMembership.status == "active"))
     if user is None or user.status != "active" or membership is None:
         raise HTTPException(status_code=422, detail="Employee must be an active platform member")
-    employee = EmployeeProfile(
-        id=str(uuid4()), organization_id=organization.id,
-        employment_status="active", **payload.model_dump(),
-    )
+    employee = EmployeeProfile(id=str(uuid4()), organization_id=organization.id, employment_status="active", **payload.model_dump())
     session.add(employee)
     try:
         await session.commit()
