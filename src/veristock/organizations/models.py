@@ -8,6 +8,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from veristock.core.database import Base
 
+
+
 class Branch(Base):
     """A physical or operational location owned by one organization."""
     __tablename__ = "branches"
@@ -28,6 +30,8 @@ class Branch(Base):
     phone: Mapped[str | None] = mapped_column(String(40))
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 
 class OrganizationContact(Base):
     """A named business contact belonging to a single tenant."""
