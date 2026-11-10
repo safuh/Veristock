@@ -13,6 +13,8 @@ down_revision: str | None = "0005_user_status"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+
+
 def upgrade() -> None:
     """Create branch, contact and employee profile tables."""
     op.create_table(
@@ -71,6 +73,8 @@ def upgrade() -> None:
         sa.UniqueConstraint("employee_number", name="uq_employee_profiles_number"),
     )
     op.create_index("ix_employee_profiles_org_status", "employee_profiles", ["organization_id", "employment_status"])
+
+
 
 def downgrade() -> None:
     """Remove workforce and organization administration tables."""
