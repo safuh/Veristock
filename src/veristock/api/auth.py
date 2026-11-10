@@ -72,6 +72,12 @@ async def register(
     body: CredentialsRequest,
     session: Annotated[AsyncSession, Depends(_session)],
 ) -> RegistrationResponseModel:
+    if not request.app.state.settings.allow_self_registration:
+        raise BackboneError(
+            "registration_disabled",
+            "Self-registration is disabled; request an invitation",
+            status.HTTP_403_FORBIDDEN,
+        )
     try:
         result = await _application(request, session).register(
             RegistrationRequest(identifier=body.identifier, password=body.password)
