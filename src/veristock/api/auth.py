@@ -275,9 +275,6 @@ async def browser_login(
     except Exception:
         await session.rollback()
         raise
-    finally:
-        await session.close()
-
     _set_browser_cookies(response, request, result.refresh_token)
     return BrowserTokenResponseModel(
         subject=result.subject,
@@ -329,7 +326,7 @@ async def browser_logout(
 ) -> Response:
     """Revoke the HttpOnly refresh cookie and clear browser auth cookies."""
     _validate_browser_csrf(request)
-    refresh_token = request.cookies.get(REFRESH_COOKIE)
+    refresh_token = request.cookies.get(_refresh_cookie_name(request))
     if refresh_token:
         try:
             await _application(request, session).logout(refresh_token)
