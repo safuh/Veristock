@@ -22,8 +22,6 @@ from ..core.config import Environment
 from ..core.errors import BackboneError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-REFRESH_COOKIE = "veristock_refresh"
-CSRF_COOKIE = "veristock_csrf"
 CSRF_HEADER = "X-CSRF-Token"
 
 
@@ -187,6 +185,16 @@ def _cookie_security(request: Request) -> bool:
     return request.app.state.settings.environment is Environment.PRODUCTION
 
 
+def _refresh_cookie_name(request: Request) -> str:
+    """Use the __Host prefix in production to prevent subdomain cookie injection."""
+    return "__Host-veristock_refresh" if _cookie_security(request) else "veristock_refresh"
+
+
+def _csrf_cookie_name(request: Request) -> str:
+    """Use a host-only CSRF cookie in production."""
+    return "__Host-veristock_csrf" if _cookie_security(request) else "veristock_csrf"
+
+
 def _set_browser_cookies(
     response: Response, request: Request, refresh_token: str
 ) -> None:
@@ -194,29 +202,29 @@ def _set_browser_cookies(
     settings = request.app.state.settings
     secure = _cookie_security(request)
     csrf_token = secrets.token_urlsafe(32)
-    cookie_options = {
-        "secure": secure,
-        "samesite": "lax",
-        "path": "/",
-        "max_age": settings.refresh_token_lifetime_seconds,
-    }
     response.set_cookie(
-        REFRESH_COOKIE,
+        _refresh_cookie_name(request),
         refresh_token,
         httponly=True,
-        **cookie_options,
+        secure=secure,
+        samesite="lax",
+        path="/",
+        max_age=settings.refresh_token_lifetime_seconds,
     )
     response.set_cookie(
-        CSRF_COOKIE,
+        _csrf_cookie_name(request),
         csrf_token,
         httponly=False,
-        **cookie_options,
+        secure=secure,
+        samesite="lax",
+        path="/",
+        max_age=settings.refresh_token_lifetime_seconds,
     )
 
 
 def _validate_browser_csrf(request: Request) -> None:
     """Validate the double-submit CSRF token for cookie-authenticated actions."""
-    cookie_token = request.cookies.get(CSRF_COOKIE)
+    cookie_token = request.cookies.get(_csrf_cookie_name(request))
     header_token = request.headers.get(CSRF_HEADER)
     if (
         not cookie_token
@@ -233,7 +241,10 @@ def _validate_browser_csrf(request: Request) -> None:
 def _clear_browser_cookies(response: Response, request: Request) -> None:
     """Clear browser authentication cookies after logout."""
     secure = _cookie_security(request)
-    for name, httponly in ((REFRESH_COOKIE, True), (CSRF_COOKIE, False)):
+    for name, httponly in (
+        (_refresh_cookie_name(request), True),
+        (_csrf_cookie_name(request), False),
+    ):
         response.delete_cookie(
             name,
             path="/",
@@ -282,7 +293,7 @@ async def browser_refresh(
 ) -> BrowserTokenResponseModel:
     """Rotate the HttpOnly refresh cookie after CSRF validation."""
     _validate_browser_csrf(request)
-    refresh_token = request.cookies.get(REFRESH_COOKIE)
+    refresh_token = request.cookies.get(_refresh_cookie_name(request))
     if not refresh_token:
         raise BackboneError(
             "refresh_cookie_missing",
