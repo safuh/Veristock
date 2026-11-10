@@ -2,7 +2,7 @@
 
 import hmac
 import secrets
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
@@ -54,9 +54,10 @@ class TokenResponseModel(BaseModel):
     refresh_token: str
 
 
-async def _session(request: Request) -> AsyncSession:
+async def _session(request: Request) -> AsyncIterator[AsyncSession]:
     session_factory: async_sessionmaker[AsyncSession] = request.app.state.db_session_factory
-    return session_factory()
+    async with session_factory() as session:
+        yield session
 
 
 def _application(request: Request, session: AsyncSession) -> AuthenticationApplication:
@@ -98,8 +99,6 @@ async def register(
     except Exception:
         await session.rollback()
         raise
-    finally:
-        await session.close()
     return RegistrationResponseModel(subject=result.subject)
 
 
