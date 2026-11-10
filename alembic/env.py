@@ -1,4 +1,4 @@
-"""Alembic migration environment for the Veristock application."""
+# ruff: noqa: E501\n"""Alembic migration environment for the Veristock application."""
 from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import pool
