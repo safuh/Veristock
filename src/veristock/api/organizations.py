@@ -77,7 +77,10 @@ class BranchCreate(BaseModel):
     @field_validator("code")
     @classmethod
     def normalize_code(cls, value: str) -> str:
-        return value.strip().upper()
+        normalized = value.strip().upper()
+        if not normalized:
+            raise ValueError("Branch code cannot be blank")
+        return normalized
 
 
 
@@ -131,6 +134,13 @@ class ContactUpdate(BaseModel):
     phone: str | None = Field(default=None, max_length=40)
     is_primary: bool | None = None
     status: str | None = None
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str | None) -> str | None:
+        if value and ("@" not in value or value.startswith("@") or value.endswith("@")):
+            raise ValueError("A valid email address is required")
+        return value
 
 
 
