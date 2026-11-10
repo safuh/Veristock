@@ -3,11 +3,13 @@
 from typing import Annotated
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from veristock.identity.authorization import Organization
 from veristock.identity.authorization_dependencies import get_current_organization, get_db_session, require_permission
 from veristock.organizations.models import Branch, OrganizationContact
