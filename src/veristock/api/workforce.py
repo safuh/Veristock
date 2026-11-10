@@ -19,6 +19,8 @@ router = APIRouter(prefix="/employees", tags=["workforce"])
 PlatformEmployeeReader = Annotated[Organization, Depends(require_permission("employee.read"))]
 PlatformEmployeeManager = Annotated[Organization, Depends(require_permission("employee.manage"))]
 
+
+
 class EmployeeCreate(BaseModel):
     user_id: str
     employee_number: str = Field(min_length=1, max_length=40)
@@ -26,6 +28,8 @@ class EmployeeCreate(BaseModel):
     phone: str | None = Field(default=None, max_length=40)
     job_title: str | None = Field(default=None, max_length=120)
     hire_date: date | None = None
+
+
 
 class EmployeeRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -39,6 +43,8 @@ class EmployeeRead(BaseModel):
     hire_date: date | None
     employment_status: str
 
+
+
 @router.get("", response_model=list[EmployeeRead])
 async def list_employees(organization: PlatformEmployeeReader, session: Annotated[AsyncSession, Depends(get_db_session)]) -> list[EmployeeProfile]:
     if organization.kind != "platform":
@@ -46,11 +52,15 @@ async def list_employees(organization: PlatformEmployeeReader, session: Annotate
     result = await session.scalars(select(EmployeeProfile).where(EmployeeProfile.organization_id == organization.id).order_by(EmployeeProfile.employee_number))
     return list(result.all())
 
+
+
 class EmployeeUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=2, max_length=180)
     phone: str | None = Field(default=None, max_length=40)
     job_title: str | None = Field(default=None, max_length=120)
     employment_status: str | None = None
+
+
 
 
 @router.patch("/{employee_id}", response_model=EmployeeRead)
@@ -78,6 +88,8 @@ async def update_employee(
     await session.commit()
     await session.refresh(employee)
     return employee
+
+
 
 
 @router.post("", response_model=EmployeeRead, status_code=201)
