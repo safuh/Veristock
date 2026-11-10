@@ -16,7 +16,8 @@ from veristock.identity.models import User
 from veristock.workforce.models import EmployeeProfile
 
 router = APIRouter(prefix="/employees", tags=["workforce"])
-PlatformEmployeeReader = Annotated[Organization, Depends(require_permission("employee.read"))]\nPlatformEmployeeManager = Annotated[Organization, Depends(require_permission("employee.manage"))]
+PlatformEmployeeReader = Annotated[Organization, Depends(require_permission("employee.read"))]
+PlatformEmployeeManager = Annotated[Organization, Depends(require_permission("employee.manage"))]
 
 class EmployeeCreate(BaseModel):
     user_id: str
