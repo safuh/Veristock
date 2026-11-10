@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Add tenant branches, contacts and internal employee profiles.
 Revision ID: 0006_organization_workforce
 Revises: 0005_user_status
