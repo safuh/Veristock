@@ -47,7 +47,7 @@ async def test_alembic_upgrade_and_downgrade() -> None:
         assert {"id", "identifier", "password_hash", "created_at"} <= user_columns
         assert {"token_id", "subject", "expires_at", "revoked"} <= refresh_token_columns
         assert permission_count > 0
-        assert role_count == 9
+        assert role_count == 10
     finally:
         await engine.dispose()
 
