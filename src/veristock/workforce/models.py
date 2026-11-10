@@ -8,6 +8,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from veristock.core.database import Base
 
+
+
 class EmployeeProfile(Base):
     """Employment profile for an active member of the platform organization."""
     __tablename__ = "employee_profiles"
