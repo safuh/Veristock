@@ -37,7 +37,10 @@ async def test_alembic_upgrade_and_downgrade() -> None:
             )
             refresh_token_columns = {row[0] for row in result}
             result = await connection.execute(
-                text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
+                text(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema = 'public'"
+                )
             )
             table_names = {row[0] for row in result}
             result = await connection.execute(
