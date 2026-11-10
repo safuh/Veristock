@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
     ForeignKey,
     String,
@@ -19,6 +20,13 @@ class Organization(Base):
     """Platform or client organization."""
 
     __tablename__ = "organizations"
+    __table_args__ = (
+        CheckConstraint("kind IN ('platform', 'client')", name="ck_organizations_kind"),
+        CheckConstraint(
+            "status IN ('active', 'suspended', 'archived')",
+            name="ck_organizations_status",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -37,6 +45,10 @@ class OrganizationMembership(Base):
     __tablename__ = "organization_memberships"
     __table_args__ = (
         UniqueConstraint("organization_id", "user_id", name="uq_membership_org_user"),
+        CheckConstraint(
+            "status IN ('invited', 'active', 'suspended', 'revoked')",
+            name="ck_memberships_status",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -56,6 +68,9 @@ class Role(Base):
     """Named permission bundle, scoped to platform or client organizations."""
 
     __tablename__ = "roles"
+    __table_args__ = (
+        CheckConstraint("scope IN ('platform', 'client')", name="ck_roles_scope"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     code: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
