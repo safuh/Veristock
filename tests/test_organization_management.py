@@ -1,19 +1,15 @@
+# ruff: noqa: E501
 from datetime import timedelta
 from uuid import uuid4
-
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from veristock.app import create_app
 from veristock.auth.tokens import TokenService
 from veristock.core.config import Environment, Settings
 from veristock.core.database import Base
-from veristock.identity import (
-    MembershipRole, Organization, OrganizationMembership, Permission,
-    Role, RolePermission, User,
-)
+from veristock.identity import MembershipRole, Organization, OrganizationMembership, Permission, Role, RolePermission, User
 from veristock.organizations.models import Branch
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 
 @pytest.mark.asyncio
 async def test_branch_api_is_tenant_scoped(tmp_path) -> None:
