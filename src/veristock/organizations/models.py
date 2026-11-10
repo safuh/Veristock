@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Tenant-owned branch and contact persistence models."""
 from datetime import datetime
 from uuid import uuid4
