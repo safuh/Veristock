@@ -6,14 +6,14 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .authorization import Organization
-from veristock.identity.models import User
-from .authorization_dependencies import (
+from veristock.identity.authorization import Organization
+from veristock.identity.authorization_dependencies import (
     get_current_organization,
     get_current_user,
     get_db_session,
 )
-from .authorization_repository import AuthorizationRepository
+from veristock.identity.authorization_repository import AuthorizationRepository
+from veristock.identity.models import User
 
 router = APIRouter(prefix="/identity", tags=["identity"])
 
