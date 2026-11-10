@@ -69,6 +69,8 @@ async def update_employee(
     if employee is None:
         raise HTTPException(status_code=404, detail="Employee profile not found")
     changes = payload.model_dump(exclude_unset=True)
+    if "display_name" in changes and changes["display_name"] is None:
+        raise HTTPException(status_code=422, detail="Employee name cannot be null")
     if changes.get("employment_status") not in (None, "active", "suspended", "terminated"):
         raise HTTPException(status_code=422, detail="Invalid employment status")
     for field, value in changes.items():
