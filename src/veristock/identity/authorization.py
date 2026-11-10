@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     String,
     UniqueConstraint,
     func,
@@ -26,6 +27,7 @@ class Organization(Base):
             "status IN ('active', 'suspended', 'archived')",
             name="ck_organizations_status",
         ),
+        Index("ix_organizations_kind_status", "kind", "status"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -49,6 +51,8 @@ class OrganizationMembership(Base):
             "status IN ('invited', 'active', 'suspended', 'revoked')",
             name="ck_memberships_status",
         ),
+        Index("ix_memberships_user_status", "user_id", "status"),
+        Index("ix_memberships_org_status", "organization_id", "status"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -70,10 +74,11 @@ class Role(Base):
     __tablename__ = "roles"
     __table_args__ = (
         CheckConstraint("scope IN ('platform', 'client')", name="ck_roles_scope"),
+        UniqueConstraint("code", name="uq_roles_code"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    code: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
+    code: Mapped[str] = mapped_column(String(80), nullable=False)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     scope: Mapped[str] = mapped_column(String(16), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -85,9 +90,10 @@ class Permission(Base):
     """Stable permission identifier used by application policies."""
 
     __tablename__ = "permissions"
+    __table_args__ = (UniqueConstraint("code", name="uq_permissions_code"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    code: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    code: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str] = mapped_column(String(240), nullable=False)
 
 
