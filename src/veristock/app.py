@@ -47,16 +47,21 @@ def create_app(
     if resolved.jwt_secret_key is not None:
         secret_key = resolved.jwt_secret_key.get_secret_value()
         if auth_application_factory is None:
-            auth_application_factory = lambda session: create_sqlalchemy_auth_application(
-                session,
-                secret_key=secret_key,
-                access_token_lifetime=timedelta(
-                    seconds=resolved.access_token_lifetime_seconds
-                ),
-                refresh_token_lifetime=timedelta(
-                    seconds=resolved.refresh_token_lifetime_seconds
-                ),
-            )
+            def configured_auth_application(
+                session: AsyncSession,
+            ) -> AuthenticationApplication:
+                return create_sqlalchemy_auth_application(
+                    session,
+                    secret_key=secret_key,
+                    access_token_lifetime=timedelta(
+                        seconds=resolved.access_token_lifetime_seconds
+                    ),
+                    refresh_token_lifetime=timedelta(
+                        seconds=resolved.refresh_token_lifetime_seconds
+                    ),
+                )
+
+            auth_application_factory = configured_auth_application
         if access_token_service is None:
             access_token_service = TokenService(secret_key)
     elif resolved.environment is Environment.PRODUCTION and (
