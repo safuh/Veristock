@@ -86,3 +86,41 @@ def test_self_registration_is_disabled_by_default() -> None:
         )
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "registration_disabled"
+
+
+@pytest.mark.asyncio
+async def test_app_composes_authentication_from_jwt_settings(tmp_path: Path) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'configured-auth.db'}"
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+    finally:
+        await engine.dispose()
+
+    settings = Settings(
+        environment=Environment.TEST,
+        database_url=database_url,
+        jwt_secret_key="z" * 48,
+        allow_self_registration=True,
+    )
+    with TestClient(create_app(settings)) as client:
+        registered = client.post(
+            "/api/auth/register",
+            json={"identifier": "configured@example.com", "password": "correct horse"},
+        )
+        assert registered.status_code == 201
+
+        logged_in = client.post(
+            "/api/auth/login",
+            json={"identifier": "configured@example.com", "password": "correct horse"},
+        )
+        assert logged_in.status_code == 200
+        access_token = logged_in.json()["access_token"]
+
+        current_user = client.get(
+            "/api/identity/me",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert current_user.status_code == 200
+        assert current_user.json()["identifier"] == "configured@example.com"
