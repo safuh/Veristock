@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from veristock.core.config import get_settings
 from veristock.core.database import Base
+from veristock.invitations.models import OrganizationInvitation  # noqa: F401
 from veristock.identity import (
     MembershipRole,
     Organization,
