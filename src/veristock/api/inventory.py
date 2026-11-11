@@ -8,7 +8,6 @@ from pydantic import BaseModel
 from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from veristock.core.database import Base
 from veristock.identity.authorization import Organization
 from veristock.identity.authorization_dependencies import (
     get_db_session,
