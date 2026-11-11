@@ -20,6 +20,7 @@ from veristock.identity import (
     User,  # noqa: F401
 )
 from veristock.invitations.models import OrganizationInvitation  # noqa: F401
+from veristock.inventory import models as inventory_models  # noqa: F401
 from veristock.organizations.models import Branch, OrganizationContact  # noqa: F401
 from veristock.workforce.models import EmployeeProfile  # noqa: F401
 
