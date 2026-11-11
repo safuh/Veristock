@@ -13,19 +13,22 @@ class _TestApiClient extends ApiClient {
 }
 
 void main() {
-  testWidgets('shows sign-in form when no mobile session exists', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          apiClientProvider.overrideWithValue(_TestApiClient()),
-        ],
-        child: const VeristockApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'shows sign-in form when no mobile session exists',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(_TestApiClient()),
+          ],
+          child: const VeristockApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.byType(MaterialApp), findsOneWidget);
-    expect(find.text('Veristock Field'), findsOneWidget);
-    expect(find.text('Sign in'), findsOneWidget);
-  });
+      expect(find.byType(MaterialApp), findsOneWidget);
+      expect(find.text('Veristock Field'), findsOneWidget);
+      expect(find.text('Sign in'), findsOneWidget);
+    },
+  );
 }
