@@ -6,7 +6,7 @@ from .health import router as health_router
 from .identity import router as identity_router
 from .invitations import router as invitations_router
 from .memberships import router as memberships_router
-from .organizations import router as organizations_router
+from .organizations import router as organizations_router\nfrom .organization_enrollments import router as organization_enrollments_router
 from .workforce import router as workforce_router
 
 api_router = APIRouter()
