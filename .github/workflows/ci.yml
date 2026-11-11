@@ -103,8 +103,8 @@ jobs:
           fi
       - name: Install Flutter dependencies
         run: flutter pub get
-      - name: Check Dart formatting
-        run: dart format --output=show lib test
+      - name: Format Dart sources
+        run: dart format lib test
       - name: Analyze Flutter application
         run: flutter analyze
       - name: Run Flutter tests
