@@ -72,6 +72,12 @@ async def test_invitation_is_single_use_and_activates_membership(tmp_path) -> No
                         name="Client Read-only",
                         scope="client",
                     ),
+                    Role(
+                        id=str(uuid4()),
+                        code="client_manager",
+                        name="Client Manager",
+                        scope="client",
+                    ),
                     Permission(
                         id=invite_permission_id,
                         code="employee.invite",
@@ -126,6 +132,37 @@ async def test_invitation_is_single_use_and_activates_membership(tmp_path) -> No
             accepted_body = accepted.json()
             assert accepted_body["organization_id"] == organization_id
             assert accepted_body["role_code"] == "client_readonly"
+
+            members = client.get("/api/memberships", headers=headers)
+            assert members.status_code == 200
+            assert len(members.json()) == 2
+
+            granted = client.post(
+                f"/api/memberships/{accepted_body['membership_id']}/roles",
+                headers=headers,
+                json={"role_code": "client_manager"},
+            )
+            assert granted.status_code == 200
+            assert "client_manager" in granted.json()["role_codes"]
+
+            revoked_role = client.delete(
+                f"/api/memberships/{accepted_body['membership_id']}/roles/client_manager",
+                headers=headers,
+            )
+            assert revoked_role.status_code == 204
+
+            last_admin_role = client.delete(
+                f"/api/memberships/{membership_id}/roles/client_admin",
+                headers=headers,
+            )
+            assert last_admin_role.status_code == 409
+
+            last_admin_status = client.patch(
+                f"/api/memberships/{membership_id}",
+                headers=headers,
+                json={"status": "suspended"},
+            )
+            assert last_admin_status.status_code == 409
 
             replay = client.post(
                 "/api/invitations/accept",
