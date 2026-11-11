@@ -1,4 +1,5 @@
 """Add single-use organization invitations.
+
 # ruff: noqa: E501
 
 Revision ID: 0007_organization_invitations
@@ -30,14 +31,27 @@ def upgrade() -> None:
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("accepted_at", sa.DateTime(timezone=True)),
         sa.Column("revoked_at", sa.DateTime(timezone=True)),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
-        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
+        ),
         sa.ForeignKeyConstraint(["role_id"], ["roles.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["invited_by_user_id"], ["users.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["invited_by_user_id"], ["users.id"], ondelete="RESTRICT"
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("token_hash", name="uq_org_invitations_token_hash"),
     )
-    op.create_index("ix_org_invitations_org_email", "organization_invitations", ["organization_id", "email"])
+    op.create_index(
+        "ix_org_invitations_org_email",
+        "organization_invitations",
+        ["organization_id", "email"],
+    )
     op.create_index("ix_org_invitations_expires", "organization_invitations", ["expires_at"])
 
     bind = op.get_bind()
