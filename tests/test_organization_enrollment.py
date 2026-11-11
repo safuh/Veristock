@@ -38,6 +38,7 @@ def test_business_enrollment_requires_platform_approval(tmp_path) -> None:
     platform_role_id = str(uuid4())
     client_admin_role_id = str(uuid4())
     permission_id = str(uuid4())
+    client_read_permission_id = str(uuid4())
     try:
         import asyncio
 
@@ -85,6 +86,11 @@ def test_business_enrollment_requires_platform_approval(tmp_path) -> None:
                             code="organization.manage",
                             description="Manage client organizations",
                         ),
+                        Permission(
+                            id=client_read_permission_id,
+                            code="organization.read",
+                            description="View organization profile",
+                        ),
                         MembershipRole(
                             membership_id=platform_membership_id,
                             role_id=platform_role_id,
@@ -92,6 +98,10 @@ def test_business_enrollment_requires_platform_approval(tmp_path) -> None:
                         RolePermission(
                             role_id=platform_role_id,
                             permission_id=permission_id,
+                        ),
+                        RolePermission(
+                            role_id=client_admin_role_id,
+                            permission_id=client_read_permission_id,
                         ),
                     ]
                 )
