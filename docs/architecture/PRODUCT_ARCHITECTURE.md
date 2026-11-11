@@ -15,7 +15,7 @@ It has three browser workspaces backed by one FastAPI application:
 2. **Field workspace:** assigned employees view work, conduct physical counts, record item condition and batch/expiry details, attach evidence, submit counts and perform authorized recounts.
 3. **Client portal:** client users manage their branches and inventory data, provide expected-stock information, monitor assignments, review approved results and download reports.
 
-The workspaces are presentation and navigation boundaries, not security boundaries. Authorization is enforced by the API for every operation.
+The management and client browser workspaces have an initial implementation under `web/`; the field workspace remains planned. The workspaces are presentation and navigation boundaries, not security boundaries. Authorization is enforced by the API for every operation.
 
 ## 2. Architecture decisions
 
