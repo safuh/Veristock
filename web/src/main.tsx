@@ -264,6 +264,18 @@ function AdminDashboard({ token, organization }: { token: string; organization: 
       await refresh();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Review action failed"); }
   };
+  const updateOrganizationStatus = async (id: string, status: "active" | "suspended") => {
+    setNotice(""); setError("");
+    try {
+      await request(`/organizations/${id}/status`, token, organization.id, {
+        method: "PATCH", body: JSON.stringify({ status })
+      });
+      setNotice(`Organization ${status === "active" ? "reactivated" : "suspended"} successfully.`);
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to update organization");
+    }
+  };
   return <div className="content">
     <div className="page-heading"><div><p className="eyebrow">VERISTOCK OPERATIONS</p><h1>Good day, team.</h1>
       <p className="muted">Your overview of clients, onboarding and platform activity.</p></div>
@@ -287,9 +299,9 @@ function AdminDashboard({ token, organization }: { token: string; organization: 
     </section>
     <section className="panel">
       <div className="panel-heading"><div><p className="eyebrow">TENANT DIRECTORY</p><h2>Client organizations</h2><p className="muted">Organizations provisioned on the platform.</p></div></div>
-      <div className="table-wrap"><table><thead><tr><th>ORGANIZATION</th><th>TIME ZONE</th><th>MEMBERS</th><th>STATUS</th></tr></thead>
-        <tbody>{organizations.map((org) => <tr key={org.id}><td><strong>{org.trading_name ?? org.legal_name}</strong><small>{org.legal_name}</small></td><td>{org.timezone}</td><td>{org.active_members}</td><td><span className={`status ${org.status}`}>{org.status}</span></td></tr>)}
-          {!organizations.length && <tr><td colSpan={4} className="muted">No client organizations provisioned yet.</td></tr>}</tbody></table></div>
+      <div className="table-wrap"><table><thead><tr><th>ORGANIZATION</th><th>TIME ZONE</th><th>MEMBERS</th><th>STATUS</th><th>ACTIONS</th></tr></thead>
+        <tbody>{organizations.map((org) => <tr key={org.id}><td><strong>{org.trading_name ?? org.legal_name}</strong><small>{org.legal_name}</small></td><td>{org.timezone}</td><td>{org.active_members}</td><td><span className={`status ${org.status}`}>{org.status}</span></td><td>{org.status === "active" ? <button className="reject" onClick={() => void updateOrganizationStatus(org.id, "suspended")}>Suspend</button> : org.status === "suspended" ? <button className="approve" onClick={() => void updateOrganizationStatus(org.id, "active")}>Reactivate</button> : "—"}</td></tr>)}
+          {!organizations.length && <tr><td colSpan={5} className="muted">No client organizations provisioned yet.</td></tr>}</tbody></table></div>
     </section>
     <p className="footnote">Veristock internal workspace · All tenant operations are authorized by the API.</p>
   </div>;
