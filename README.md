@@ -13,7 +13,7 @@ The repository began as a reusable FastAPI foundation. The product architecture 
 - Existing application factory, async persistence, migrations, JWT primitives, Docker assets and tests are retained.
 - Organization, membership, role and permission schema is added through forward migrations.
 - Authenticated identity and organization-context endpoints are available.
-- Initial M9 APIs cover client-tenant provisioning, tenant-scoped branches and contacts, and internal employee profiles.
+- Initial M9 APIs cover client-tenant provisioning, tenant-scoped branches and contacts, internal employee profiles, and secure organization invitations.
 - Management, field and client browser interfaces and the inventory business modules are not yet implemented.
 
 See [Product Architecture](docs/architecture/PRODUCT_ARCHITECTURE.md), [Domain Model](docs/architecture/DOMAIN_MODEL.md), and [MVP Acceptance Tracker](docs/MILESTONES.md).
@@ -68,7 +68,8 @@ The bootstrap command is idempotent for the same active account. It creates the 
 - Select an organization with X-Organization-ID; the API verifies active membership before returning context.
 - Role scope must match organization kind.
 - Self-registration is disabled by default. Production onboarding will use controlled invitations.
-- Rate limiting and invitation/password-recovery flows remain implementation requirements before production release.
+- Invitation tokens are single-use, stored as SHA-256 digests and expire after 72 hours; delivery is not yet integrated with an email provider, so the token is returned once to the authorized inviter for secure delivery.
+- Rate limiting and password-recovery flows remain implementation requirements before production release.
 
 Review [SECURITY.md](SECURITY.md) before deployment.
 
