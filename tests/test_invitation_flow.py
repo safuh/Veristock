@@ -1,11 +1,11 @@
 """HTTP tests for single-use organization invitations."""
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from veristock.app import create_app
@@ -172,6 +172,42 @@ async def test_invitation_is_single_use_and_activates_membership(tmp_path) -> No
                 },
             )
             assert replay.status_code == 400
+
+            revoked_invite = client.post(
+                "/api/invitations",
+                headers=headers,
+                json={"email": "revoked@example.com", "role_code": "client_readonly"},
+            )
+            assert revoked_invite.status_code == 201
+            revoke_response = client.post(
+                f"/api/invitations/{revoked_invite.json()['id']}/revoke",
+                headers=headers,
+            )
+            assert revoke_response.status_code == 204
+            revoked_acceptance = client.post(
+                "/api/invitations/accept",
+                json={"token": revoked_invite.json()["invitation_token"]},
+            )
+            assert revoked_acceptance.status_code == 400
+
+            expired_invite = client.post(
+                "/api/invitations",
+                headers=headers,
+                json={"email": "expired@example.com", "role_code": "client_readonly"},
+            )
+            assert expired_invite.status_code == 201
+            async with factory() as session:
+                await session.execute(
+                    update(OrganizationInvitation)
+                    .where(OrganizationInvitation.id == expired_invite.json()["id"])
+                    .values(expires_at=datetime.now(UTC) - timedelta(days=1))
+                )
+                await session.commit()
+            expired_acceptance = client.post(
+                "/api/invitations/accept",
+                json={"token": expired_invite.json()["invitation_token"]},
+            )
+            assert expired_acceptance.status_code == 400
 
         async with factory() as session:
             invitation = await session.scalar(
