@@ -180,19 +180,19 @@ Reference documents:
 
 ### M12 — Physical stocktaking
 
-**Status: planned — shared workflow for client and Veristock counters.**
+**Status: in progress — tenant-scoped branch snapshots, blind scope listing, immutable count observations, idempotent capture, complete-round submission and recount rounds are implemented for client-organization counters. Veristock cross-tenant staff assignment and evidence upload remain open.**
 
-- [ ] Stocktake creation and branch/location/item scope definition.
-- [ ] Performer type: client employee or assigned Veristock employee.
+- [x] Stocktake creation and branch/item scope definition with frozen expected quantities.
+- [ ] Performer type: client employee or assigned Veristock employee (client-member counter access is implemented).
 - [ ] Explicit Veristock assignment and branch-scope authorization.
 - [ ] Client membership/permission authorization for client counters.
-- [ ] Blind-count API and UI behavior.
-- [ ] Barcode/manual item identification and quantity capture.
+- [x] Blind-count API behavior; expected quantities are withheld from blind count scope responses.
+- [x] Manual/barcode-identified item quantity capture API.
 - [ ] Image evidence upload with private storage and authorized retrieval.
 - [ ] Vision-assisted barcode/OCR/catalogue matching with confidence and manual confirmation.
 - [ ] Batch, serial, expiry and condition capture where enabled by item policy.
-- [ ] Idempotent count submission and immutable count rounds.
-- [ ] Recount workflow, supervisor queue and audit events.
+- [x] Idempotent count observations and immutable count rounds with completeness checks.
+- [x] Recount round creation; [ ] supervisor queue and richer audit events.
 
 ### M13 — Reconciliation and discrepancy intelligence
 
