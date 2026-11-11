@@ -67,7 +67,7 @@ async def _active_invitation_admin_count(
 
 
 async def _membership_has_invite_permission(
-    session: AsyncSession, membership_id: str
+    session: AsyncSession, membership_id: str, role_id: str | None = None
 ) -> bool:
     statement = (
         select(MembershipRole.id)
@@ -77,6 +77,7 @@ async def _membership_has_invite_permission(
         .where(
             MembershipRole.membership_id == membership_id,
             Permission.code == "employee.invite",
+            *([MembershipRole.role_id == role_id] if role_id is not None else []),
         )
         .limit(1)
     )
@@ -146,6 +147,8 @@ async def grant_membership_role(
     )
     if role is None:
         raise HTTPException(status_code=422, detail="Role is not valid for this organization")
+    if membership.status != "active":
+        raise HTTPException(status_code=409, detail="Only active memberships can receive role grants")
     if role.code == "platform_owner":
         owner_grant = await session.scalar(
             select(MembershipRole.id)
@@ -228,7 +231,7 @@ async def revoke_membership_role(
     )
     if grant is None:
         raise HTTPException(status_code=404, detail="Role grant not found")
-    if await _membership_has_invite_permission(session, membership.id):
+    if await _membership_has_invite_permission(session, membership.id, role.id):
         admin_count = await _active_invitation_admin_count(session, organization.id)
         if membership.status == "active" and admin_count <= 1:
             raise HTTPException(
