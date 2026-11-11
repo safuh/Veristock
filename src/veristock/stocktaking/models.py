@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Physical stocktake plans, frozen expected quantities and immutable count rounds."""
 
 from datetime import datetime
