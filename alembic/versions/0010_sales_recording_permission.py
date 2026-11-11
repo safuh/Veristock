@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Add sale-recording permission to client operational roles.
 
 Revision ID: 0010_sales_recording_permission
