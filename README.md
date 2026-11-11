@@ -13,7 +13,7 @@ The repository began as a reusable FastAPI foundation. The product architecture 
 - Existing application factory, async persistence, migrations, JWT primitives, Docker assets and tests are retained.
 - Organization, membership, role and permission schema is added through forward migrations.
 - Authenticated identity and organization-context endpoints are available.
-- Initial M9 APIs cover client-tenant provisioning, tenant-scoped branches and contacts, internal employee profiles, and secure organization invitations.
+- Initial M9 APIs cover client-tenant provisioning, tenant-scoped branches and contacts, internal employee profiles, secure organization invitations, and tenant-scoped membership/role administration.
 - Management, field and client browser interfaces and the inventory business modules are not yet implemented.
 
 See [Product Architecture](docs/architecture/PRODUCT_ARCHITECTURE.md), [Domain Model](docs/architecture/DOMAIN_MODEL.md), and [MVP Acceptance Tracker](docs/MILESTONES.md).
