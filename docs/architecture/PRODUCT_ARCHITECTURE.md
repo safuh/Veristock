@@ -417,3 +417,15 @@ The organization domain is a first-class product domain, separate from authentic
 - Existing `/api/organizations/current`, `/api/branches`, `/api/contacts` and membership endpoints provide tenant-side administration.
 
 Enrollment approval is transactional. An applicant receives no client organization access until approval succeeds. Every client-owned resource remains scoped by organization ID, and platform-level access is granted only through an authenticated platform membership and permission.
+
+
+## 15. Frontend delivery architecture (2026-11-11)
+
+Veristock uses a shared FastAPI backend and two purpose-specific clients:
+
+- **React + TypeScript PWA** for Veristock platform administration and client organization portals. It is responsive and installable on supported browsers. The service worker may precache only the static application shell and versioned assets. It must not cache authenticated API responses, access tokens, refresh tokens or tenant business data.
+- **Flutter Android application** for field stocktaking and mobile-first workflows such as camera capture, barcode scanning and controlled offline task execution. Flutter consumes the same versioned API contracts and authorization model as the web client.
+
+The PWA and Android app are not separate business systems. They must not implement inventory calculations, permissions or stock ledger rules independently. All authoritative business decisions remain in the backend.
+
+Offline write support is a separate capability gate, not an automatic consequence of installing either application. Before enabling it, implement encrypted local persistence, scoped task downloads, operation IDs/idempotency, server-side replay authorization, conflict handling, expiry/revocation behavior and auditable synchronization. No sensitive tenant data is included in generic service-worker caches.
