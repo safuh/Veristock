@@ -141,9 +141,9 @@ Reference documents:
 
 ### M9 — Client organizations and workforce
 
-**Status: in progress — initial tenant provisioning, branch/contact administration, employee profiles and single-use organization invitations are implemented; verification and remaining lifecycle workflows are open.**
+**Status: in progress — business enrollment, platform-side client administration, tenant profile/branch/contact APIs, employee profiles and invitations are implemented; lifecycle verification and workforce workflows remain open.**
 
-- [ ] Client organization profile, branches and contacts.
+- [x] Client organization profile, branches and contacts.
 - [x] Single-use, hashed, 72-hour organization invitations with revocation and acceptance.
 - [x] Invitation acceptance creates or reuses a user, activates membership and grants the selected tenant-scoped role.
 - [x] Tenant-scoped membership listing, role grants/revocation and membership suspension/reactivation/revocation, with protection against removing the final active invitation administrator.
@@ -151,7 +151,7 @@ Reference documents:
 - [ ] Role assignment and employee access administration.
 - [ ] Assignment membership and branch-scope enforcement.
 
-**Implemented in the current M9 slice:** client tenant creation from an authorized platform context; current-tenant profile read/update; branch create/list/update with organization-scoped queries; contact create/list/update; internal employee profile create/list/update restricted to active platform members; migration `0006_organization_workforce`; single-use invitation creation, revocation and acceptance; invitation-token digest storage; tenant-scoped role validation; migration `0007_organization_invitations`; initial branch-isolation and invitation-flow tests. CI verification is pending. Employee availability, member role grant/revocation, broader lifecycle tests and assignment-level access remain outstanding.
+**Implemented in the current M9 slice:** authenticated business enrollment; platform-only enrollment review and client directory/status management; atomic client tenant provisioning with the first client administrator; current-tenant profile read/update; branch and contact create/list/update; internal employee profile create/list/update restricted to active platform members; single-use invitation creation, revocation and acceptance; invitation-token digest storage; tenant-scoped role validation; migrations `0006`–`0009`; initial enrollment, branch-isolation and invitation-flow tests. Employee availability, member role grant/revocation, broader lifecycle tests and assignment-level access remain outstanding.
 
 ### M10 — Commercial and operational management
 
@@ -163,7 +163,7 @@ Reference documents:
 
 ### M11 — Inventory and sales ledger
 
-**Status: planned — next business-domain implementation slice.**
+**Status: in progress — inventory and stock ledger schema already exists; initial tenant-scoped read APIs and client dashboard visibility are being added. Sales posting and stock adjustment workflows remain open.**
 
 - [ ] Tenant-owned inventory items, categories and controlled units of measure.
 - [ ] Branch-scoped opening balances and optional warehouse locations.
@@ -172,7 +172,7 @@ Reference documents:
 - [ ] Client portal/API sales entry with line items and posting validation.
 - [ ] Atomic sale + stock-out movement posting with idempotency.
 - [ ] Reversal/correction workflow; no direct edits to posted sales or movements.
-- [ ] Tenant/branch-scoped inventory search and stock-on-hand queries.
+- [x] Initial tenant-scoped inventory catalogue and stock-on-hand read APIs.\n- [ ] Tenant/branch-scoped inventory search, pagination and filtering beyond the initial read endpoints.
 - [ ] Permission matrix and cross-tenant tests for inventory and sales.
 
 **MVP boundary:** no purchase orders, goods-received notes, invoice ingestion, supplier integrations or POS integrations. The sales portal is the initial source of demand/stock-out history for reporting and forecasting.
@@ -230,10 +230,15 @@ Reference documents:
 
 ### M15 — Browser workspaces
 
-- [ ] React + TypeScript application and shared component system.
-- [ ] Management workspace flows.
+**Status: in progress — React + TypeScript browser foundation, browser authentication, management onboarding dashboard and initial client inventory view are implemented.**
+
+- [x] React + TypeScript application foundation and responsive workspace shell.
+- [x] Browser login, HttpOnly refresh-cookie session restoration and logout integration.
+- [x] Veristock management dashboard for reviewing client applications and listing client organizations.
+- [x] Client portal organization context, branch list, inventory summary and stock-balance view.
+- [ ] Complete management workspace flows.
 - [ ] Field workspace responsive count flows.
-- [ ] Client portal inventory and report flows.
+- [ ] Client portal sales, stocktaking, discrepancy, forecast and report flows.
 - [ ] Typed API integration and loading/error/empty states.
 - [ ] Browser authentication and permission-aware navigation.
 - [ ] End-to-end tests for core management, field and client journeys.
