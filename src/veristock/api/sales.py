@@ -9,6 +9,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -243,15 +244,15 @@ async def post_sale(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> Sale:
     prior = await session.scalar(
-        select(Sale).where(
+        select(Sale)
+        .options(selectinload(Sale.lines))
+        .where(
             Sale.organization_id == organization.id,
             Sale.idempotency_key == payload.idempotency_key,
         )
     )
     if prior is not None:
-        prior_lines = list(
-            (await session.scalars(select(SaleLine).where(SaleLine.sale_id == prior.id))).all()
-        )
+        prior_lines = prior.lines
         requested = sorted(
             (line.item_id, line.quantity, line.unit_code, line.unit_price, line.currency)
             for line in payload.lines
@@ -262,7 +263,6 @@ async def post_sale(
         )
         if prior.branch_id != payload.branch_id or prior.reference != payload.reference or requested != recorded:
             raise HTTPException(status_code=409, detail="Idempotency key was used for a different sale")
-        setattr(prior, "lines", prior_lines)
         return prior
 
     branch = await session.scalar(
@@ -318,7 +318,7 @@ async def post_sale(
     session.add(sale)
     for index, (line, item, balance) in enumerate(prepared):
         balance.quantity_on_hand -= line.quantity
-        session.add(
+        sale.lines.append(
             SaleLine(
                 id=str(uuid4()),
                 organization_id=organization.id,
@@ -350,19 +350,6 @@ async def post_sale(
         await session.rollback()
         raise HTTPException(status_code=409, detail="Sale conflicts with another request") from exc
     await session.refresh(sale)
-    setattr(sale, "lines", [
-        SaleLine(
-            id=str(uuid4()),
-            organization_id=organization.id,
-            sale_id=sale_id,
-            item_id=line.item_id,
-            quantity=line.quantity,
-            unit_code=line.unit_code,
-            unit_price=line.unit_price,
-            currency=line.currency,
-        )
-        for line in payload.lines
-    ])
     return sale
 
 
@@ -380,14 +367,11 @@ async def list_sales(
     sales = list(
         (
             await session.scalars(
-                statement.order_by(Sale.posted_at.desc()).limit(limit).offset(offset)
+                statement.options(selectinload(Sale.lines))
+                .order_by(Sale.posted_at.desc())
+                .limit(limit)
+                .offset(offset)
             )
         ).all()
     )
-    for sale in sales:
-        setattr(sale, "lines", list(
-            (
-                await session.scalars(select(SaleLine).where(SaleLine.sale_id == sale.id))
-            ).all()
-        ))
     return sales
