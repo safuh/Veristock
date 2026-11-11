@@ -6,3 +6,16 @@
 .pwa-install{position:fixed;z-index:900;right:22px;bottom:22px;border:0;border-radius:999px;background:#101c2c;color:#fff;padding:13px 20px;font-weight:700;box-shadow:0 8px 28px #101c2c35}
 .pwa-install:hover{background:#243a55}
 @media(max-width:640px){.pwa-install{right:14px;bottom:14px}}
+
+.operation-form{display:flex;align-items:end;gap:12px;flex-wrap:wrap;padding:4px 22px 20px}
+.operation-form label{display:grid;gap:7px;min-width:150px;flex:1;font-size:10px;font-weight:700;color:#536276}
+.operation-form input,.operation-form select,.count-row input{height:39px;border:1px solid #dce3e9;border-radius:7px;padding:0 10px;background:#fff;color:#25364a;min-width:0}
+.operation-form .primary{height:39px;padding:0 16px;white-space:nowrap}
+.count-workspace{border-top:1px solid #edf0f3;padding-bottom:12px}
+.count-row{display:grid;grid-template-columns:minmax(0,1fr) 140px auto;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid #f0f2f5}
+.count-row strong,.count-row small{display:block}
+.count-row strong{font-size:11px;color:#27394c}
+.count-row small{font-size:10px;color:#8793a2;margin-top:4px}
+.count-row input{width:100%}
+@media(max-width:760px){.operation-form{display:grid;grid-template-columns:1fr 1fr}.count-row{grid-template-columns:minmax(0,1fr) 100px}.count-row button{grid-column:2}.operation-form .primary{width:100%}}
+@media(max-width:480px){.operation-form{grid-template-columns:1fr}.count-row{grid-template-columns:1fr 100px}.count-row button{grid-column:1 / -1}}
