@@ -238,8 +238,11 @@ Reference documents:
 - [x] Client portal organization context, branch list, inventory summary and stock-balance view.
 - [ ] Complete management workspace flows.
 - [ ] Field workspace responsive count flows.
+- [x] Flutter Android client foundation with secure token storage, session restoration, organization selection and camera barcode-scanning screen.
+- [ ] Complete Android runner configuration, field task APIs, count capture and release signing.
 - [ ] Client portal sales, stocktaking, discrepancy, forecast and report flows.
 - [ ] Typed API integration and loading/error/empty states.
+- [x] Installable React PWA shell with a service worker restricted to static application assets.
 - [ ] Browser authentication and permission-aware navigation.
 - [ ] End-to-end tests for core management, field and client journeys.
 - [x] Installable PWA shell with manifest and static-asset precaching; authenticated API responses are explicitly excluded from service-worker caching.
