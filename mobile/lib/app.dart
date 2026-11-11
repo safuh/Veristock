@@ -114,6 +114,7 @@ class _VeristockAppState extends ConsumerState<VeristockApp> {
               : _selectedOrganization == null
                   ? _NoOrganizationPage(
                       identifier: _identifier!,
+                      apiClient: ref.read(apiClientProvider),
                       onSignOut: _signOut,
                     )
                   : StocktakingHomePage(
