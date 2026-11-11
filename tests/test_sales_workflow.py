@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Integration tests for tenant-scoped opening stock and sale posting."""
 
 from datetime import timedelta
