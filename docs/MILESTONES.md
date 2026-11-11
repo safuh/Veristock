@@ -4,9 +4,9 @@ This tracker defines the full browser-based Veristock One MVP. A checkbox means 
 
 ## Product scope
 
-**Included:** FastAPI backend, React + TypeScript browser application, management workspace, field operations workspace, client portal, PostgreSQL, tenant isolation, RBAC, inventory onboarding, stocktaking, reconciliation, fixed asset verification, reporting and basic billing.
+**Included:** FastAPI backend, React + TypeScript browser application, management workspace, field operations workspace, client portal, PostgreSQL, tenant isolation, RBAC, branch/item/unit inventory, opening-stock onboarding, client-entered sales, stocktaking by either Veristock or client employees, reconciliation, inventory analytics/reporting, forecasting, discrepancy-risk detection and computer-vision-assisted counts.
 
-**Explicitly excluded:** all AI integration and scaffolding (PydanticAI, LLM providers, agents, embeddings, vector databases and AI-generated outputs), native Android/iOS apps, microservices, and advanced accounting/POS integrations.
+**Explicitly excluded from this MVP:** purchase-order/receipt/invoice document processing, supplier and POS integrations, fixed-asset verification, advanced accounting/billing, native Android/iOS apps, microservices, general-purpose support agents and employee performance ranking. AI is in scope only for the four capabilities in ADR 0003; no general agent platform or vector database is required initially.
 
 ## Foundation milestones retained from the backend repository
 
@@ -161,45 +161,72 @@ Reference documents:
 - [ ] Assignment status transitions and audit events.
 - [ ] Basic invoice and payment tracking.
 
-### M11 — Inventory onboarding
+### M11 — Inventory and sales ledger
 
-- [ ] Tenant-owned item catalogue, categories and units of measure.
-- [ ] Branch and optional warehouse location hierarchy.
-- [ ] Inventory file upload and mapping.
-- [ ] Import validation, duplicate detection and error reporting.
-- [ ] Immutable import provenance and expected-stock snapshots.
-- [ ] Tenant-scoped inventory search and maintenance.
+**Status: planned — next business-domain implementation slice.**
+
+- [ ] Tenant-owned inventory items, categories and controlled units of measure.
+- [ ] Branch-scoped opening balances and optional warehouse locations.
+- [ ] Validated structured import/manual opening-stock entry with provenance.
+- [ ] Append-only stock movement ledger and current-balance projection.
+- [ ] Client portal/API sales entry with line items and posting validation.
+- [ ] Atomic sale + stock-out movement posting with idempotency.
+- [ ] Reversal/correction workflow; no direct edits to posted sales or movements.
+- [ ] Tenant/branch-scoped inventory search and stock-on-hand queries.
+- [ ] Permission matrix and cross-tenant tests for inventory and sales.
+
+**MVP boundary:** no purchase orders, goods-received notes, invoice ingestion, supplier integrations or POS integrations. The sales portal is the initial source of demand/stock-out history for reporting and forecasting.
 
 ### M12 — Physical stocktaking
 
-- [ ] Stocktake creation and scope definition.
-- [ ] Count task allocation by branch/location/scope.
+**Status: planned — shared workflow for client and Veristock counters.**
+
+- [ ] Stocktake creation and branch/location/item scope definition.
+- [ ] Performer type: client employee or assigned Veristock employee.
+- [ ] Explicit Veristock assignment and branch-scope authorization.
+- [ ] Client membership/permission authorization for client counters.
 - [ ] Blind-count API and UI behavior.
 - [ ] Barcode/manual item identification and quantity capture.
-- [ ] Batch, serial, expiry and condition capture.
-- [ ] Evidence upload and authorized retrieval.
-- [ ] Idempotent count submission and immutable rounds.
-- [ ] Recount workflow and supervisor queue.
-- [ ] Assignment/stocktake completion controls.
+- [ ] Image evidence upload with private storage and authorized retrieval.
+- [ ] Vision-assisted barcode/OCR/catalogue matching with confidence and manual confirmation.
+- [ ] Batch, serial, expiry and condition capture where enabled by item policy.
+- [ ] Idempotent count submission and immutable count rounds.
+- [ ] Recount workflow, supervisor queue and audit events.
 
-### M13 — Reconciliation and quality assurance
+### M13 — Reconciliation and discrepancy intelligence
 
-- [ ] Reconciliation against frozen expected-stock snapshots.
+- [ ] Reconciliation against frozen expected-stock snapshots and accepted count rounds.
 - [ ] Configurable matching grain and unit validation.
 - [ ] Shortage, surplus, missing, unrecognized and condition exceptions.
 - [ ] Quantity variance and verified-cost financial variance.
 - [ ] Exception resolution and recount handoff.
 - [ ] Reviewer approval and separation-of-duties enforcement.
 - [ ] Immutable, versioned reconciliation runs.
+- [ ] Deterministic anomaly rules for unusual adjustments, sales and stock movement patterns.
+- [ ] Explainable risk signals with evidence references; human review only, no automated accusations.
 
-### M14 — Fixed assets and reporting
+### M14 — Forecasting, reporting and business intelligence
 
-- [ ] Fixed asset register and physical verification.
-- [ ] Missing, unregistered, moved and damaged asset exceptions.
-- [ ] Draft, approved and published report lifecycle.
-- [ ] PDF and spreadsheet exports from approved data.
-- [ ] Report provenance, version and file checksum.
-- [ ] Client report access and historical engagement views.
+- [ ] SQL-backed daily/weekly sales, stock movement and stock-on-hand metrics.
+- [ ] Branch/item inventory valuation only where verified unit cost and currency exist.
+- [ ] Low-stock, fast/slow-moving and stockout-risk reports.
+- [ ] CPU-friendly baseline demand forecasts and reorder suggestions with uncertainty.
+- [ ] Replenishment calculations use lead time, safety stock and configured service levels.
+- [ ] Report period, filters, generation timestamp and source watermark are recorded.
+- [ ] PDF/spreadsheet exports from deterministic query results.
+- [ ] Optional LLM narrative grounded only in authorized, precomputed metrics.
+- [ ] Tenant-scoped reporting permissions and cross-tenant tests.
+- [ ] Reports remain available when AI providers are unavailable.
+
+### M14A — AI platform foundations
+
+- [ ] Separate `veristock.ai` package with provider-neutral interfaces.
+- [ ] Model/provider configuration and safe timeouts; no provider secrets in domain modules.
+- [ ] Structured outputs validated with Pydantic.
+- [ ] Model/version, confidence, latency and failure metadata recorded.
+- [ ] Evaluation fixtures for OCR/matching, forecasts, anomaly signals and report narratives.
+- [ ] Human approval for any proposed action that can affect stock or business decisions.
+- [ ] AI failure isolation: inventory, sales, counting and deterministic reporting continue without AI.
 
 ### M15 — Browser workspaces
 
@@ -214,7 +241,7 @@ Reference documents:
 
 ### M16 — Production hardening and release
 
-- [ ] Full unit, integration, tenant-isolation, authorization and browser test suites pass.
+- [ ] Full unit, integration, tenant-isolation, authorization, AI evaluation and browser test suites pass.
 - [ ] PostgreSQL migration upgrade/downgrade and rollback procedures verified.
 - [ ] Upload limits, file authorization and storage lifecycle verified.
 - [ ] Backup and restore drill completed.
