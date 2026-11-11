@@ -1,6 +1,6 @@
 """Tenant-scoped physical stocktake planning and blind count capture."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated
 from uuid import uuid4
@@ -119,7 +119,7 @@ async def create_stocktake(
                 select(StockBalance).where(
                     StockBalance.organization_id == organization.id,
                     StockBalance.branch_id == branch.id,
-                )
+                ).with_for_update()
             )
         ).all()
     }
@@ -228,6 +228,11 @@ async def list_stocktake_scope(
             "barcode": item.barcode or "",
             "name": item.name,
             "unit_code": scope.unit_code,
+            **(
+                {"expected_quantity": str(scope.expected_quantity)}
+                if not stocktake.blind_count
+                else {}
+            ),
         }
         for scope, item in rows
     ]
@@ -346,7 +351,7 @@ async def submit_count_round(
             detail=f"Count incomplete: {observed_count or 0} of {expected_count or 0} items recorded",
         )
     round_record.status = "submitted"
-    round_record.submitted_at = datetime.now().astimezone()
+    round_record.submitted_at = datetime.now(UTC)
     stocktake.status = "submitted"
     stocktake.submitted_at = round_record.submitted_at
     await session.commit()
