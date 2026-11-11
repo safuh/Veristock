@@ -368,7 +368,7 @@ async def update_client_organization_status(
     organization.status = payload.status
     await session.commit()
     active_members = await session.scalar(
-        select(__import__("sqlalchemy").func.count(OrganizationMembership.id)).where(
+        select(func.count(OrganizationMembership.id)).where(
             OrganizationMembership.organization_id == organization.id,
             OrganizationMembership.status == "active",
         )
