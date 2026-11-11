@@ -366,6 +366,7 @@ function ClientDashboard({ token, organization }: { token: string; organization:
   const [activeStocktake, setActiveStocktake] = useState<string | null>(null);
   const [stocktakeScope, setStocktakeScope] = useState<StocktakeScopeItem[]>([]);
   const [countValues, setCountValues] = useState<Record<string, string>>({});
+  const [recordedCounts, setRecordedCounts] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -464,6 +465,7 @@ function ClientDashboard({ token, organization }: { token: string; organization:
     setActiveStocktake(created.id);
     setStocktakeScope(scope);
     setCountValues({});
+    setRecordedCounts(new Set());
     setStocktakeReference("");
   }, "Stocktake opened. Expected quantities are hidden from counters.");
 
@@ -564,13 +566,13 @@ function ClientDashboard({ token, organization }: { token: string; organization:
       {activeStocktake && <div className="count-workspace">
         <div className="panel-heading"><div><p className="eyebrow">ACTIVE COUNT</p><h2>Record physical quantities</h2>
           <p className="muted">Expected stock is hidden. Record every scoped item, including zero quantities.</p></div>
-          <button className="primary" disabled={busy || !stocktakeScope.length} onClick={() => void submitStocktake()}>Submit count round</button></div>
+          <button className="primary" disabled={busy || !stocktakeScope.length || recordedCounts.size !== stocktakeScope.length} onClick={() => void submitStocktake()}>Submit count round</button></div>
         {stocktakeScope.map((item) => <div className="count-row" key={item.item_id}>
           <div><strong>{item.name}</strong><small>{item.sku || item.barcode || item.item_id.slice(0, 8)} · {item.unit_code}</small></div>
           <input aria-label={`Count for ${item.name}`} type="number" min="0" step="0.0001"
             value={countValues[item.item_id] ?? ""} onChange={(e) => setCountValues((current) => ({ ...current, [item.item_id]: e.target.value }))} />
-          <button className="secondary" disabled={busy || countValues[item.item_id] === undefined || countValues[item.item_id].trim() === ""}
-            onClick={() => void recordCount(item)}>Save count</button>
+          <button className="secondary" disabled={busy || recordedCounts.has(item.item_id) || countValues[item.item_id] === undefined || countValues[item.item_id].trim() === ""}
+            onClick={() => void recordCount(item)}>{recordedCounts.has(item.item_id) ? "Count saved" : "Save count"}</button>
         </div>)}
       </div>}
       <div className="table-wrap"><table><thead><tr><th>REFERENCE</th><th>CREATED</th><th>ITEMS</th><th>STATUS</th></tr></thead>
