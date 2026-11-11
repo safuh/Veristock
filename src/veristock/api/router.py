@@ -9,11 +9,13 @@ from .invitations import router as invitations_router
 from .memberships import router as memberships_router
 from .organization_enrollments import router as organization_enrollments_router
 from .organizations import router as organizations_router
+from .sales import router as sales_router
 from .workforce import router as workforce_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
 api_router.include_router(inventory_router)
+api_router.include_router(sales_router)
 api_router.include_router(auth_router)
 api_router.include_router(identity_router)
 api_router.include_router(organizations_router)
