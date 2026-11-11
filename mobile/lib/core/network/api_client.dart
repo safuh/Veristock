@@ -5,12 +5,14 @@ import '../config/app_config.dart';
 
 class ApiClient {
   ApiClient()
-      : _dio = Dio(BaseOptions(
-          baseUrl: AppConfig.apiBaseUrl,
-          connectTimeout: const Duration(seconds: 15),
-          receiveTimeout: const Duration(seconds: 20),
-          headers: const {'Accept': 'application/json'},
-        ));
+      : _dio = Dio(
+          BaseOptions(
+            baseUrl: AppConfig.apiBaseUrl,
+            connectTimeout: const Duration(seconds: 15),
+            receiveTimeout: const Duration(seconds: 20),
+            headers: const {'Accept': 'application/json'},
+          ),
+        );
 
   final Dio _dio;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
@@ -71,7 +73,9 @@ class ApiClient {
     final accessToken = data['access_token'] as String?;
     final refreshToken = data['refresh_token'] as String?;
     if (accessToken == null || refreshToken == null) {
-      throw const FormatException('Authentication response did not contain tokens');
+      throw const FormatException(
+        'Authentication response did not contain tokens',
+      );
     }
     await _secureStorage.write(key: 'access_token', value: accessToken);
     await _secureStorage.write(key: 'refresh_token', value: refreshToken);
