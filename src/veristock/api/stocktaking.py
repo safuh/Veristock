@@ -7,7 +7,7 @@ from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,6 +58,8 @@ class CountObservationCreate(BaseModel):
 
 
 class CountObservationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     stocktake_id: str
     round_id: str
@@ -68,6 +70,8 @@ class CountObservationRead(BaseModel):
 
 
 class RoundRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     stocktake_id: str
     round_number: int
@@ -149,6 +153,7 @@ async def create_stocktake(
     except IntegrityError as exc:
         await session.rollback()
         raise HTTPException(status_code=409, detail="Stocktake reference or scope conflict") from exc
+    await session.refresh(stocktake)
     return StocktakeRead(
         id=stocktake.id,
         branch_id=stocktake.branch_id,
