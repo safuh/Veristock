@@ -76,3 +76,26 @@ Review [SECURITY.md](SECURITY.md) before deployment.
 ## Deployment
 
 Docker and Docker Compose assets are included. Kubernetes/Kustomize deployment is optional and is not an MVP prerequisite.
+
+## Frontend applications
+
+### Web PWA
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+The web application can be installed from supported browsers. Offline mode currently makes the static application shell available only; authenticated organization data is not cached and operational offline writes are not enabled.
+
+### Flutter Android client
+
+```bash
+cd mobile
+flutter create --platforms=android --project-name=veristock_mobile .
+flutter pub get
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api
+```
+
+The default URL is for the Android emulator. Use the development machine's LAN IP for a physical device. The Android client currently provides authentication, organization selection and barcode scanning; stocktake task synchronization is a subsequent milestone.
