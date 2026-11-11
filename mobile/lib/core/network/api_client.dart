@@ -55,6 +55,80 @@ class ApiClient {
     return response.data!;
   }
 
+  Future<List<Map<String, dynamic>>> listStocktakes(String organizationId) async {
+    final token = await _requiredAccessToken();
+    final response = await _dio.get<List<dynamic>>(
+      '/stocktakes',
+      options: Options(headers: {
+        'Authorization': 'Bearer $token',
+        'X-Organization-ID': organizationId,
+      }),
+    );
+    return (response.data ?? const [])
+        .cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> stocktakeScope(
+    String organizationId,
+    String stocktakeId,
+  ) async {
+    final token = await _requiredAccessToken();
+    final response = await _dio.get<List<dynamic>>(
+      '/stocktakes/$stocktakeId/scope',
+      options: Options(headers: {
+        'Authorization': 'Bearer $token',
+        'X-Organization-ID': organizationId,
+      }),
+    );
+    return (response.data ?? const [])
+        .cast<Map<String, dynamic>>();
+  }
+
+  Future<void> recordCount({
+    required String organizationId,
+    required String stocktakeId,
+    required String itemId,
+    required String quantity,
+    required String unitCode,
+  }) async {
+    final token = await _requiredAccessToken();
+    final operationId = DateTime.now().toUtc().microsecondsSinceEpoch;
+    await _dio.post<void>(
+      '/stocktakes/$stocktakeId/observations',
+      data: {
+        'item_id': itemId,
+        'counted_quantity': quantity,
+        'unit_code': unitCode,
+        'idempotency_key': 'mobile-$operationId',
+      },
+      options: Options(headers: {
+        'Authorization': 'Bearer $token',
+        'X-Organization-ID': organizationId,
+      }),
+    );
+  }
+
+  Future<void> submitStocktake({
+    required String organizationId,
+    required String stocktakeId,
+  }) async {
+    final token = await _requiredAccessToken();
+    await _dio.post<void>(
+      '/stocktakes/$stocktakeId/submit',
+      data: const {},
+      options: Options(headers: {
+        'Authorization': 'Bearer $token',
+        'X-Organization-ID': organizationId,
+      }),
+    );
+  }
+
+  Future<String> _requiredAccessToken() async {
+    final token = await _secureStorage.read(key: 'access_token');
+    if (token == null) throw StateError('No access token');
+    return token;
+  }
+
   Future<void> signOut() async {
     final refreshToken = await _secureStorage.read(key: 'refresh_token');
     try {
