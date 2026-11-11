@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -264,7 +264,6 @@ function AdminDashboard({ token, organization }: { token: string; organization: 
       await refresh();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Review action failed"); }
   };
-  const pendingCount = enrollments.filter((item) => item.status === "pending").length;
   return <div className="content">
     <div className="page-heading"><div><p className="eyebrow">VERISTOCK OPERATIONS</p><h1>Good day, team.</h1>
       <p className="muted">Your overview of clients, onboarding and platform activity.</p></div>
