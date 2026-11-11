@@ -262,7 +262,7 @@ async def post_sale(
         )
         if prior.branch_id != payload.branch_id or prior.reference != payload.reference or requested != recorded:
             raise HTTPException(status_code=409, detail="Idempotency key was used for a different sale")
-        prior.lines = prior_lines
+        setattr(prior, "lines", prior_lines)
         return prior
 
     branch = await session.scalar(
@@ -350,7 +350,7 @@ async def post_sale(
         await session.rollback()
         raise HTTPException(status_code=409, detail="Sale conflicts with another request") from exc
     await session.refresh(sale)
-    sale.lines = [
+    setattr(sale, "lines", [
         SaleLine(
             id=str(uuid4()),
             organization_id=organization.id,
@@ -362,7 +362,7 @@ async def post_sale(
             currency=line.currency,
         )
         for line in payload.lines
-    ]
+    ])
     return sale
 
 
@@ -385,9 +385,9 @@ async def list_sales(
         ).all()
     )
     for sale in sales:
-        sale.lines = list(
+        setattr(sale, "lines", list(
             (
                 await session.scalars(select(SaleLine).where(SaleLine.sale_id == sale.id))
             ).all()
-        )
+        ))
     return sales
