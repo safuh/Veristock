@@ -1,0 +1,1 @@
+"""Internal Veristock workforce domain."""

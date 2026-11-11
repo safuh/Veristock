@@ -1,6 +1,7 @@
 """Application factory and composition root."""
 
 from collections.abc import Callable
+from datetime import timedelta
 from typing import cast
 
 from fastapi import FastAPI
@@ -12,7 +13,8 @@ from starlette.types import ExceptionHandler
 
 from .api.router import api_router
 from .auth.application import AuthenticationApplication
-from .core.config import Settings, get_settings
+from .auth.tokens import TokenService
+from .core.config import Environment, Settings, get_settings
 from .core.errors import (
     BackboneError,
     backbone_error_handler,
@@ -23,6 +25,7 @@ from .core.errors import (
 from .core.lifespan import lifespan
 from .core.logging import configure_logging
 from .core.middleware import RequestContextMiddleware
+from .identity import create_sqlalchemy_auth_application
 
 AuthApplicationFactory = Callable[[AsyncSession], AuthenticationApplication]
 
@@ -30,14 +33,43 @@ AuthApplicationFactory = Callable[[AsyncSession], AuthenticationApplication]
 def create_app(
     settings: Settings | None = None,
     auth_application_factory: AuthApplicationFactory | None = None,
+    access_token_service: TokenService | None = None,
 ) -> FastAPI:
-    """Create a configured FastAPI application with optional auth composition.
+    """Create the API application with explicit authentication composition.
 
-    Authentication dependencies are supplied by the consuming application so
-    secrets, token lifetimes, and persistence remain explicit composition concerns.
+    When JWT settings are provided, the standard SQLAlchemy authentication
+    application and access-token validator are composed automatically. Custom
+    implementations can be injected for tests or alternate identity providers.
     """
     resolved = settings or get_settings()
     configure_logging(resolved)
+
+    if resolved.jwt_secret_key is not None:
+        secret_key = resolved.jwt_secret_key.get_secret_value()
+        if auth_application_factory is None:
+            def configured_auth_application(
+                session: AsyncSession,
+            ) -> AuthenticationApplication:
+                return create_sqlalchemy_auth_application(
+                    session,
+                    secret_key=secret_key,
+                    access_token_lifetime=timedelta(
+                        seconds=resolved.access_token_lifetime_seconds
+                    ),
+                    refresh_token_lifetime=timedelta(
+                        seconds=resolved.refresh_token_lifetime_seconds
+                    ),
+                )
+
+            auth_application_factory = configured_auth_application
+        if access_token_service is None:
+            access_token_service = TokenService(secret_key)
+    elif resolved.environment is Environment.PRODUCTION and (
+        auth_application_factory is None or access_token_service is None
+    ):
+        raise ValueError(
+            "Production requires JWT_SECRET_KEY or explicit authentication services"
+        )
 
     app = FastAPI(
         title=resolved.app_name,
@@ -47,6 +79,7 @@ def create_app(
     )
     app.state.settings = resolved
     app.state.auth_application_factory = auth_application_factory
+    app.state.access_token_service = access_token_service
 
     app.add_middleware(RequestContextMiddleware)
     if resolved.cors_origins:

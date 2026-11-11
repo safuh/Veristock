@@ -1,6 +1,8 @@
 """HTTP transport for the password authentication lifecycle."""
 
-from collections.abc import Callable
+import hmac
+import secrets
+from collections.abc import AsyncIterator, Callable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
@@ -16,9 +18,11 @@ from ..auth import (
     RegistrationRequest,
     TokenError,
 )
+from ..core.config import Environment
 from ..core.errors import BackboneError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+CSRF_HEADER = "X-CSRF-Token"
 
 
 class CredentialsRequest(BaseModel):
@@ -48,9 +52,10 @@ class TokenResponseModel(BaseModel):
     refresh_token: str
 
 
-async def _session(request: Request) -> AsyncSession:
+async def _session(request: Request) -> AsyncIterator[AsyncSession]:
     session_factory: async_sessionmaker[AsyncSession] = request.app.state.db_session_factory
-    return session_factory()
+    async with session_factory() as session:
+        yield session
 
 
 def _application(request: Request, session: AsyncSession) -> AuthenticationApplication:
@@ -72,6 +77,12 @@ async def register(
     body: CredentialsRequest,
     session: Annotated[AsyncSession, Depends(_session)],
 ) -> RegistrationResponseModel:
+    if not request.app.state.settings.allow_self_registration:
+        raise BackboneError(
+            "registration_disabled",
+            "Self-registration is disabled; request an invitation",
+            status.HTTP_403_FORBIDDEN,
+        )
     try:
         result = await _application(request, session).register(
             RegistrationRequest(identifier=body.identifier, password=body.password)
@@ -86,8 +97,6 @@ async def register(
     except Exception:
         await session.rollback()
         raise
-    finally:
-        await session.close()
     return RegistrationResponseModel(subject=result.subject)
 
 
@@ -110,8 +119,6 @@ async def login(
     except Exception:
         await session.rollback()
         raise
-    finally:
-        await session.close()
     return TokenResponseModel(
         subject=result.subject,
         access_token=result.access_token,
@@ -134,8 +141,6 @@ async def refresh(
     except Exception:
         await session.rollback()
         raise
-    finally:
-        await session.close()
     return TokenResponseModel(
         subject=result.subject,
         access_token=result.access_token,
@@ -158,6 +163,173 @@ async def logout(
     except Exception:
         await session.rollback()
         raise
-    finally:
-        await session.close()
     return Response(status_code=204)
+
+
+class BrowserTokenResponseModel(BaseModel):
+    """Browser login/refresh response; refresh token is cookie-only."""
+
+    subject: str
+    access_token: str
+
+
+def _cookie_security(request: Request) -> bool:
+    """Use Secure cookies in production; permit HTTP localhost development."""
+    return request.app.state.settings.environment is Environment.PRODUCTION
+
+
+def _refresh_cookie_name(request: Request) -> str:
+    """Use the __Host prefix in production to prevent subdomain cookie injection."""
+    return "__Host-veristock_refresh" if _cookie_security(request) else "veristock_refresh"
+
+
+def _csrf_cookie_name(request: Request) -> str:
+    """Use a host-only CSRF cookie in production."""
+    return "__Host-veristock_csrf" if _cookie_security(request) else "veristock_csrf"
+
+
+def _set_browser_cookies(
+    response: Response, request: Request, refresh_token: str
+) -> None:
+    """Set the HttpOnly refresh cookie and double-submit CSRF cookie."""
+    settings = request.app.state.settings
+    secure = _cookie_security(request)
+    csrf_token = secrets.token_urlsafe(32)
+    response.set_cookie(
+        _refresh_cookie_name(request),
+        refresh_token,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/",
+        max_age=settings.refresh_token_lifetime_seconds,
+    )
+    response.set_cookie(
+        _csrf_cookie_name(request),
+        csrf_token,
+        httponly=False,
+        secure=secure,
+        samesite="lax",
+        path="/",
+        max_age=settings.refresh_token_lifetime_seconds,
+    )
+
+
+def _validate_browser_csrf(request: Request) -> None:
+    """Validate the double-submit CSRF token for cookie-authenticated actions."""
+    cookie_token = request.cookies.get(_csrf_cookie_name(request))
+    header_token = request.headers.get(CSRF_HEADER)
+    if (
+        not cookie_token
+        or not header_token
+        or not hmac.compare_digest(cookie_token, header_token)
+    ):
+        raise BackboneError(
+            "csrf_validation_failed",
+            "A valid CSRF token is required",
+            status.HTTP_403_FORBIDDEN,
+        )
+
+
+def _clear_browser_cookies(response: Response, request: Request) -> None:
+    """Clear browser authentication cookies after logout."""
+    secure = _cookie_security(request)
+    for name, httponly in (
+        (_refresh_cookie_name(request), True),
+        (_csrf_cookie_name(request), False),
+    ):
+        response.delete_cookie(
+            name,
+            path="/",
+            secure=secure,
+            httponly=httponly,
+            samesite="lax",
+        )
+
+
+@router.post("/browser/login", response_model=BrowserTokenResponseModel)
+async def browser_login(
+    request: Request,
+    body: CredentialsRequest,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(_session)],
+) -> BrowserTokenResponseModel:
+    """Authenticate a browser and keep its refresh token out of JavaScript."""
+    try:
+        result = await _application(request, session).login(
+            LoginRequest(identifier=body.identifier, password=body.password)
+        )
+        await session.commit()
+    except AuthenticationError as exc:
+        await session.rollback()
+        raise BackboneError(
+            "invalid_credentials", "Invalid credentials", status.HTTP_401_UNAUTHORIZED
+        ) from exc
+    except Exception:
+        await session.rollback()
+        raise
+    _set_browser_cookies(response, request, result.refresh_token)
+    return BrowserTokenResponseModel(
+        subject=result.subject,
+        access_token=result.access_token,
+    )
+
+
+@router.post("/browser/refresh", response_model=BrowserTokenResponseModel)
+async def browser_refresh(
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(_session)],
+) -> BrowserTokenResponseModel:
+    """Rotate the HttpOnly refresh cookie after CSRF validation."""
+    _validate_browser_csrf(request)
+    refresh_token = request.cookies.get(_refresh_cookie_name(request))
+    if not refresh_token:
+        raise BackboneError(
+            "refresh_cookie_missing",
+            "Browser refresh session is unavailable",
+            status.HTTP_401_UNAUTHORIZED,
+        )
+    try:
+        result = await _application(request, session).refresh(refresh_token)
+        await session.commit()
+    except TokenError as exc:
+        await session.rollback()
+        raise BackboneError(
+            "invalid_refresh_token", "Invalid refresh token", status.HTTP_401_UNAUTHORIZED
+        ) from exc
+    except Exception:
+        await session.rollback()
+        raise
+
+    _set_browser_cookies(response, request, result.refresh_token)
+    return BrowserTokenResponseModel(
+        subject=result.subject,
+        access_token=result.access_token,
+    )
+
+
+@router.post("/browser/logout", status_code=204)
+async def browser_logout(
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(_session)],
+) -> Response:
+    """Revoke the HttpOnly refresh cookie and clear browser auth cookies."""
+    _validate_browser_csrf(request)
+    refresh_token = request.cookies.get(_refresh_cookie_name(request))
+    if refresh_token:
+        try:
+            await _application(request, session).logout(refresh_token)
+            await session.commit()
+        except TokenError as exc:
+            await session.rollback()
+            raise BackboneError(
+                "invalid_refresh_token", "Invalid refresh token", status.HTTP_401_UNAUTHORIZED
+            ) from exc
+        except Exception:
+            await session.rollback()
+            raise
+    _clear_browser_cookies(response, request)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response

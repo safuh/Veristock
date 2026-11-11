@@ -1,4 +1,4 @@
-"""Alembic migration environment for the backbone package."""
+"""Alembic migration environment for the Veristock application."""
 
 from logging.config import fileConfig
 
@@ -9,7 +9,25 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from veristock.core.config import get_settings
 from veristock.core.database import Base
-from veristock.identity import RefreshToken, User  # noqa: F401
+from veristock.identity import (
+    MembershipRole,  # noqa: F401
+    Organization,  # noqa: F401
+    OrganizationMembership,  # noqa: F401
+    Permission,  # noqa: F401
+    RefreshToken,  # noqa: F401
+    Role,  # noqa: F401
+    RolePermission,  # noqa: F401
+    User,  # noqa: F401
+)
+from veristock.inventory import models as inventory_models  # noqa: F401
+from veristock.invitations.models import OrganizationInvitation  # noqa: F401
+from veristock.organizations.models import (
+    Branch,  # noqa: F401
+    OrganizationContact,  # noqa: F401
+    OrganizationEnrollment,  # noqa: F401
+)
+from veristock.stocktaking import models as stocktaking_models  # noqa: F401
+from veristock.workforce.models import EmployeeProfile  # noqa: F401
 
 config = context.config
 settings = get_settings()

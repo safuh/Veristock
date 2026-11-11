@@ -3,7 +3,7 @@
 from enum import StrEnum
 from functools import lru_cache
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     environment: Environment = Environment.DEVELOPMENT
     debug: bool = False
     api_prefix: str = "/api"
+    allow_self_registration: bool = False
+    jwt_secret_key: SecretStr | None = Field(default=None, min_length=32)
+    access_token_lifetime_seconds: int = Field(default=900, ge=60, le=3600)
+    refresh_token_lifetime_seconds: int = Field(default=604800, ge=3600)
     database_url: str = "sqlite+aiosqlite:///./backbone.db"
     database_echo: bool = False
     database_pool_size: int = Field(default=5, ge=1)
@@ -53,7 +57,7 @@ class Settings(BaseSettings):
         ]
     )
     cors_allow_headers: list[str] = Field(
-        default_factory=lambda: ["Authorization", "Content-Type", "X-Request-ID"]
+        default_factory=lambda: ["Authorization", "Content-Type", "X-Request-ID", "X-CSRF-Token"]
     )
 
     @model_validator(mode="after")

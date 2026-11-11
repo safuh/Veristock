@@ -100,6 +100,7 @@ def client() -> TestClient:
     settings = Settings(
         environment=Environment.TEST,
         database_url="sqlite+aiosqlite:///:memory:",
+        allow_self_registration=True,
     )
     with TestClient(create_app(settings, application_factory)) as test_client:
         yield test_client
