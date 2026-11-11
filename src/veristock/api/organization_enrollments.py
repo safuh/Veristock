@@ -6,8 +6,8 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
-from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,9 +36,17 @@ class EnrollmentCreate(BaseModel):
     business_registration_number: str | None = Field(default=None, max_length=100)
     timezone: str = Field(default="Africa/Nairobi", max_length=64)
     contact_name: str = Field(min_length=2, max_length=180)
-    contact_email: EmailStr
+    contact_email: str = Field(min_length=5, max_length=320)
     contact_phone: str | None = Field(default=None, max_length=40)
     business_description: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("contact_email")
+    @classmethod
+    def validate_contact_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized.count("@") != 1 or "." not in normalized.rsplit("@", 1)[-1]:
+            raise ValueError("A valid contact email is required")
+        return normalized
 
     @field_validator("timezone")
     @classmethod
@@ -306,7 +314,7 @@ async def list_client_organizations(
     statement = (
         select(
             Organization,
-            __import__("sqlalchemy").func.count(OrganizationMembership.id).label(
+            func.count(OrganizationMembership.id).label(
                 "active_members"
             ),
         )
