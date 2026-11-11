@@ -295,14 +295,42 @@ function AdminDashboard({ token, organization }: { token: string; organization: 
   </div>;
 }
 
+type InventorySummary = {
+  item_count: number;
+  branch_count: number;
+  stocked_item_count: number;
+  total_units_on_hand: string;
+};
+type StockBalance = {
+  item_id: string;
+  sku: string | null;
+  item_name: string;
+  branch_id: string;
+  branch_code: string;
+  branch_name: string;
+  quantity_on_hand: string;
+  unit_code: string;
+};
+
 function ClientDashboard({ token, organization }: { token: string; organization: Organization }) {
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [summary, setSummary] = useState<InventorySummary | null>(null);
+  const [balances, setBalances] = useState<StockBalance[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    void request<Branch[]>("/branches", token, organization.id)
-      .then(setBranches).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Unable to load branches"))
-      .finally(() => setLoading(false));
+    setLoading(true);
+    void Promise.all([
+      request<Branch[]>("/branches", token, organization.id),
+      request<InventorySummary>("/inventory/summary", token, organization.id),
+      request<StockBalance[]>("/inventory/balances", token, organization.id)
+    ]).then(([branchRows, inventorySummary, stockRows]) => {
+      setBranches(branchRows);
+      setSummary(inventorySummary);
+      setBalances(stockRows);
+    }).catch((reason: unknown) => {
+      setError(reason instanceof Error ? reason.message : "Unable to load organization data");
+    }).finally(() => setLoading(false));
   }, [organization.id, token]);
   const name = organization.trading_name ?? organization.legal_name;
   return <div className="content">
@@ -310,14 +338,27 @@ function ClientDashboard({ token, organization }: { token: string; organization:
       <p className="muted">Your organization’s inventory and stocktaking workspace.</p></div><span className="status active">Account active</span></div>
     {error && <div className="alert">{error}</div>}
     <div className="client-banner"><div><p className="eyebrow">YOUR ORGANIZATION</p><h2>{name}</h2><p>{organization.legal_name} <span>·</span> {organization.timezone}</p></div><div className="banner-icon">▦</div></div>
-    <div className="section-title"><div><h2>Your workspace</h2><p className="muted">Tools and information available to your team.</p></div></div>
+    <div className="stat-grid client-stats">
+      <Stat label="Active branches" value={loading ? "—" : String(summary?.branch_count ?? branches.length)} hint="Registered locations" icon="⌖" />
+      <Stat label="Inventory items" value={loading ? "—" : String(summary?.item_count ?? 0)} hint="Active catalogue items" icon="▤" />
+      <Stat label="Stocked item types" value={loading ? "—" : String(summary?.stocked_item_count ?? 0)} hint="Items with balances" icon="▦" />
+      <Stat label="Units on hand" value={loading ? "—" : Number(summary?.total_units_on_hand ?? 0).toLocaleString()} hint="Across all branches" icon="✓" />
+    </div>
+    <div className="section-title"><div><h2>Inventory overview</h2><p className="muted">Current stock balances recorded for your organization.</p></div></div>
+    <section className="panel">
+      <div className="panel-heading"><div><p className="eyebrow">STOCK POSITION</p><h2>Stock by branch and item</h2></div><span className="count-pill">{balances.length} balances</span></div>
+      {loading ? <div className="loading">Loading inventory…</div> : balances.length === 0 ?
+        <div className="empty-state"><span>▤</span><strong>No stock balances recorded yet</strong><p>Once your catalogue and opening stock are entered, your stock position will appear here.</p></div> :
+        <div className="table-wrap"><table><thead><tr><th>ITEM</th><th>SKU</th><th>BRANCH</th><th>ON HAND</th><th>UNIT</th></tr></thead>
+          <tbody>{balances.map((row) => <tr key={row.item_id + row.branch_id}><td><strong>{row.item_name}</strong></td><td>{row.sku ?? "—"}</td><td>{row.branch_name} <small>{row.branch_code}</small></td><td><strong>{Number(row.quantity_on_hand).toLocaleString()}</strong></td><td>{row.unit_code}</td></tr>)}</tbody></table></div>}
+    </section>
+    <div className="section-title"><div><h2>More from Veristock</h2><p className="muted">Additional workspace modules are being connected to the platform.</p></div></div>
     <div className="feature-grid">
-      <Feature icon="▤" title="Inventory" description="Your item catalogue, stock balances and movements." state="Inventory module next" />
-      <Feature icon="↗" title="Sales" description="Record sales and keep your stock position current." state="Sales module next" />
-      <Feature icon="◷" title="Stocktaking" description="View scheduled counts, assignments and submissions." state="Stocktaking module next" />
-      <Feature icon="⌁" title="Discrepancies" description="Review count variances and reconciliation outcomes." state="Reconciliation module next" />
-      <Feature icon="⌁" title="Forecasts" description="Demand trends and replenishment recommendations." state="Forecasting module next" />
-      <Feature icon="▧" title="Reports" description="Your approved stocktaking and inventory reports." state="Reporting module next" />
+      <Feature icon="↗" title="Sales" description="Record sales and keep your stock position current." state="Sales workflow in progress" />
+      <Feature icon="◷" title="Stocktaking" description="View scheduled counts, assignments and submissions." state="Stocktaking module planned" />
+      <Feature icon="⌁" title="Discrepancies" description="Review count variances and reconciliation outcomes." state="Reconciliation module planned" />
+      <Feature icon="⌁" title="Forecasts" description="Demand trends and replenishment recommendations." state="Forecasting module planned" />
+      <Feature icon="▧" title="Reports" description="Your approved stocktaking and inventory reports." state="Reporting module planned" />
     </div>
     <section className="panel">
       <div className="panel-heading"><div><p className="eyebrow">LOCATIONS</p><h2>Your branches</h2><p className="muted">Branches registered under this organization.</p></div>
