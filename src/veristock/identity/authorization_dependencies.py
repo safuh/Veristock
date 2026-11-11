@@ -78,13 +78,13 @@ async def get_current_user(
 async def get_current_organization(
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    organization_id: Annotated[str, Header(alias="X-Organization-ID")],
+    organization_header_id: Annotated[str, Header(alias="X-Organization-ID")],
 ) -> Organization:
     """Resolve an organization only after verifying active membership."""
-    organization = await session.get(Organization, organization_id)
+    organization = await session.get(Organization, organization_header_id)
     if organization is None or not await AuthorizationRepository(
         session
-    ).has_active_membership(user.id, organization_id):
+    ).has_active_membership(user.id, organization_header_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Active organization membership required",
