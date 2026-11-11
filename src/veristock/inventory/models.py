@@ -14,7 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from veristock.core.database import Base
 
@@ -148,6 +148,11 @@ class Sale(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    lines: Mapped[list["SaleLine"]] = relationship(
+        back_populates="sale",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
 
 class SaleLine(Base):
@@ -179,3 +184,4 @@ class SaleLine(Base):
     unit_code: Mapped[str] = mapped_column(String(24), nullable=False)
     unit_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     currency: Mapped[str | None] = mapped_column(String(3))
+    sale: Mapped["Sale"] = relationship(back_populates="lines")
