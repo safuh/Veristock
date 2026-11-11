@@ -1,4 +1,5 @@
 """Invitation creation, revocation and acceptance endpoints."""
+# ruff: noqa: E501
 
 import hashlib
 import secrets
@@ -20,7 +21,6 @@ from veristock.identity.authorization import (
     Role,
 )
 from veristock.identity.authorization_dependencies import (
-    get_current_organization,
     get_current_user,
     get_db_session,
     require_permission,
@@ -37,6 +37,14 @@ InvitationManager = Annotated[
 class InvitationCreate(BaseModel):
     email: str = Field(min_length=5, max_length=320)
     role_code: str = Field(min_length=2, max_length=80)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized.count("@") != 1 or "." not in normalized.rsplit("@", 1)[1]:
+            raise ValueError("A valid email address is required")
+        return normalized
 
 
 class InvitationCreated(BaseModel):
@@ -161,13 +169,17 @@ async def accept_invitation(
     """Redeem a valid invite and activate its organization membership."""
     invitation = await session.scalar(select(OrganizationInvitation).where(
         OrganizationInvitation.token_hash == _token_digest(payload.token)
-    ))
+    ).with_for_update())
     now = datetime.now(UTC)
     if (
         invitation is None
         or invitation.accepted_at is not None
         or invitation.revoked_at is not None
-        or invitation.expires_at <= now
+        or (
+            invitation.expires_at.replace(tzinfo=UTC)
+            if invitation.expires_at.tzinfo is None
+            else invitation.expires_at
+        ) <= now
     ):
         raise HTTPException(status_code=400, detail="Invitation is invalid or expired")
 
