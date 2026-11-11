@@ -34,7 +34,7 @@ async def test_opening_balance_and_sale_posting_are_atomic_and_idempotent(tmp_pa
     factory = async_sessionmaker(engine, expire_on_commit=False)
     user_id, org_id, branch_id, item_id = (str(uuid4()) for _ in range(4))
     membership_id, role_id = str(uuid4()), str(uuid4())
-    permission_ids = {code: str(uuid4()) for code in ("inventory.manage", "sales.record")}
+    permission_ids = {code: str(uuid4()) for code in ("inventory.manage", "inventory.read", "sales.record")}
     try:
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
