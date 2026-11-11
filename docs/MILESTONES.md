@@ -242,7 +242,8 @@ Reference documents:
 - [ ] Typed API integration and loading/error/empty states.
 - [ ] Browser authentication and permission-aware navigation.
 - [ ] End-to-end tests for core management, field and client journeys.
-- [ ] PWA/offline support only if its own conflict, encryption, retry and sync acceptance gate is approved.
+- [x] Installable PWA shell with manifest and static-asset precaching; authenticated API responses are explicitly excluded from service-worker caching.
+- [ ] Offline business operations only after encrypted local storage, authorization expiry, idempotent retries, conflict resolution and sync acceptance gates are implemented.
 
 ### M16 — Production hardening and release
 
