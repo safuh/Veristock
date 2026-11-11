@@ -20,9 +20,9 @@ from veristock.identity import (
     User,
 )
 from veristock.organizations.models import (
-    Branch,
-    OrganizationContact,
-    OrganizationEnrollment,
+    Branch,  # noqa: F401
+    OrganizationContact,  # noqa: F401
+    OrganizationEnrollment,  # noqa: F401
 )
 from veristock.workforce.models import EmployeeProfile  # noqa: F401
 
