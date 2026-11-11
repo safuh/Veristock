@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Add physical stocktake snapshots, rounds and observations.
 
 Revision ID: 0011_physical_stocktaking
