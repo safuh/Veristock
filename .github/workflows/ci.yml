@@ -99,7 +99,7 @@ jobs:
       - name: Generate Android runner when absent
         run: |
           if [ ! -d android ]; then
-            flutter create --platforms=android --project-name=veristock_mobile .
+            flutter create --platforms=android --project-name=veristock_mobile --org=com.veristock .
           fi
       - name: Install Flutter dependencies
         run: flutter pub get
