@@ -1,10 +1,12 @@
 """Add single-use organization invitations.
+# ruff: noqa: E501
 
 Revision ID: 0007_organization_invitations
 Revises: 0006_organization_workforce
 """
 
 from collections.abc import Sequence
+from uuid import uuid4
 
 import sqlalchemy as sa
 from alembic import op
@@ -53,14 +55,12 @@ def upgrade() -> None:
         {"role_id": client_admin, "permission_id": invite_permission},
     ).scalar_one_or_none()
     if existing is None:
-        import uuid
-
         bind.execute(
             sa.text(
                 "INSERT INTO role_permissions (id, role_id, permission_id) "
                 "VALUES (:id, :role_id, :permission_id)"
             ),
-            {"id": str(uuid.uuid4()), "role_id": client_admin, "permission_id": invite_permission},
+            {"id": str(uuid4()), "role_id": client_admin, "permission_id": invite_permission},
         )
 
 
