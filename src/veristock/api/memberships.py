@@ -148,7 +148,10 @@ async def grant_membership_role(
     if role is None:
         raise HTTPException(status_code=422, detail="Role is not valid for this organization")
     if membership.status != "active":
-        raise HTTPException(status_code=409, detail="Only active memberships can receive role grants")
+        raise HTTPException(
+            status_code=409,
+            detail="Only active memberships can receive role grants",
+        )
     if role.code == "platform_owner":
         owner_grant = await session.scalar(
             select(MembershipRole.id)
