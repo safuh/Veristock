@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -240,6 +241,7 @@ class _StocktakeCountPageState extends State<StocktakeCountPage> {
   List<Map<String, dynamic>> _scope = const [];
   final Map<String, TextEditingController> _quantities = {};
   final Set<String> _saved = {};
+  String? _matchedItemId;
 
   @override
   void initState() {
@@ -287,10 +289,13 @@ class _StocktakeCountPageState extends State<StocktakeCountPage> {
       ),
     );
     if (!mounted || barcode == null) return;
-    final match = _scope.cast<Map<String, dynamic>?>().firstWhere(
-          (item) => item?['barcode'] == barcode,
-          orElse: () => null,
-        );
+    Map<String, dynamic>? match;
+    for (final item in _scope) {
+      if (item['barcode'] == barcode) {
+        match = item;
+        break;
+      }
+    }
     if (match == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Barcode is not in this stocktake scope.')),
@@ -298,14 +303,9 @@ class _StocktakeCountPageState extends State<StocktakeCountPage> {
       return;
     }
     final itemId = match['item_id'] as String;
+    setState(() => _matchedItemId = itemId);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Matched ${match['name']}. Enter its physical quantity.')),
-    );
-    setState(() {});
-    FocusScope.of(context).requestFocus(FocusNode());
-    _quantities[itemId]?.selection = TextSelection(
-      baseOffset: 0,
-      extentOffset: _quantities[itemId]!.text.length,
+      SnackBar(content: Text('Matched ${match?['name']}. Enter its physical quantity.')),
     );
   }
 
@@ -399,6 +399,8 @@ class _StocktakeCountPageState extends State<StocktakeCountPage> {
                           children: [
                             Text(item['name'] as String,
                                 style: Theme.of(context).textTheme.titleMedium),
+                            if (_matchedItemId == itemId)
+                              const Text('Barcode matched', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                             Text(
                               '${item['sku'] ?? item['barcode'] ?? ''} · '
                               '${item['unit_code']}',
