@@ -39,6 +39,7 @@ def test_business_enrollment_requires_platform_approval(tmp_path) -> None:
     client_admin_role_id = str(uuid4())
     permission_id = str(uuid4())
     client_read_permission_id = str(uuid4())
+    inventory_read_permission_id = str(uuid4())
     try:
         import asyncio
 
@@ -91,6 +92,11 @@ def test_business_enrollment_requires_platform_approval(tmp_path) -> None:
                             code="organization.read",
                             description="View organization profile",
                         ),
+                        Permission(
+                            id=inventory_read_permission_id,
+                            code="inventory.read",
+                            description="View inventory",
+                        ),
                         MembershipRole(
                             membership_id=platform_membership_id,
                             role_id=platform_role_id,
@@ -102,6 +108,10 @@ def test_business_enrollment_requires_platform_approval(tmp_path) -> None:
                         RolePermission(
                             role_id=client_admin_role_id,
                             permission_id=client_read_permission_id,
+                        ),
+                        RolePermission(
+                            role_id=client_admin_role_id,
+                            permission_id=inventory_read_permission_id,
                         ),
                     ]
                 )
@@ -187,6 +197,19 @@ def test_business_enrollment_requires_platform_approval(tmp_path) -> None:
             )
             assert current.status_code == 200
             assert current.json()["id"] == result["organization_id"]
+
+            inventory_summary = client.get(
+                "/api/inventory/summary", headers=client_headers
+            )
+            assert inventory_summary.status_code == 200
+            assert inventory_summary.json()["item_count"] == 0
+            assert inventory_summary.json()["branch_count"] == 0
+
+            inventory_balances = client.get(
+                "/api/inventory/balances", headers=client_headers
+            )
+            assert inventory_balances.status_code == 200
+            assert inventory_balances.json() == []
 
             suspended = client.patch(
                 f"/api/organizations/{result['organization_id']}/status",
