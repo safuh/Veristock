@@ -85,7 +85,7 @@ async def test_opening_balance_and_sale_posting_are_atomic_and_idempotent(tmp_pa
             },
         )
         assert opening.status_code == 201
-        assert opening.json()["quantity_on_hand"] == "10.0000"
+        assert Decimal(opening.json()["quantity_on_hand"]) == Decimal("10")
 
         replay = client.post(
             "/api/inventory/opening-balances",
