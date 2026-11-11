@@ -390,4 +390,40 @@ function Feature({ icon, title, description, state }: { icon: string; title: str
   return <div className="feature-card"><div className="feature-icon">{icon}</div><h3>{title}</h3><p>{description}</p><span>{state} <b>→</b></span></div>;
 }
 
-createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
+
+function PwaInstallPrompt() {
+  const [installEvent, setInstallEvent] = useState<InstallPromptEvent | null>(null);
+  const [offline, setOffline] = useState(!navigator.onLine);
+  useEffect(() => {
+    const onInstall = (event: Event) => {
+      event.preventDefault();
+      setInstallEvent(event as InstallPromptEvent);
+    };
+    const onOnline = () => setOffline(false);
+    const onOffline = () => setOffline(true);
+    window.addEventListener("beforeinstallprompt", onInstall);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onInstall);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+  const install = async () => {
+    if (!installEvent) return;
+    await installEvent.prompt();
+    await installEvent.userChoice;
+    setInstallEvent(null);
+  };
+  return <>
+    {offline && <div className="offline-banner" role="status">You are offline. Veristock can open its app shell, but live business data requires a connection.</div>}
+    {installEvent && <button className="pwa-install" onClick={() => void install()}>Install Veristock</button>}
+  </>;
+}
+
+createRoot(document.getElementById("root")!).render(<React.StrictMode><><App /><PwaInstallPrompt /></></React.StrictMode>);
