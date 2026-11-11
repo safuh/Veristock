@@ -75,7 +75,7 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
                         ),
                     ]
                 )
-                for code in ("stocktake.manage", "stocktake.read", "stocktake.count"):
+                for code in ("stocktake.manage", "stocktake.read", "stocktake.count", "stocktake.submit"):
                     permission_id = str(uuid4())
                     session.add(
                         Permission(id=permission_id, code=code, description=code)
