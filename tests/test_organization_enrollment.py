@@ -24,7 +24,7 @@ from veristock.organizations.models import (
     OrganizationContact,
     OrganizationEnrollment,
 )
-from veristock.workforce.models import EmployeeProfile
+from veristock.workforce.models import EmployeeProfile  # noqa: F401
 
 
 def test_business_enrollment_requires_platform_approval(tmp_path) -> None:
