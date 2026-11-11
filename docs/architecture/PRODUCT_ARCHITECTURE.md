@@ -391,3 +391,29 @@ The MVP now includes:
 - **Automated BI:** SQL/Python calculates every authoritative metric. An optional LLM may narrate precomputed metrics and cite source references; it may not calculate or invent figures.
 
 AI services are optional at runtime. Core inventory, sales posting, physical counting, reconciliation and deterministic reporting must continue when every AI provider is offline. AI dependencies are not imported by business domains.
+
+
+## Organization domain
+
+The organization domain is a first-class product domain, separate from authentication and inventory. It owns client enrollment requests, organization profiles, branches, business contacts and the lifecycle of each client tenant.
+
+### Client lifecycle
+
+1. A business owner creates an authenticated Veristock account and submits an enrollment request.
+2. The request remains pending and does not grant access to a tenant.
+3. Platform operations reviews the request and either rejects it with a reason or approves it.
+4. Approval atomically creates the client organization, its primary contact, the requester's active organization membership and the `client_admin` role grant.
+5. Platform operations can list clients, inspect enrollment status, suspend a client, reactivate it or archive it.
+6. Client administrators manage their own organization profile, branches, contacts and employee invitations within their tenant boundary.
+
+### API surface
+
+- `POST /api/organizations/enrollments` — authenticated business enrollment.
+- `GET /api/organizations/enrollments` — platform review queue.
+- `POST /api/organizations/enrollments/{id}/approve` — provision tenant and initial administrator.
+- `POST /api/organizations/enrollments/{id}/reject` — reject with review note.
+- `GET /api/organizations` — platform client directory with active-member counts.
+- `PATCH /api/organizations/{id}/status` — suspend, reactivate or archive a client.
+- Existing `/api/organizations/current`, `/api/branches`, `/api/contacts` and membership endpoints provide tenant-side administration.
+
+Enrollment approval is transactional. An applicant receives no client organization access until approval succeeds. Every client-owned resource remains scoped by organization ID, and platform-level access is granted only through an authenticated platform membership and permission.
