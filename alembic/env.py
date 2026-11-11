@@ -19,8 +19,8 @@ from veristock.identity import (
     RolePermission,  # noqa: F401
     User,  # noqa: F401
 )
-from veristock.invitations.models import OrganizationInvitation  # noqa: F401
 from veristock.inventory import models as inventory_models  # noqa: F401
+from veristock.invitations.models import OrganizationInvitation  # noqa: F401
 from veristock.organizations.models import (
     Branch,  # noqa: F401
     OrganizationContact,  # noqa: F401
