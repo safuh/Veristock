@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Tenant-scoped physical stocktake planning and blind count capture."""
 
 from datetime import UTC, datetime
