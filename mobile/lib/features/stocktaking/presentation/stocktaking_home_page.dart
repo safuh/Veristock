@@ -305,7 +305,7 @@ class _StocktakeCountPageState extends State<StocktakeCountPage> {
     final itemId = match['item_id'] as String;
     setState(() => _matchedItemId = itemId);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Matched ${match?['name']}. Enter its physical quantity.')),
+      SnackBar(content: Text('Matched ${match['name']}. Enter its physical quantity.')),
     );
   }
 
