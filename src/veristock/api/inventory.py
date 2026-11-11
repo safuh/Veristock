@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +21,8 @@ InventoryRead = Annotated[Organization, Depends(require_permission("inventory.re
 
 
 class InventoryItemRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     sku: str | None
     barcode: str | None
