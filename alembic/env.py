@@ -22,8 +22,8 @@ from veristock.identity import (
 from veristock.invitations.models import OrganizationInvitation  # noqa: F401
 from veristock.inventory import models as inventory_models  # noqa: F401
 from veristock.organizations.models import (
-    Branch,
-    OrganizationContact,
+    Branch,  # noqa: F401
+    OrganizationContact,  # noqa: F401
     OrganizationEnrollment,  # noqa: F401
 )
 from veristock.workforce.models import EmployeeProfile  # noqa: F401
