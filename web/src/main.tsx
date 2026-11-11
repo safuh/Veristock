@@ -605,10 +605,6 @@ function ClientDashboard({ token, organization }: { token: string; organization:
 function Stat({ label, value, hint, icon }: { label: string; value: string; hint: string; icon: string }) {
   return <div className="stat-card"><div className="stat-top"><span>{label}</span><i>{icon}</i></div><strong>{value}</strong><small>{hint}</small></div>;
 }
-function Feature({ icon, title, description, state }: { icon: string; title: string; description: string; state: string }) {
-  return <div className="feature-card"><div className="feature-icon">{icon}</div><h3>{title}</h3><p>{description}</p><span>{state} <b>→</b></span></div>;
-}
-
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
