@@ -21,16 +21,24 @@ def upgrade() -> None:
     permission_id = bind.execute(
         sa.text("SELECT id FROM permissions WHERE code = 'stocktake.count'")
     ).scalar_one()
-    bind.execute(
+    role_ids = bind.execute(
         sa.text(
-            "INSERT INTO role_permissions (id, role_id, permission_id) "
-            "SELECT :id, r.id, :permission_id FROM roles r "
-            "WHERE r.code IN ('client_admin', 'client_manager') "
-            "AND NOT EXISTS (SELECT 1 FROM role_permissions rp "
-            "WHERE rp.role_id = r.id AND rp.permission_id = :permission_id)"
-        ),
-        {"id": str(uuid4()), "permission_id": permission_id},
-    )
+            "SELECT id FROM roles "
+            "WHERE code IN ('client_admin', 'client_manager')"
+        )
+    ).scalars()
+    for role_id in role_ids:
+        bind.execute(
+            sa.text(
+                "INSERT INTO role_permissions (id, role_id, permission_id) "
+                "VALUES (:id, :role_id, :permission_id)"
+            ),
+            {
+                "id": str(uuid4()),
+                "role_id": role_id,
+                "permission_id": permission_id,
+            },
+        )
 
 
 def downgrade() -> None:
