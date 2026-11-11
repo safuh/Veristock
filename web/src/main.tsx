@@ -481,6 +481,7 @@ function ClientDashboard({ token, organization }: { token: string; organization:
         idempotency_key: crypto.randomUUID(),
       }),
     });
+    setRecordedCounts((current) => new Set(current).add(item.item_id));
   }, `Count recorded for ${item.name}.`);
 
   const submitStocktake = () => perform(async () => {
