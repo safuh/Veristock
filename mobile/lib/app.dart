@@ -73,13 +73,17 @@ class _VeristockAppState extends ConsumerState<VeristockApp> {
   }
 
   Future<void> _signOut() async {
-    await ref.read(apiClientProvider).signOut();
-    if (!mounted) return;
-    setState(() {
-      _identifier = null;
-      _organizations = const [];
-      _selectedOrganization = null;
-    });
+    try {
+      await ref.read(apiClientProvider).signOut();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _identifier = null;
+          _organizations = const [];
+          _selectedOrganization = null;
+        });
+      }
+    }
   }
 
   String _apiError(DioException error) {
