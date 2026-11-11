@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Physical stocktaking API workflow tests."""
 
 from datetime import timedelta
