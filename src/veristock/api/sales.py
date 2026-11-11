@@ -1,5 +1,6 @@
 """Tenant-scoped sale posting and stock ledger operations."""
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Annotated
 from uuid import uuid4
@@ -66,7 +67,7 @@ class SaleRead(BaseModel):
     branch_id: str
     reference: str | None
     status: str
-    posted_at: object
+    posted_at: datetime
     lines: list[SaleLineRead]
 
 
