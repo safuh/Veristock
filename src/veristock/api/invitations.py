@@ -57,7 +57,7 @@ class InvitationCreated(BaseModel):
 
 class InvitationAccept(BaseModel):
     token: str = Field(min_length=32, max_length=256)
-    password: str = Field(min_length=12, max_length=256)
+    password: str | None = Field(default=None, min_length=12, max_length=256)
 
 
 class InvitationAccepted(BaseModel):
@@ -99,6 +99,8 @@ async def create_invitation(
             raise HTTPException(status_code=403, detail="Only a platform owner may invite another platform owner")
     user = await session.scalar(select(User).where(func.lower(User.identifier) == email))
     if user is not None:
+        if user.status != "active":
+            raise HTTPException(status_code=409, detail="Cannot invite an inactive user account")
         membership = await session.scalar(select(OrganizationMembership).where(
             OrganizationMembership.organization_id == organization.id,
             OrganizationMembership.user_id == user.id,
@@ -185,13 +187,23 @@ async def accept_invitation(
 
     organization = await session.get(Organization, invitation.organization_id)
     role = await session.get(Role, invitation.role_id)
-    if organization is None or organization.status != "active" or role is None:
+    if (
+        organization is None
+        or organization.status != "active"
+        or role is None
+        or role.scope != organization.kind
+    ):
         raise HTTPException(status_code=400, detail="Invitation is no longer valid")
 
     user = await session.scalar(select(User).where(
         func.lower(User.identifier) == invitation.email
     ))
     if user is None:
+        if payload.password is None:
+            raise HTTPException(
+                status_code=422,
+                detail="A password of at least 12 characters is required for a new account",
+            )
         user = User(
             id=str(uuid4()),
             identifier=invitation.email,
