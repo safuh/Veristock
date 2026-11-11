@@ -3,8 +3,8 @@ from fastapi import APIRouter
 
 from .auth import router as auth_router
 from .health import router as health_router
-from .inventory import router as inventory_router
 from .identity import router as identity_router
+from .inventory import router as inventory_router
 from .invitations import router as invitations_router
 from .memberships import router as memberships_router
 from .organization_enrollments import router as organization_enrollments_router
