@@ -8,12 +8,12 @@ Veristock One is the inventory verification and stocktaking platform for Veristo
 
 ## Current implementation status
 
-The repository began as a reusable FastAPI foundation. The product architecture and domain model are documented, and the first identity/tenancy/RBAC foundation is being implemented.
+The repository began as a reusable FastAPI foundation. It now contains the initial organization onboarding workflow and a React browser application foundation for Veristock staff and client users. The browser workspaces are being connected incrementally to the inventory and stocktaking APIs.
 
 - Existing application factory, async persistence, migrations, JWT primitives, Docker assets and tests are retained.
 - Organization, membership, role and permission schema is added through forward migrations.
 - Authenticated identity and organization-context endpoints are available.
-- Initial M9 APIs cover client-tenant provisioning, tenant-scoped branches and contacts, internal employee profiles, secure organization invitations, and tenant-scoped membership/role administration.
+- Organization enrollment, platform-side client management, tenant-scoped branches and contacts, employee profiles, secure invitations, and membership/role administration are implemented as initial APIs.\n- The React + TypeScript web app provides browser login/session restoration, organization selection, a Veristock management dashboard for applications and client organizations, and a client workspace shell with branch visibility.\n- Inventory, sales, stocktaking, forecasting, discrepancy and reporting screens are not complete yet; they will be connected as their protected APIs are implemented.
 - Management, field and client browser interfaces and the inventory business modules are not yet implemented.
 
 See [Product Architecture](docs/architecture/PRODUCT_ARCHITECTURE.md), [Domain Model](docs/architecture/DOMAIN_MODEL.md), and [MVP Acceptance Tracker](docs/MILESTONES.md).
@@ -36,7 +36,7 @@ make check
 make run
 ```
 
-API documentation is available at http://127.0.0.1:8000/docs.
+API documentation is available at http://127.0.0.1:8000/docs.\n\nIn a second terminal, run the browser application:\n\n```bash\ncd web\nnpm install\nnpm run dev\n```\n\nOpen http://localhost:5173. Vite proxies `/api` requests to `http://127.0.0.1:8000`; set `VERISTOCK_API_URL` in the web environment if the API runs elsewhere.
 
 ## Database and initial platform owner
 
