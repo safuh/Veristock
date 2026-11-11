@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.Column("created_by_user_id", sa.String(36), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
         sa.Column("submitted_at", sa.DateTime(timezone=True)),
-        sa.CheckConstraint("status IN ('open', 'submitted', 'cancelled)", name="ck_stocktakes_status"),
+        sa.CheckConstraint("status IN ('open', 'submitted', 'cancelled')", name="ck_stocktakes_status"),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["branch_id"], ["branches.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="RESTRICT"),
