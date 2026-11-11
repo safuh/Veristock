@@ -9,17 +9,17 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from veristock.core.config import get_settings
 from veristock.core.database import Base
-from veristock.invitations.models import OrganizationInvitation  # noqa: F401
 from veristock.identity import (
-    MembershipRole,
-    Organization,
-    OrganizationMembership,
-    Permission,
-    RefreshToken,
-    Role,
-    RolePermission,
-    User,
-)  # noqa: F401
+    MembershipRole,  # noqa: F401
+    Organization,  # noqa: F401
+    OrganizationMembership,  # noqa: F401
+    Permission,  # noqa: F401
+    RefreshToken,  # noqa: F401
+    Role,  # noqa: F401
+    RolePermission,  # noqa: F401
+    User,  # noqa: F401
+)
+from veristock.invitations.models import OrganizationInvitation  # noqa: F401
 from veristock.organizations.models import Branch, OrganizationContact  # noqa: F401
 from veristock.workforce.models import EmployeeProfile  # noqa: F401
 
