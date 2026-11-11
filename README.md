@@ -8,16 +8,32 @@ Veristock One is the inventory verification and stocktaking platform for Veristo
 
 ## Current implementation status
 
-The repository began as a reusable FastAPI foundation. It now contains the initial organization onboarding workflow and a React browser application foundation for Veristock staff and client users. The browser workspaces are being connected incrementally to the inventory and stocktaking APIs.
+The repository is a modular-monolith MVP foundation with a tenant-aware FastAPI backend, PostgreSQL persistence, a React PWA client portal and a Flutter Android field application.
 
-- Existing application factory, async persistence, migrations, JWT primitives, Docker assets and tests are retained.
-- Organization, membership, role and permission schema is added through forward migrations.
-- Authenticated identity and organization-context endpoints are available.
-- Organization enrollment, platform-side client management, tenant-scoped branches and contacts, employee profiles, secure invitations, and membership/role administration are implemented as initial APIs.\n- The React + TypeScript web app provides browser login/session restoration, organization selection, a Veristock management dashboard for applications and client organizations, and a client workspace shell with branch visibility.\n- Inventory, sales, stocktaking, forecasting, discrepancy and reporting screens are not complete yet; they will be connected as their protected APIs are implemented.
-- Management, field and client browser interfaces and the inventory business modules are not yet implemented.
+Implemented capabilities:
+
+- Organization enrollment, platform-side review and client organization provisioning.
+- Tenant-scoped organizations, branches, contacts, memberships, roles and permission checks.
+- JWT authentication, browser refresh-cookie flow, identity context and platform administration APIs.
+- Tenant-scoped inventory catalogue creation, stock-on-hand reads and branch opening balances.
+- Append-only stock movement records for opening balances and posted sales.
+- Idempotent, atomic sales posting with unit validation and insufficient-stock protection.
+- Physical stocktake creation with frozen branch/item expected quantities, blind count scope, immutable count observations, complete-round submission and recount rounds.
+- React client workspace flows for item creation, opening balances, sales and stocktaking.
+- Flutter Android field workflows for open stocktake retrieval, barcode matching, count capture and round submission.
+- Installable PWA shell; service-worker caching is limited to static assets and does not cache authenticated API responses.
+- CI coverage for Python 3.11–3.13, React production builds, Flutter analysis/tests and Android debug builds.
+
+Important MVP boundaries still being completed:
+
+- Veristock staff cross-tenant stocktake assignment and evidence upload.
+- Reconciliation runs, discrepancy review/approval and controlled ledger corrections.
+- Richer reporting, export, replenishment forecasts and anomaly detection.
+- AI stocktaking assistance and natural-language reporting, implemented as isolated services after deterministic workflows.
+- Email delivery, password recovery, rate limiting, production release signing, deployment secrets and operational monitoring.
+- Offline Android capture and conflict-safe synchronization are not enabled; current mobile count capture requires connectivity.
 
 See [Product Architecture](docs/architecture/PRODUCT_ARCHITECTURE.md), [Domain Model](docs/architecture/DOMAIN_MODEL.md), and [MVP Acceptance Tracker](docs/MILESTONES.md).
-
 ## Quick start
 
 Requirements: Python 3.11+, [uv](https://docs.astral.sh/uv/), and Docker if you use the container workflow.
@@ -36,7 +52,17 @@ make check
 make run
 ```
 
-API documentation is available at http://127.0.0.1:8000/docs.\n\nIn a second terminal, run the browser application:\n\n```bash\ncd web\nnpm install\nnpm run dev\n```\n\nOpen http://localhost:5173. Vite proxies `/api` requests to `http://127.0.0.1:8000`; set `VERISTOCK_API_URL` in the web environment if the API runs elsewhere.
+API documentation is available at http://127.0.0.1:8000/docs.
+
+In a second terminal, run the browser application:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Open http://localhost:5173. Vite proxies `/api` requests to `http://127.0.0.1:8000`; set `VERISTOCK_API_URL` in the web environment if the API runs elsewhere.
 
 ## Database and initial platform owner
 
@@ -98,4 +124,4 @@ flutter pub get
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api
 ```
 
-The default URL is for the Android emulator. Use the development machine's LAN IP for a physical device. The Android client currently provides authentication, organization selection and barcode scanning; stocktake task synchronization is a subsequent milestone.
+The default URL is for the Android emulator. Use the development machine's LAN IP for a physical device. The Android client provides authentication, organization selection, open-stocktake retrieval, barcode-to-item matching, online count capture and count-round submission. Offline queueing and conflict-safe sync are not yet enabled.
