@@ -112,14 +112,24 @@ def upgrade() -> None:
             "description": "Create and manage physical stocktakes",
         },
     )
-    bind.execute(
+    role_ids = bind.execute(
         sa.text(
-            "INSERT INTO role_permissions (id, role_id, permission_id) "
-            "SELECT :id, r.id, :permission_id FROM roles r "
-            "WHERE r.code IN ('client_admin', 'client_manager')"
-        ),
-        {"id": str(uuid4()), "permission_id": permission_id},
-    )
+            "SELECT id FROM roles "
+            "WHERE code IN ('client_admin', 'client_manager')"
+        )
+    ).scalars()
+    for role_id in role_ids:
+        bind.execute(
+            sa.text(
+                "INSERT INTO role_permissions (id, role_id, permission_id) "
+                "VALUES (:id, :role_id, :permission_id)"
+            ),
+            {
+                "id": str(uuid4()),
+                "role_id": role_id,
+                "permission_id": permission_id,
+            },
+        )
 
 
 def downgrade() -> None:
