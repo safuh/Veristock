@@ -81,11 +81,7 @@ class StocktakingHomePage extends StatelessWidget {
                 subtitle: const Text(
                     'Camera scanning foundation; count submission is not connected yet.'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const _BarcodeScannerPage(),
-                  ),
-                ),
+                onTap: () => _openScanner(context),
               ),
             ),
             const SizedBox(height: 16),
@@ -152,9 +148,6 @@ class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
             if (value == null || value.isEmpty) return;
             _handled = true;
             Navigator.of(context).pop(value);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Scanned barcode: $value')),
-            );
           },
         ),
       );
