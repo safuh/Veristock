@@ -7,13 +7,12 @@ from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from veristock.auth import PasswordHasher
-from veristock.core.database import Base
 from veristock.identity.authorization import (
     MembershipRole,
     Organization,
@@ -36,7 +35,7 @@ InvitationManager = Annotated[
 
 
 class InvitationCreate(BaseModel):
-    email: EmailStr
+    email: str = Field(min_length=5, max_length=320)
     role_code: str = Field(min_length=2, max_length=80)
 
 
@@ -72,13 +71,24 @@ async def create_invitation(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> InvitationCreated:
     """Create a 72-hour single-use invite; return its secret once for delivery."""
-    email = str(payload.email).strip().lower()
+    email = payload.email
     role = await session.scalar(select(Role).where(
         Role.code == payload.role_code,
         Role.scope == organization.kind,
     ))
     if role is None:
         raise HTTPException(status_code=422, detail="Role is not valid for this organization")
+    if role.code == "platform_owner":
+        owner_grant = await session.scalar(select(MembershipRole.id).join(
+            OrganizationMembership, OrganizationMembership.id == MembershipRole.membership_id
+        ).join(Role, Role.id == MembershipRole.role_id).where(
+            OrganizationMembership.user_id == inviter.id,
+            OrganizationMembership.organization_id == organization.id,
+            OrganizationMembership.status == "active",
+            Role.code == "platform_owner",
+        ))
+        if owner_grant is None:
+            raise HTTPException(status_code=403, detail="Only a platform owner may invite another platform owner")
     user = await session.scalar(select(User).where(func.lower(User.identifier) == email))
     if user is not None:
         membership = await session.scalar(select(OrganizationMembership).where(
