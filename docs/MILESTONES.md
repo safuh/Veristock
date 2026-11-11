@@ -141,15 +141,17 @@ Reference documents:
 
 ### M9 — Client organizations and workforce
 
-**Status: in progress — initial tenant provisioning, branch/contact administration and internal employee profile APIs are implemented; verification and lifecycle workflows remain open.**
+**Status: in progress — initial tenant provisioning, branch/contact administration, employee profiles and single-use organization invitations are implemented; verification and remaining lifecycle workflows are open.**
 
 - [ ] Client organization profile, branches and contacts.
-- [ ] User invitations and membership lifecycle.
+- [x] Single-use, hashed, 72-hour organization invitations with revocation and acceptance.
+- [x] Invitation acceptance creates or reuses a user, activates membership and grants the selected tenant-scoped role.
+- [ ] Membership role administration and revocation endpoints.
 - [ ] Veristock employee profiles and availability.
 - [ ] Role assignment and employee access administration.
 - [ ] Assignment membership and branch-scope enforcement.
 
-**Implemented in the current M9 slice:** client tenant creation from an authorized platform context; current-tenant profile read/update; branch create/list/update with organization-scoped queries; contact create/list/update; internal employee profile create/list/update restricted to active platform members; migration `0006_organization_workforce`; initial branch tenant-isolation test. The API routes enforce the seeded RBAC permissions. These items remain unchecked until CI and additional lifecycle tests pass. Invitations, contact/branch lifecycle edge cases, employee availability, role administration and assignment-level access remain outstanding.
+**Implemented in the current M9 slice:** client tenant creation from an authorized platform context; current-tenant profile read/update; branch create/list/update with organization-scoped queries; contact create/list/update; internal employee profile create/list/update restricted to active platform members; migration `0006_organization_workforce`; single-use invitation creation, revocation and acceptance; invitation-token digest storage; tenant-scoped role validation; migration `0007_organization_invitations`; initial branch-isolation and invitation-flow tests. CI verification is pending. Employee availability, member role grant/revocation, broader lifecycle tests and assignment-level access remain outstanding.
 
 ### M10 — Commercial and operational management
 
