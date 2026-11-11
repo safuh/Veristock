@@ -81,3 +81,33 @@ jobs:
         run: npm install
       - name: Build browser application
         run: npm run build
+
+  mobile:
+    name: Flutter Android client / analyze, tests and debug build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Android runner when absent
+        run: |
+          if [ ! -d android ]; then
+            flutter create --platforms=android --project-name=veristock_mobile .
+          fi
+      - name: Install Flutter dependencies
+        run: flutter pub get
+      - name: Check Dart formatting
+        run: dart format --output=none --set-exit-if-changed lib test
+      - name: Analyze Flutter application
+        run: flutter analyze
+      - name: Run Flutter tests
+        run: flutter test
+      - name: Build Android debug APK
+        run: flutter build apk --debug
