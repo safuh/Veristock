@@ -1,12 +1,12 @@
 # Veristock One — MVP Acceptance Tracker
 
-This tracker defines the full browser-based Veristock One MVP. A checkbox means the criterion has been verified; implementation alone is not verification.
+This tracker defines the Veristock One MVP across its browser workspaces and Android field application. A checkbox means the criterion has been verified; implementation alone is not verification.
 
 ## Product scope
 
 **Included:** FastAPI backend, React + TypeScript browser application, management workspace, field operations workspace, client portal, PostgreSQL, tenant isolation, RBAC, branch/item/unit inventory, opening-stock onboarding, client-entered sales, stocktaking by either Veristock or client employees, reconciliation, inventory analytics/reporting, forecasting, discrepancy-risk detection and computer-vision-assisted counts.
 
-**Explicitly excluded from this MVP:** purchase-order/receipt/invoice document processing, supplier and POS integrations, fixed-asset verification, advanced accounting/billing, native Android/iOS apps, microservices, general-purpose support agents and employee performance ranking. AI is in scope only for the four capabilities in ADR 0003; no general agent platform or vector database is required initially.
+**Explicitly excluded from this MVP:** purchase-order/receipt/invoice document processing, supplier and POS integrations, fixed-asset verification, advanced accounting/billing, native iOS app, microservices, general-purpose support agents and employee performance ranking. AI is in scope only for the four capabilities in ADR 0003; no general agent platform or vector database is required initially.
 
 ## Foundation milestones retained from the backend repository
 
@@ -242,10 +242,9 @@ Reference documents:
 - [ ] Complete Android runner configuration, field task APIs, count capture and release signing.
 - [ ] Client portal sales, stocktaking, discrepancy, forecast and report flows.
 - [ ] Typed API integration and loading/error/empty states.
-- [x] Installable React PWA shell with a service worker restricted to static application assets.
 - [ ] Browser authentication and permission-aware navigation.
 - [ ] End-to-end tests for core management, field and client journeys.
-- [x] Installable PWA shell with manifest and static-asset precaching; authenticated API responses are explicitly excluded from service-worker caching.
+- [x] Installable React PWA shell with manifest and static-asset precaching; authenticated API responses are explicitly excluded from service-worker caching.
 - [ ] Offline business operations only after encrypted local storage, authorization expiry, idempotent retries, conflict resolution and sync acceptance gates are implemented.
 
 ### M16 — Production hardening and release
@@ -265,4 +264,4 @@ The Veristock One MVP is releasable only when required M8–M16 acceptance crite
 
 ## Change control
 
-No AI integration or AI scaffolding may be introduced into the MVP. Changes to the agreed product scope, data ownership, authorization model or immutable count/reconciliation rules require an explicit architecture decision and updated acceptance criteria.
+AI capabilities are part of the agreed MVP scope but must be introduced only at the M14/M14A milestones, after their deterministic data contracts and evaluation criteria are ready. No AI scaffolding belongs in earlier inventory or stocktaking slices. Changes to the agreed product scope, data ownership, authorization model or immutable count/reconciliation rules require an explicit architecture decision and updated acceptance criteria.
