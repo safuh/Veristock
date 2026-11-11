@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../auth/models/organization.dart';
@@ -18,6 +18,19 @@ class StocktakingHomePage extends StatelessWidget {
   final Organization selectedOrganization;
   final ValueChanged<Organization> onOrganizationChanged;
   final VoidCallback onSignOut;
+
+  Future<void> _openScanner(BuildContext context) async {
+    final barcode = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => const _BarcodeScannerPage(),
+      ),
+    );
+    if (context.mounted && barcode != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Scanned barcode: $barcode')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -49,7 +62,7 @@ class StocktakingHomePage extends StatelessWidget {
                     const Text('ACTIVE ORGANIZATION'),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<Organization>(
-                      value: selectedOrganization,
+                      initialValue: selectedOrganization,
                       isExpanded: true,
                       items: organizations
                           .map((organization) => DropdownMenuItem(
