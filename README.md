@@ -1,6 +1,6 @@
 # Veristock One
 
-Veristock One is the inventory verification and stocktaking platform for Veristock Inventory Solutions Ltd. The MVP includes a FastAPI backend and three browser workspaces: Veristock management, field operations and the client portal.
+Veristock One is the inventory verification and stocktaking platform for Veristock Inventory Solutions Ltd. The target MVP includes a FastAPI backend and three browser workspaces: Veristock management, field operations and the client portal. The current implementation provides the initial management and client workspaces; the field workspace is still planned.
 
 **Architecture:** Modular monolith · FastAPI · Python · SQLAlchemy 2.x · Alembic · PostgreSQL · React + TypeScript
 
