@@ -163,14 +163,15 @@ Reference documents:
 
 ### M11 — Inventory and sales ledger
 
-**Status: in progress — inventory and stock ledger schema already exists; initial tenant-scoped read APIs and client dashboard visibility are being added. Sales posting and stock adjustment workflows remain open.**
+**Status: in progress — catalogue creation, opening balances and atomic idempotent sales posting are implemented; stocktake and reconciliation remain open.**
 
 - [ ] Tenant-owned inventory items, categories and controlled units of measure.
 - [ ] Branch-scoped opening balances and optional warehouse locations.
-- [ ] Validated structured import/manual opening-stock entry with provenance.
+- [x] Validated manual opening-stock entry with actor provenance and idempotency.
+- [ ] Validated structured import with row-level error reporting.
 - [ ] Append-only stock movement ledger and current-balance projection.
-- [ ] Client portal/API sales entry with line items and posting validation.
-- [ ] Atomic sale + stock-out movement posting with idempotency.
+- [x] Client portal/API sales entry with line items and posting validation.
+- [x] Atomic sale + stock-out movement posting with idempotency.
 - [ ] Reversal/correction workflow; no direct edits to posted sales or movements.
 - [x] Initial tenant-scoped inventory catalogue and stock-on-hand read APIs.\n- [ ] Tenant/branch-scoped inventory search, pagination and filtering beyond the initial read endpoints.
 - [ ] Permission matrix and cross-tenant tests for inventory and sales.
