@@ -32,6 +32,7 @@ router = APIRouter(prefix="/stocktakes", tags=["stocktaking"])
 StocktakeManager = Annotated[Organization, Depends(require_permission("stocktake.manage"))]
 StocktakeReader = Annotated[Organization, Depends(require_permission("stocktake.read"))]
 StocktakeCounter = Annotated[Organization, Depends(require_permission("stocktake.count"))]
+StocktakeSubmitter = Annotated[Organization, Depends(require_permission("stocktake.submit"))]
 
 
 class StocktakeCreate(BaseModel):
@@ -321,7 +322,7 @@ async def record_count_observation(
 @router.post("/{stocktake_id}/submit", response_model=RoundRead)
 async def submit_count_round(
     stocktake_id: str,
-    organization: StocktakeManager,
+    organization: StocktakeSubmitter,
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> StocktakeRound:
     stocktake = await session.scalar(
