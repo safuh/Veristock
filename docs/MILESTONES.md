@@ -165,8 +165,10 @@ Reference documents:
 
 **Status: in progress — catalogue creation, opening balances and atomic idempotent sales posting are implemented; stocktake and reconciliation remain open.**
 
-- [ ] Tenant-owned inventory items, categories and controlled units of measure.
-- [ ] Branch-scoped opening balances and optional warehouse locations.
+- [x] Tenant-owned inventory items with barcode/SKU identifiers and explicit base-unit codes.
+- [ ] Controlled unit-of-measure catalogue and item categories.
+- [x] Branch-scoped opening balances.
+- [ ] Optional warehouse/bin locations.
 - [x] Validated manual opening-stock entry with actor provenance and idempotency.
 - [ ] Validated structured import with row-level error reporting.
 - [ ] Append-only stock movement ledger and current-balance projection.
@@ -185,7 +187,7 @@ Reference documents:
 - [x] Stocktake creation and branch/item scope definition with frozen expected quantities.
 - [ ] Performer type: client employee or assigned Veristock employee (client-member counter access is implemented).
 - [ ] Explicit Veristock assignment and branch-scope authorization.
-- [ ] Client membership/permission authorization for client counters.
+- [x] Client membership and permission authorization for client counters.
 - [x] Blind-count API behavior; expected quantities are withheld from blind count scope responses.
 - [x] Manual/barcode-identified item quantity capture API.
 - [ ] Image evidence upload with private storage and authorized retrieval.
@@ -241,7 +243,8 @@ Reference documents:
 - [ ] Field workspace responsive count flows.
 - [x] Flutter Android client foundation with secure token storage, session restoration, organization selection and camera barcode-scanning screen.
 - [ ] Complete Android runner configuration, field task APIs, count capture and release signing.
-- [ ] Client portal sales, stocktaking, discrepancy, forecast and report flows.
+- [x] Initial client portal sales posting and stocktaking count flows.
+- [ ] Client portal discrepancy, forecast and report flows.
 - [ ] Typed API integration and loading/error/empty states.
 - [ ] Browser authentication and permission-aware navigation.
 - [ ] End-to-end tests for core management, field and client journeys.
