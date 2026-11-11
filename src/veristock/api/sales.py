@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Tenant-scoped sale posting and stock ledger operations."""
 
 from datetime import datetime
@@ -63,6 +64,8 @@ class SaleLineRead(BaseModel):
 
 
 class SaleRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     branch_id: str
     reference: str | None
@@ -337,7 +340,7 @@ async def post_sale(
                 unit_code=item.base_unit_code,
                 source_type="sale",
                 source_id=sale_id,
-                idempotency_key=f"{payload.idempotency_key}:{index}",
+                idempotency_key=f"sale:{sale_id}:{index}",
                 actor_user_id=user.id,
             )
         )
