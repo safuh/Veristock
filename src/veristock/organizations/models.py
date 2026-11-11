@@ -59,3 +59,50 @@ class OrganizationContact(Base):
     is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class OrganizationEnrollment(Base):
+    """A business request to join Veristock, reviewed by platform operations."""
+
+    __tablename__ = "organization_enrollments"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected')",
+            name="ck_organization_enrollments_status",
+        ),
+        Index(
+            "ix_org_enrollments_status_created",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_org_enrollments_requester_status",
+            "requester_user_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    requester_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    legal_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    trading_name: Mapped[str | None] = mapped_column(String(240))
+    business_registration_number: Mapped[str | None] = mapped_column(String(100))
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="Africa/Nairobi")
+    contact_name: Mapped[str] = mapped_column(String(180), nullable=False)
+    contact_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    contact_phone: Mapped[str | None] = mapped_column(String(40))
+    business_description: Mapped[str | None] = mapped_column(String(1000))
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    review_note: Mapped[str | None] = mapped_column(String(1000))
+    organization_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="RESTRICT")
+    )
+    reviewed_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
