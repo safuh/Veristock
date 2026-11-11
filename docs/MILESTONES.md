@@ -137,7 +137,7 @@ Reference documents:
 - [ ] Add login/invitation/password-recovery rate limits.
 - [ ] Add cross-tenant negative tests for every protected business resource family.
 
-**Current limitation:** the standard issuer and validator are composed from JWT_SECRET_KEY when configured, or may be explicitly injected; custom implementations must share the same signing configuration. Browser endpoints now use HttpOnly refresh cookies and CSRF validation; legacy JSON-body token endpoints remain for non-browser clients. Rate limiting, invitation/password-recovery flows and business-resource authorization remain open. The bootstrap command creates the first platform owner but does not yet provide client-organization onboarding or invitations.
+**Current limitation:** the standard issuer and validator are composed from JWT_SECRET_KEY when configured, or may be explicitly injected; custom implementations must share the same signing configuration. Browser endpoints now use HttpOnly refresh cookies and CSRF validation; legacy JSON-body token endpoints remain for non-browser clients. Invitation creation, acceptance and revocation are implemented; rate limiting, password recovery and business-resource authorization remain open. The bootstrap command creates the first platform owner but does not yet provide client-organization onboarding or invitations.
 
 ### M9 — Client organizations and workforce
 
@@ -146,7 +146,7 @@ Reference documents:
 - [ ] Client organization profile, branches and contacts.
 - [x] Single-use, hashed, 72-hour organization invitations with revocation and acceptance.
 - [x] Invitation acceptance creates or reuses a user, activates membership and grants the selected tenant-scoped role.
-- [ ] Membership role administration and revocation endpoints.
+- [x] Tenant-scoped membership listing, role grants/revocation and membership suspension/reactivation/revocation, with protection against removing the final active invitation administrator.
 - [ ] Veristock employee profiles and availability.
 - [ ] Role assignment and employee access administration.
 - [ ] Assignment membership and branch-scope enforcement.
