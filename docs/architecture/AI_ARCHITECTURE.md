@@ -2,11 +2,22 @@
 
 ## Current implementation
 
-The reporting API currently exposes `GET /api/reports/inventory/summary`, protected by `inventory.read`. It returns organization-scoped inventory totals, branch breakdowns and stable source references. These deterministic metrics are the first approved input source for future narrative generation.\n\nThe AI package is isolated under `src/veristock/ai`. It contains strict Pydantic
+The reporting API exposes:
+
+- `GET /api/reports/inventory/summary`, protected by `inventory.read`, for deterministic tenant-scoped inventory metrics and branch totals.
+- `POST /api/reports/inventory/narrative`, protected by `inventory.read`, for an advisory narrative generated only from the authorized inventory snapshot.
+
+The AI package is isolated under `src/veristock/ai`. It contains strict Pydantic
 contracts for model provenance, vision assessments, demand forecasts, anomaly
-findings and report narratives. The provider execution boundary currently supports
-an injectable report-narrative provider; no commercial or hosted model SDK is a
+findings and report narratives. The provider execution boundary supports an
+injectable report-narrative provider; no commercial or hosted model SDK is a
 mandatory dependency.
+
+AI execution metadata is persisted in `ai_execution_records`. Records identify
+the organization and requesting user, operation, outcome, provider/model
+provenance, latency, request ID, approved source references and a stable failure
+code when applicable. Prompts, raw report payloads and generated narrative text
+are deliberately not copied into the audit table.
 
 ## Design rules
 
@@ -22,22 +33,30 @@ mandatory dependency.
    inventory, sales, stocktaking or deterministic reporting.
 6. Outputs use strict Pydantic contracts and carry provider/model provenance.
    Report narratives may cite only source references included in their input.
-7. Any recommendation that can affect operations requires human review.
+7. Every narrative execution outcome is recorded with tenant and actor identity.
+   Audit records contain operational metadata, not prompts or raw business data.
+8. Any recommendation that can affect operations requires human review.
 
 ## Report narrative flow
 
-1. A permission-checked reporting use case retrieves tenant-scoped metrics.
-2. The reporting use case builds a `ReportNarrativeRequest` from those metrics.
+1. The permission-checked reporting route retrieves tenant-scoped inventory metrics.
+2. The route builds a `ReportNarrativeRequest` from those deterministic metrics.
 3. `AIService` receives trusted organization/actor context for audit correlation.
 4. The provider receives only the structured report request.
 5. The result is checked for provider/model provenance and allowed source references.
-6. The narrative is returned as advisory content; deterministic metrics remain
+6. A success/failure/unavailable audit record is committed before the response.
+7. The narrative is returned as advisory content; deterministic metrics remain
    authoritative.
+
+The application factory accepts an `AIService` instance for provider injection.
+Without one, the API uses an unconfigured service and returns HTTP 503 for the
+narrative endpoint while recording the unavailable attempt. Provider execution
+failures return HTTP 502 after recording a safe failure code.
 
 ## Deliberately not implemented yet
 
 - Hosted LLM or vision provider adapters and secret configuration.
-- Persistent AI operation/audit records and token/cost metering.
+- Token/cost metering and provider-specific usage reporting.
 - Demand forecast execution and evaluation pipelines.
 - Deterministic anomaly detection and evidence collection.
 - Vision model inference and private image storage.
