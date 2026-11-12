@@ -7,6 +7,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from veristock.ai import models as ai_models  # noqa: F401
 from veristock.core.config import get_settings
 from veristock.core.database import Base
 from veristock.identity import (
