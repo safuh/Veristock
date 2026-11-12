@@ -180,7 +180,19 @@ class FakeForecastSession:
             name="Cooking oil",
             base_unit_code="bottle",
         )
-        return FakeResult(rows=[(item, Decimal("60"), Decimal("10"))])
+        return FakeResult(
+            rows=[
+                (
+                    item,
+                    Decimal("60"),
+                    Decimal("10"),
+                    5,
+                    2,
+                    None,
+                    None,
+                )
+            ]
+        )
 
 
 @pytest.mark.asyncio
@@ -214,6 +226,9 @@ async def test_demand_forecast_uses_tenant_scoped_sales_and_stock_totals():
     assert item.reorder_point_quantity == Decimal("14")
     assert item.days_until_reorder == Decimal("0")
     assert item.recommended_replenishment_quantity == Decimal("32")
+    assert item.lead_time_days == 5
+    assert item.safety_stock_days == 2
+    assert item.planning_policy_source == "request_override"
     assert item.sales_source_reference == "sales:posted:item-1:30d"
     assert item.stock_source_reference == "stock:balance:item-1:all-branches"
     assert session.statement is not None
@@ -224,3 +239,111 @@ async def test_demand_forecast_uses_tenant_scoped_sales_and_stock_totals():
     assert "inventory_items.organization_id" in sql
     assert "CASE WHEN" in sql
     assert "ORDER BY" in sql
+
+class FakePolicyScalars:
+    def __init__(self, policies):
+        self.policies = policies
+
+    def all(self):
+        return self.policies
+
+
+class FakeBranchForecastSession(FakeForecastSession):
+    def __init__(self, *, policy=None):
+        super().__init__()
+        self.policy = policy
+        self.policy_statement = None
+
+    async def scalar(self, statement):
+        return "branch-1"
+
+    async def scalars(self, statement):
+        self.policy_statement = statement
+        return FakePolicyScalars([self.policy] if self.policy is not None else [])
+
+
+@pytest.mark.asyncio
+async def test_branch_forecast_uses_saved_item_policy_and_tenant_scope():
+    from veristock.api.reports import inventory_demand_forecast
+
+    policy = SimpleNamespace(
+        organization_id="org-1",
+        branch_id="branch-1",
+        item_id="item-1",
+        lead_time_days=5,
+        safety_stock_days=2,
+    )
+    session = FakeBranchForecastSession(policy=policy)
+    # Effective planning values are selected from the joined policy row.
+    session.execute = async_branch_execute_with_policy
+    result = await inventory_demand_forecast(
+        organization=SimpleNamespace(id="org-1"),
+        session=session,
+        branch_id="branch-1",
+        lookback_days=30,
+        target_days=14,
+        limit=200,
+        offset=0,
+    )
+
+    item = result.items[0]
+    assert item.lead_time_days == 5
+    assert item.safety_stock_days == 2
+    assert item.planning_policy_source == "saved_policy"
+    assert item.reorder_point_quantity == Decimal("14")
+    assert item.recommended_replenishment_quantity == Decimal("32")
+    assert result.lead_time_days is None
+    assert session.policy_statement is not None
+    policy_sql = str(session.policy_statement)
+    assert "replenishment_policies.organization_id" in policy_sql
+    assert "replenishment_policies.branch_id" in policy_sql
+
+
+@pytest.mark.asyncio
+async def test_branch_forecast_request_override_takes_precedence_over_saved_policy():
+    from veristock.api.reports import inventory_demand_forecast
+
+    policy = SimpleNamespace(
+        organization_id="org-1",
+        branch_id="branch-1",
+        item_id="item-1",
+        lead_time_days=5,
+        safety_stock_days=2,
+    )
+    session = FakeBranchForecastSession(policy=policy)
+    session.execute = async_branch_execute_with_override
+    result = await inventory_demand_forecast(
+        organization=SimpleNamespace(id="org-1"),
+        session=session,
+        branch_id="branch-1",
+        lead_time_days=1,
+        safety_stock_days=1,
+        lookback_days=30,
+        target_days=14,
+        limit=200,
+        offset=0,
+    )
+
+    item = result.items[0]
+    assert item.lead_time_days == 1
+    assert item.safety_stock_days == 1
+    assert item.planning_policy_source == "request_override"
+    assert item.reorder_point_quantity == Decimal("4")
+
+
+async def async_branch_execute_with_policy(statement):
+    item = SimpleNamespace(
+        id="item-1", sku="SKU-1", name="Cooking oil", base_unit_code="bottle"
+    )
+    return FakeResult(
+        rows=[(item, Decimal("60"), Decimal("10"), 5, 2, 5, 2)]
+    )
+
+
+async def async_branch_execute_with_override(statement):
+    item = SimpleNamespace(
+        id="item-1", sku="SKU-1", name="Cooking oil", base_unit_code="bottle"
+    )
+    return FakeResult(
+        rows=[(item, Decimal("60"), Decimal("10"), 1, 1, 5, 2)]
+    )

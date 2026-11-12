@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Veristock now supports durable, tenant-owned planning assumptions at the
+Veristock supports durable, tenant-owned planning assumptions at the
 branch/item level. A policy stores supplier lead time and safety-stock days
 without introducing a supplier or purchase-order domain before those workflows
 are part of the product scope.
@@ -20,11 +20,22 @@ branch and item are active and belong to the caller's selected organization.
 Each write records the user who last changed the policy. Policies do not
 change stock, create orders or contact suppliers.
 
-## Scope and next integration
+## Forecast integration
+
+Branch-scoped demand forecasts apply saved branch/item policies by default.
+Explicit `lead_time_days` or `safety_stock_days` query parameters override
+the corresponding saved value, and every forecast item reports whether its
+planning values came from a saved policy, a request override or the default.
+
+All-branches forecasts deliberately do not combine branch-specific policies.
+They use shared request overrides when supplied and otherwise use zero-day
+defaults. The client reporting screen supports branch selection and inline
+policy editing/saving. Forecasts remain advisory and never create purchase
+orders or mutate stock.
+
+## Scope and next work
 
 Policies are unique by organization, branch and item. They intentionally do
-not infer a supplier relationship or imply a purchase commitment. The current
-forecast endpoint still accepts explicit lead-time and safety-stock assumptions;
-the next integration step is to make a branch-scoped forecast resolve saved
-policies by default while allowing clearly marked, request-level overrides.
-An all-branches forecast must not silently combine different branch policies.
+not infer supplier relationships or imply purchase commitments. Supplier
+master data, minimum order quantities, order multiples and service-level
+configuration remain future planning capabilities.

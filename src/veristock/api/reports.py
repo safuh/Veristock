@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import and_, case, distinct, func, select
+from sqlalchemy import and_, case, distinct, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from veristock.ai.context import AIExecutionContext
@@ -34,6 +34,7 @@ from veristock.inventory.models import (
     SaleLine,
     StockBalance,
 )
+from veristock.inventory.policies import ReplenishmentPolicy
 from veristock.organizations.models import Branch
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -402,6 +403,9 @@ class DemandForecastItemRead(BaseModel):
     reorder_point_quantity: Decimal
     days_until_reorder: Decimal | None
     recommended_replenishment_quantity: Decimal
+    lead_time_days: int
+    safety_stock_days: int
+    planning_policy_source: str
     sales_source_reference: str
     stock_source_reference: str
 
@@ -413,8 +417,8 @@ class DemandForecastRead(BaseModel):
     branch_id: str | None
     lookback_days: int
     target_days: int
-    lead_time_days: int
-    safety_stock_days: int
+    lead_time_days: int | None
+    safety_stock_days: int | None
     methodology: str
     items: tuple[DemandForecastItemRead, ...]
 
@@ -426,16 +430,17 @@ async def inventory_demand_forecast(
     branch_id: str | None = None,
     lookback_days: int = Query(default=30, ge=7, le=365),
     target_days: int = Query(default=14, ge=1, le=180),
-    lead_time_days: int = Query(default=0, ge=0, le=180),
-    safety_stock_days: int = Query(default=0, ge=0, le=180),
+    lead_time_days: int | None = Query(default=None, ge=0, le=180),
+    safety_stock_days: int | None = Query(default=None, ge=0, le=180),
     limit: int = Query(default=200, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> DemandForecastRead:
-    """Return an explainable sales-velocity forecast for this tenant.
+    """Return explainable sales-velocity forecasts for the selected tenant.
 
-    Posted, non-reversed sales are aggregated over a trailing UTC window.
-    Stock is summed across the same branch scope. No AI provider is involved
-    and the endpoint never creates or posts replenishment transactions.
+    A branch forecast uses saved branch/item policies unless a request-level
+    override is supplied. All-branch forecasts do not merge branch policies:
+    explicit shared overrides are accepted, otherwise zero-day defaults apply.
+    This endpoint never creates or posts replenishment transactions.
     """
     if branch_id is not None:
         branch = await session.scalar(
@@ -486,30 +491,67 @@ async def inventory_demand_forecast(
     stock_totals = stock_statement.subquery()
     units_sold_expression = func.coalesce(sales_totals.c.units_sold, 0)
     stock_expression = func.coalesce(stock_totals.c.quantity_on_hand, 0)
+
+    if branch_id is not None:
+        policy_join = and_(
+            ReplenishmentPolicy.organization_id == organization.id,
+            ReplenishmentPolicy.branch_id == branch_id,
+            ReplenishmentPolicy.item_id == InventoryItem.id,
+        )
+        saved_lead_expression = ReplenishmentPolicy.lead_time_days
+        saved_safety_expression = ReplenishmentPolicy.safety_stock_days
+        lead_expression = (
+            literal(lead_time_days)
+            if lead_time_days is not None
+            else func.coalesce(saved_lead_expression, 0)
+        )
+        safety_expression = (
+            literal(safety_stock_days)
+            if safety_stock_days is not None
+            else func.coalesce(saved_safety_expression, 0)
+        )
+    else:
+        saved_lead_expression = literal(None)
+        saved_safety_expression = literal(None)
+        lead_expression = literal(lead_time_days or 0)
+        safety_expression = literal(safety_stock_days or 0)
+
     target_stock_expression = (
         units_sold_expression
-        * (target_days + lead_time_days + safety_stock_days)
+        * (target_days + lead_expression + safety_expression)
         / lookback_days
     )
     replenishment_priority = case(
-        (target_stock_expression > stock_expression,
-         target_stock_expression - stock_expression),
+        (
+            target_stock_expression > stock_expression,
+            target_stock_expression - stock_expression,
+        ),
         else_=0,
     )
+
+    statement = (
+        select(
+            InventoryItem,
+            units_sold_expression,
+            stock_expression,
+            lead_expression.label("lead_time_days"),
+            safety_expression.label("safety_stock_days"),
+            saved_lead_expression.label("saved_lead_time_days"),
+            saved_safety_expression.label("saved_safety_stock_days"),
+        )
+        .outerjoin(sales_totals, sales_totals.c.item_id == InventoryItem.id)
+        .outerjoin(stock_totals, stock_totals.c.item_id == InventoryItem.id)
+        .where(
+            InventoryItem.organization_id == organization.id,
+            InventoryItem.status == "active",
+        )
+    )
+    if branch_id is not None:
+        statement = statement.outerjoin(ReplenishmentPolicy, policy_join)
+
     rows = (
         await session.execute(
-            select(
-                InventoryItem,
-                units_sold_expression,
-                stock_expression,
-            )
-            .outerjoin(sales_totals, sales_totals.c.item_id == InventoryItem.id)
-            .outerjoin(stock_totals, stock_totals.c.item_id == InventoryItem.id)
-            .where(
-                InventoryItem.organization_id == organization.id,
-                InventoryItem.status == "active",
-            )
-            .order_by(
+            statement.order_by(
                 replenishment_priority.desc(),
                 units_sold_expression.desc(),
                 InventoryItem.name.asc(),
@@ -520,16 +562,34 @@ async def inventory_demand_forecast(
     ).all()
 
     forecasts: list[DemandForecastItemRead] = []
-    for item, raw_units_sold, raw_on_hand in rows:
+    for (
+        item,
+        raw_units_sold,
+        raw_on_hand,
+        raw_lead_time,
+        raw_safety_stock,
+        saved_lead_time,
+        saved_safety_stock,
+    ) in rows:
         units_sold = Decimal(raw_units_sold or 0)
         on_hand = Decimal(raw_on_hand or 0)
+        item_lead_time = int(raw_lead_time or 0)
+        item_safety_stock = int(raw_safety_stock or 0)
+        policy_source = (
+            "request_override"
+            if lead_time_days is not None or safety_stock_days is not None
+            else "saved_policy"
+            if branch_id is not None
+            and (saved_lead_time is not None or saved_safety_stock is not None)
+            else "default"
+        )
         metrics = calculate_demand_metrics(
             units_sold=units_sold,
             quantity_on_hand=on_hand,
             lookback_days=lookback_days,
             target_days=target_days,
-            lead_time_days=lead_time_days,
-            safety_stock_days=safety_stock_days,
+            lead_time_days=item_lead_time,
+            safety_stock_days=item_safety_stock,
         )
         forecasts.append(
             DemandForecastItemRead(
@@ -546,9 +606,10 @@ async def inventory_demand_forecast(
                 recommended_replenishment_quantity=(
                     metrics.recommended_replenishment_quantity
                 ),
-                sales_source_reference=(
-                    f"sales:posted:{item.id}:{lookback_days}d"
-                ),
+                lead_time_days=item_lead_time,
+                safety_stock_days=item_safety_stock,
+                planning_policy_source=policy_source,
+                sales_source_reference=f"sales:posted:{item.id}:{lookback_days}d",
                 stock_source_reference=(
                     f"stock:balance:{item.id}:{branch_id or 'all-branches'}"
                 ),
@@ -560,17 +621,26 @@ async def inventory_demand_forecast(
         branch_id=branch_id,
         lookback_days=lookback_days,
         target_days=target_days,
-        lead_time_days=lead_time_days,
-        safety_stock_days=safety_stock_days,
+        lead_time_days=(
+            lead_time_days
+            if lead_time_days is not None
+            else 0 if branch_id is None else None
+        ),
+        safety_stock_days=(
+            safety_stock_days
+            if safety_stock_days is not None
+            else 0 if branch_id is None else None
+        ),
         methodology=(
             "Average daily demand equals posted units sold divided by every "
             "calendar day in the lookback window. Reorder point equals average "
             "daily demand multiplied by supplier lead-time days plus safety-stock "
             "days. Suggested replenishment raises stock to cover lead time, "
             "safety stock and the requested post-replenishment target horizon. "
-            "Lead time and safety stock are caller-supplied planning assumptions; "
-            "seasonality, stockout-censored demand and supplier constraints are "
-            "not inferred."
+            "Branch forecasts use saved branch/item policies unless explicitly "
+            "overridden. All-branch forecasts use shared request overrides or "
+            "zero-day defaults because branch policies may differ. Seasonality, "
+            "stockout-censored demand and supplier constraints are not inferred."
         ),
         items=tuple(forecasts),
     )

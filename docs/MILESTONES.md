@@ -217,7 +217,8 @@ Reference documents:
 - [ ] Low-stock, fast/slow-moving and stockout-risk reports.
 - [x] CPU-friendly trailing-average demand baseline and target-coverage replenishment suggestions.
 - [ ] Forecast evaluation, uncertainty bounds, seasonality and backtesting.
-- [ ] Replenishment calculations use lead time, safety stock and configured service levels.
+- [x] Replenishment calculations use saved or explicitly overridden lead-time and safety-stock days.
+- [ ] Configured service levels, order multiples and minimum order quantities.
 - [ ] Report period, filters, generation timestamp and source watermark are recorded.
 - [ ] PDF/spreadsheet exports from deterministic query results.
 - [ ] Optional LLM narrative grounded only in authorized, precomputed metrics.
@@ -249,7 +250,9 @@ Reference documents:
 - [x] Initial client portal sales posting and stocktaking count flows.
 - [ ] Client portal discrepancy and advanced forecast flows.
 - [x] Client portal deterministic demand-forecast and inventory report view, including configurable lead-time and safety-stock assumptions.
-- [x] Persist branch/item lead-time and safety-stock policies with tenant-scoped read/write APIs and updater provenance; automatically apply policies in branch forecasts remains open.
+- [x] Persist branch/item lead-time and safety-stock policies with tenant-scoped read/write APIs and updater provenance.
+- [x] Apply saved policies automatically in branch-scoped forecasts, support explicit request overrides, and expose policy source per item.
+- [x] Add client portal branch selection and inline policy editing/saving; all-branch forecasts intentionally use shared overrides or zero-day defaults.
 - [ ] Evaluate forecast error against historical periods and identify stockout-censored demand.
 - [ ] Typed API integration and loading/error/empty states.
 - [ ] Browser authentication and permission-aware navigation.

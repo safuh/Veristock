@@ -22,8 +22,8 @@ type DemandForecast = {
   branch_id: string | null;
   lookback_days: number;
   target_days: number;
-  lead_time_days: number;
-  safety_stock_days: number;
+  lead_time_days: number | null;
+  safety_stock_days: number | null;
   methodology: string;
   items: {
     item_id: string;
@@ -37,6 +37,9 @@ type DemandForecast = {
     reorder_point_quantity: string;
     days_until_reorder: string | null;
     recommended_replenishment_quantity: string;
+    lead_time_days: number;
+    safety_stock_days: number;
+    planning_policy_source: "saved_policy" | "request_override" | "default";
   }[];
 };
 
@@ -116,8 +119,11 @@ export function ReportsPanel({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [leadTimeDays, setLeadTimeDays] = useState(0);
-  const [safetyStockDays, setSafetyStockDays] = useState(0);
+  const [branchId, setBranchId] = useState("");
+  const [policyDrafts, setPolicyDrafts] = useState<
+    Record<string, { leadTimeDays: number; safetyStockDays: number }>
+  >({});
+  const [savingPolicyId, setSavingPolicyId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -134,7 +140,7 @@ export function ReportsPanel({
           "/reports/ai-provider/status", token, organizationId,
         ),
         apiRequest<DemandForecast>(
-          `/reports/inventory/demand-forecast?lookback_days=30&target_days=14&lead_time_days=${leadTimeDays}&safety_stock_days=${safetyStockDays}`,
+          `/reports/inventory/demand-forecast?lookback_days=30&target_days=14${branchId ? `&branch_id=${encodeURIComponent(branchId)}` : ""}`,
           token,
           organizationId,
         ),
@@ -148,9 +154,45 @@ export function ReportsPanel({
     } finally {
       setLoading(false);
     }
-  }, [leadTimeDays, organizationId, safetyStockDays, token]);
+  }, [branchId, organizationId, token]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  const savePolicy = async (item: DemandForecast["items"][number]) => {
+    if (!branchId) return;
+    const draft = policyDrafts[item.item_id] ?? {
+      leadTimeDays: item.lead_time_days,
+      safetyStockDays: item.safety_stock_days,
+    };
+    setSavingPolicyId(item.item_id);
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest(
+        `/inventory/replenishment-policies/${encodeURIComponent(branchId)}/${encodeURIComponent(item.item_id)}`,
+        token,
+        organizationId,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            lead_time_days: draft.leadTimeDays,
+            safety_stock_days: draft.safetyStockDays,
+          }),
+        },
+      );
+      setPolicyDrafts((current) => {
+        const next = { ...current };
+        delete next[item.item_id];
+        return next;
+      });
+      setNotice(`Planning policy saved for ${item.item_name}.`);
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to save planning policy");
+    } finally {
+      setSavingPolicyId(null);
+    }
+  };
 
   const generateNarrative = async () => {
     setGenerating(true);
@@ -221,21 +263,26 @@ export function ReportsPanel({
 
       <div className="panel-heading">
         <div><p className="eyebrow">DEMAND PLANNING</p><h3>Sales-velocity forecast</h3>
-          <p className="muted">Deterministic 30-day trailing average and 14-day post-replenishment coverage target. Lead time and safety stock are planning assumptions, not supplier records; changing either refreshes the forecast.</p>
-          <div className="form-row">
-            <label>Supplier lead time (days)
-              <input type="number" min="0" max="180" value={leadTimeDays} onChange={(event) => setLeadTimeDays(Math.max(0, Number(event.target.value)))} />
-            </label>
-            <label>Safety stock (days)
-              <input type="number" min="0" max="180" value={safetyStockDays} onChange={(event) => setSafetyStockDays(Math.max(0, Number(event.target.value)))} />
-            </label>
-          </div>
+          <p className="muted">Deterministic 30-day trailing average and 14-day post-replenishment coverage target. Branch forecasts apply saved item policies; all-branch forecasts use shared defaults.</p>
+          <label className="branch-filter">Forecast branch
+            <select value={branchId} onChange={(event) => {
+              setPolicyDrafts({});
+              setBranchId(event.target.value);
+            }}>
+              <option value="">All branches (shared defaults)</option>
+              {report?.branches.map((branch) => (
+                <option key={branch.branch_id} value={branch.branch_id}>
+                  {branch.branch_name} ({branch.branch_code})
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </div>
       {forecast && <>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>ITEM</th><th>SOLD / 30 DAYS</th><th>AVG. DAILY</th><th>ON HAND</th><th>DAYS COVER</th><th>REORDER POINT</th><th>DAYS TO REORDER</th><th>SUGGESTED QTY</th></tr></thead>
+            <thead><tr><th>ITEM</th><th>SOLD / 30 DAYS</th><th>AVG. DAILY</th><th>ON HAND</th><th>DAYS COVER</th><th>REORDER POINT</th><th>DAYS TO REORDER</th><th>LEAD TIME</th><th>SAFETY STOCK</th><th>POLICY</th><th>SUGGESTED QTY</th></tr></thead>
             <tbody>
               {forecast.items.map((item) => (
                 <tr key={item.item_id}>
@@ -246,14 +293,17 @@ export function ReportsPanel({
                   <td>{item.days_of_cover === null ? "—" : formatNumber(item.days_of_cover)}</td>
                   <td>{formatNumber(item.reorder_point_quantity)}</td>
                   <td>{item.days_until_reorder === null ? "—" : formatNumber(item.days_until_reorder)}</td>
+                  <td>{branchId ? <input aria-label={`Lead time for ${item.item_name}`} type="number" min="0" max="180" value={policyDrafts[item.item_id]?.leadTimeDays ?? item.lead_time_days} onChange={(event) => setPolicyDrafts((current) => ({ ...current, [item.item_id]: { leadTimeDays: Math.max(0, Number(event.target.value)), safetyStockDays: current[item.item_id]?.safetyStockDays ?? item.safety_stock_days } }))} /> : formatNumber(item.lead_time_days)}</td>
+                  <td>{branchId ? <input aria-label={`Safety stock for ${item.item_name}`} type="number" min="0" max="180" value={policyDrafts[item.item_id]?.safetyStockDays ?? item.safety_stock_days} onChange={(event) => setPolicyDrafts((current) => ({ ...current, [item.item_id]: { leadTimeDays: current[item.item_id]?.leadTimeDays ?? item.lead_time_days, safetyStockDays: Math.max(0, Number(event.target.value)) } }))} /> : formatNumber(item.safety_stock_days)}</td>
+                  <td>{branchId ? <button className="secondary" disabled={savingPolicyId === item.item_id} onClick={() => void savePolicy(item)}>{savingPolicyId === item.item_id ? "Saving…" : "Save policy"}</button> : item.planning_policy_source === "default" ? "Shared default" : "Override"}</td>
                   <td><strong>{formatNumber(item.recommended_replenishment_quantity)}</strong></td>
                 </tr>
               ))}
-              {!forecast.items.length && <tr><td colSpan={8} className="muted">No active items are available for forecasting.</td></tr>}
+              {!forecast.items.length && <tr><td colSpan={11} className="muted">No active items are available for forecasting.</td></tr>}
             </tbody>
           </table>
         </div>
-        <p className="footnote">{forecast.methodology} Assumptions used: {forecast.lead_time_days} lead-time days and {forecast.safety_stock_days} safety-stock days.</p>
+        <p className="footnote">{forecast.methodology} Each row identifies its own planning assumptions and source.</p>
       </>}
       <div className="panel-heading">
         <div><p className="eyebrow">AI-ASSISTED ANALYSIS</p><h3>Inventory narrative</h3>

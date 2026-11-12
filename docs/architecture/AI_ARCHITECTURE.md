@@ -64,12 +64,14 @@ stock balances for the same tenant and optional branch. The baseline average
 includes zero-sale days. It reports average daily demand, days of cover and
 the non-negative quantity needed to reach a caller-selected target coverage
 horizon. Defaults are 30 days of sales history and 14 days of target coverage.
-Callers can also provide supplier lead-time days and safety-stock days (both
-default to zero). The API returns the resulting reorder point, days until the
-reorder point is reached, and suggested quantity to cover lead time, safety
-stock and the post-replenishment target horizon. The client portal exposes
-these two assumptions and shows them with each forecast snapshot. They are
-planning inputs, not yet supplier/item master-data settings.
+Supplier lead-time and safety-stock days are persisted per organization,
+branch and item. Branch-scoped forecasts apply saved policies by default;
+explicit request parameters override the corresponding saved values. Each
+forecast item reports its effective assumptions and whether they came from a
+saved policy, request override or zero-day default. All-branch forecasts do not
+combine branch policies and instead use shared request overrides or zero-day
+defaults. The client portal supports branch selection and inline policy
+management. These remain planning assumptions, not supplier master data.
 
 Results are ranked by the calculated replenishment gap in the database before
 limit/offset pagination, so later pages do not omit higher-priority items merely
