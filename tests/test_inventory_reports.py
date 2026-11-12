@@ -146,3 +146,23 @@ async def test_unconfigured_ai_provider_is_audited_and_returns_503():
     assert audit.failure_code == "provider_not_configured"
     assert audit.organization_id == "org-1"
     assert audit.user_id == "user-1"
+
+@pytest.mark.asyncio
+async def test_ai_provider_status_does_not_expose_configuration_secrets():
+    from veristock.api.reports import ai_provider_status
+
+    configured = await ai_provider_status(
+        organization=SimpleNamespace(id="org-1"),
+        ai_service=AIService(FakeProvider()),
+    )
+    unconfigured = await ai_provider_status(
+        organization=SimpleNamespace(id="org-1"),
+        ai_service=AIService(),
+    )
+
+    assert configured.configured is True
+    assert configured.provider == "test-provider"
+    assert configured.model == "test-model"
+    assert unconfigured.configured is False
+    assert unconfigured.provider is None
+    assert unconfigured.model is None
