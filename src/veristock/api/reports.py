@@ -405,6 +405,7 @@ class DemandForecastItemRead(BaseModel):
     unit_code: str
     units_sold_in_window: Decimal
     sales_activity_days: int
+    sales_activity_fraction: Decimal
     average_daily_demand: Decimal
     quantity_on_hand: Decimal
     days_of_cover: Decimal | None
@@ -652,6 +653,9 @@ async def inventory_demand_forecast(
                 unit_code=item.base_unit_code,
                 units_sold_in_window=metrics.units_sold,
                 sales_activity_days=int(raw_sales_activity_days or 0),
+                sales_activity_fraction=(
+                    Decimal(raw_sales_activity_days or 0) / Decimal(lookback_days)
+                ),
                 average_daily_demand=metrics.average_daily_demand,
                 quantity_on_hand=on_hand,
                 days_of_cover=metrics.days_of_cover,

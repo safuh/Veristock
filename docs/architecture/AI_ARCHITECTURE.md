@@ -61,8 +61,8 @@ failures return HTTP 502 after recording a safe failure code.
 The demand-forecast endpoint is independent of AI providers. It aggregates
 posted sale-line quantities over a trailing UTC lookback window and current
 stock balances for the same tenant and optional branch. The baseline average
-includes zero-sale days. It reports average daily demand, days of cover and
-the non-negative quantity needed to reach a caller-selected target coverage
+includes zero-sale days. It reports average daily demand, distinct active sales days and their share of
+the lookback window, days of cover and the non-negative quantity needed to reach a caller-selected target coverage
 horizon. Defaults are 30 days of sales history and 14 days of target coverage.
 Supplier lead-time and safety-stock days are persisted per organization,
 branch and item. Branch-scoped forecasts apply saved policies by default;

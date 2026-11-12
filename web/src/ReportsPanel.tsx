@@ -287,12 +287,13 @@ export function ReportsPanel({
       {forecast && <>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>ITEM</th><th>SOLD / 30 DAYS</th><th>AVG. DAILY</th><th>ON HAND</th><th>DAYS COVER</th><th>REORDER POINT</th><th>DAYS TO REORDER</th><th>LEAD TIME</th><th>SAFETY STOCK</th><th>POLICY</th><th>SUGGESTED QTY</th></tr></thead>
+            <thead><tr><th>ITEM</th><th>SOLD / 30 DAYS</th><th>ACTIVE SALES DAYS</th><th>AVG. DAILY</th><th>ON HAND</th><th>DAYS COVER</th><th>REORDER POINT</th><th>DAYS TO REORDER</th><th>LEAD TIME</th><th>SAFETY STOCK</th><th>POLICY</th><th>SUGGESTED QTY</th></tr></thead>
             <tbody>
               {forecast.items.map((item) => (
                 <tr key={item.item_id}>
                   <td><strong>{item.item_name}</strong><small className="muted">{item.sku ?? "No SKU"}</small></td>
                   <td>{formatNumber(item.units_sold_in_window)}</td>
+                  <td>{item.sales_activity_days} ({formatNumber(Number(item.sales_activity_fraction) * 100)}%)</td>
                   <td>{formatNumber(item.average_daily_demand)} {item.unit_code}/day</td>
                   <td>{formatNumber(item.quantity_on_hand)}</td>
                   <td>{item.days_of_cover === null ? "—" : formatNumber(item.days_of_cover)}</td>
@@ -304,7 +305,7 @@ export function ReportsPanel({
                   <td><strong>{formatNumber(item.recommended_replenishment_quantity)}</strong></td>
                 </tr>
               ))}
-              {!forecast.items.length && <tr><td colSpan={11} className="muted">No active items are available for forecasting.</td></tr>}
+              {!forecast.items.length && <tr><td colSpan={12} className="muted">No active items are available for forecasting.</td></tr>}
             </tbody>
           </table>
         </div>

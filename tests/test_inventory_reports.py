@@ -227,6 +227,7 @@ async def test_demand_forecast_uses_tenant_scoped_sales_and_stock_totals():
     assert item.item_id == "item-1"
     assert item.units_sold_in_window == Decimal("60")
     assert item.sales_activity_days == 12
+    assert item.sales_activity_fraction == Decimal("0.4")
     assert item.average_daily_demand == Decimal("2")
     assert item.quantity_on_hand == Decimal("10")
     assert item.days_of_cover == Decimal("5")
