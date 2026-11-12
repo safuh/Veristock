@@ -12,7 +12,6 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ExceptionHandler
 
 from .ai.service import AIService
-from .ai.provider_http import OpenAICompatibleProvider
 from .api.router import api_router
 from .auth.application import AuthenticationApplication
 from .auth.tokens import TokenService
@@ -86,6 +85,8 @@ def create_app(
     app.state.access_token_service = access_token_service
     configured_ai_service = ai_service
     if configured_ai_service is None and resolved.ai_provider == "openai-compatible":
+        from .ai.provider_http import OpenAICompatibleProvider
+
         configured_ai_service = AIService(
             OpenAICompatibleProvider(
                 base_url=resolved.ai_base_url or "",
