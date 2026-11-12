@@ -22,6 +22,8 @@ type DemandForecast = {
   branch_id: string | null;
   lookback_days: number;
   target_days: number;
+  lead_time_days: number;
+  safety_stock_days: number;
   methodology: string;
   items: {
     item_id: string;
@@ -252,7 +254,7 @@ export function ReportsPanel({
             </tbody>
           </table>
         </div>
-        <p className="footnote">{forecast.methodology}</p>
+        <p className="footnote">{forecast.methodology} Assumptions used: {forecast.lead_time_days} lead-time days and {forecast.safety_stock_days} safety-stock days.</p>
       </>}
       <div className="panel-heading">
         <div><p className="eyebrow">AI-ASSISTED ANALYSIS</p><h3>Inventory narrative</h3>
