@@ -1,6 +1,6 @@
 """Tenant-scoped deterministic reporting and advisory AI narratives."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from time import perf_counter
 from typing import Annotated
@@ -12,6 +12,7 @@ from sqlalchemy import and_, case, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from veristock.ai.context import AIExecutionContext
+from veristock.ai.forecasting import calculate_demand_metrics
 from veristock.ai.contracts import ReportNarrative
 from veristock.ai.models import AIExecutionRecord
 from veristock.ai.requests import ReportMetric, ReportNarrativeRequest
@@ -27,7 +28,12 @@ from veristock.identity.authorization_dependencies import (
     require_permission,
 )
 from veristock.identity.models import User
-from veristock.inventory.models import InventoryItem, StockBalance
+from veristock.inventory.models import (
+    InventoryItem,
+    Sale,
+    SaleLine,
+    StockBalance,
+)
 from veristock.organizations.models import Branch
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -379,4 +385,170 @@ async def ai_provider_status(
         configured=True,
         provider=ai_service.provider_name,
         model=ai_service.model_name,
+    )
+
+
+class DemandForecastItemRead(BaseModel):
+    """Explainable demand and stock coverage estimate for one catalogue item."""
+
+    item_id: str
+    sku: str | None
+    item_name: str
+    unit_code: str
+    units_sold_in_window: Decimal
+    average_daily_demand: Decimal
+    quantity_on_hand: Decimal
+    days_of_cover: Decimal | None
+    recommended_replenishment_quantity: Decimal
+    sales_source_reference: str
+    stock_source_reference: str
+
+
+class DemandForecastRead(BaseModel):
+    """Tenant-scoped deterministic replenishment planning snapshot."""
+
+    generated_at: datetime
+    branch_id: str | None
+    lookback_days: int
+    target_days: int
+    methodology: str
+    items: tuple[DemandForecastItemRead, ...]
+
+
+@router.get("/inventory/demand-forecast", response_model=DemandForecastRead)
+async def inventory_demand_forecast(
+    organization: InventoryReporter,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    branch_id: str | None = None,
+    lookback_days: int = Query(default=30, ge=7, le=365),
+    target_days: int = Query(default=14, ge=1, le=180),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DemandForecastRead:
+    """Return an explainable sales-velocity forecast for this tenant.
+
+    Posted, non-reversed sales are aggregated over a trailing UTC window.
+    Stock is summed across the same branch scope. No AI provider is involved
+    and the endpoint never creates or posts replenishment transactions.
+    """
+    if branch_id is not None:
+        branch = await session.scalar(
+            select(Branch.id).where(
+                Branch.id == branch_id,
+                Branch.organization_id == organization.id,
+                Branch.status == "active",
+            )
+        )
+        if branch is None:
+            raise HTTPException(status_code=404, detail="Active branch not found")
+
+    generated_at = datetime.now(UTC)
+    window_start = generated_at - timedelta(days=lookback_days)
+
+    sales_statement = (
+        select(
+            SaleLine.item_id.label("item_id"),
+            func.coalesce(func.sum(SaleLine.quantity), 0).label("units_sold"),
+        )
+        .join(
+            Sale,
+            (Sale.id == SaleLine.sale_id)
+            & (Sale.organization_id == organization.id)
+            & (Sale.status == "posted"),
+        )
+        .where(
+            SaleLine.organization_id == organization.id,
+            Sale.posted_at >= window_start,
+        )
+        .group_by(SaleLine.item_id)
+    )
+    stock_statement = (
+        select(
+            StockBalance.item_id.label("item_id"),
+            func.coalesce(func.sum(StockBalance.quantity_on_hand), 0).label(
+                "quantity_on_hand"
+            ),
+        )
+        .where(StockBalance.organization_id == organization.id)
+        .group_by(StockBalance.item_id)
+    )
+    if branch_id is not None:
+        sales_statement = sales_statement.where(Sale.branch_id == branch_id)
+        stock_statement = stock_statement.where(StockBalance.branch_id == branch_id)
+
+    sales_totals = sales_statement.subquery()
+    stock_totals = stock_statement.subquery()
+    rows = (
+        await session.execute(
+            select(
+                InventoryItem,
+                func.coalesce(sales_totals.c.units_sold, 0),
+                func.coalesce(stock_totals.c.quantity_on_hand, 0),
+            )
+            .outerjoin(sales_totals, sales_totals.c.item_id == InventoryItem.id)
+            .outerjoin(stock_totals, stock_totals.c.item_id == InventoryItem.id)
+            .where(
+                InventoryItem.organization_id == organization.id,
+                InventoryItem.status == "active",
+            )
+            .order_by(InventoryItem.name)
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
+
+    forecasts: list[DemandForecastItemRead] = []
+    for item, raw_units_sold, raw_on_hand in rows:
+        units_sold = Decimal(raw_units_sold or 0)
+        on_hand = Decimal(raw_on_hand or 0)
+        metrics = calculate_demand_metrics(
+            units_sold=units_sold,
+            quantity_on_hand=on_hand,
+            lookback_days=lookback_days,
+            target_days=target_days,
+        )
+        forecasts.append(
+            DemandForecastItemRead(
+                item_id=item.id,
+                sku=item.sku,
+                item_name=item.name,
+                unit_code=item.base_unit_code,
+                units_sold_in_window=metrics.units_sold,
+                average_daily_demand=metrics.average_daily_demand,
+                quantity_on_hand=on_hand,
+                days_of_cover=metrics.days_of_cover,
+                recommended_replenishment_quantity=(
+                    metrics.recommended_replenishment_quantity
+                ),
+                sales_source_reference=(
+                    f"sales:posted:{item.id}:{lookback_days}d"
+                ),
+                stock_source_reference=(
+                    f"stock:balance:{item.id}:{branch_id or 'all-branches'}"
+                ),
+            )
+        )
+
+    forecasts.sort(
+        key=lambda entry: (
+            entry.recommended_replenishment_quantity,
+            entry.average_daily_demand,
+            entry.item_name.casefold(),
+        ),
+        reverse=True,
+    )
+    return DemandForecastRead(
+        generated_at=generated_at,
+        branch_id=branch_id,
+        lookback_days=lookback_days,
+        target_days=target_days,
+        methodology=(
+            "Average daily demand equals posted units sold divided by every "
+            "calendar day in the lookback window. Days of cover equals current "
+            "stock divided by average daily demand. Suggested replenishment "
+            "equals the non-negative gap between current stock and average "
+            "demand over the target horizon. No lead time, seasonality, safety "
+            "stock or supplier constraints are assumed."
+        ),
+        items=tuple(forecasts),
     )
