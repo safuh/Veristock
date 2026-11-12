@@ -166,3 +166,51 @@ async def test_ai_provider_status_does_not_expose_configuration_secrets():
     assert unconfigured.configured is False
     assert unconfigured.provider is None
     assert unconfigured.model is None
+
+
+class FakeForecastSession:
+    def __init__(self):
+        self.statement = None
+
+    async def execute(self, statement):
+        self.statement = statement
+        item = SimpleNamespace(
+            id="item-1",
+            sku="SKU-1",
+            name="Cooking oil",
+            base_unit_code="bottle",
+        )
+        return FakeResult(rows=[(item, Decimal("60"), Decimal("10"))])
+
+
+@pytest.mark.asyncio
+async def test_demand_forecast_uses_tenant_scoped_sales_and_stock_totals():
+    from veristock.api.reports import inventory_demand_forecast
+
+    session = FakeForecastSession()
+    result = await inventory_demand_forecast(
+        organization=SimpleNamespace(id="org-1"),
+        session=session,
+        lookback_days=30,
+        target_days=14,
+    )
+
+    assert result.branch_id is None
+    assert result.lookback_days == 30
+    assert result.target_days == 14
+    assert len(result.items) == 1
+    item = result.items[0]
+    assert item.item_id == "item-1"
+    assert item.units_sold_in_window == Decimal("60")
+    assert item.average_daily_demand == Decimal("2")
+    assert item.quantity_on_hand == Decimal("10")
+    assert item.days_of_cover == Decimal("5")
+    assert item.recommended_replenishment_quantity == Decimal("18")
+    assert item.sales_source_reference == "sales:posted:item-1:30d"
+    assert item.stock_source_reference == "stock:balance:item-1:all-branches"
+    assert session.statement is not None
+    sql = str(session.statement)
+    assert "sales.organization_id" in sql
+    assert "sale_lines.organization_id" in sql
+    assert "stock_balances.organization_id" in sql
+    assert "inventory_items.organization_id" in sql
