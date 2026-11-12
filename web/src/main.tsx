@@ -509,9 +509,9 @@ function ClientDashboard({ token, organization }: { token: string; organization:
       <Stat label="Units on hand" value={loading ? "—" : Number(summary?.total_units_on_hand ?? 0).toLocaleString()} hint="Across all branches" icon="✓" />
     </div>
 
-    <section className="panel">
-      <ReportsPanel token={token} organizationId={organization.id} />
+    <ReportsPanel token={token} organizationId={organization.id} />
 
+    <section className="panel">
       <div className="panel-heading"><div><p className="eyebrow">CATALOGUE</p><h2>Inventory items</h2>
         <p className="muted">Create and maintain the items your organization counts and sells.</p></div></div>
       <div className="operation-form">
