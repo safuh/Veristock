@@ -12,13 +12,16 @@ class AIProvider(Protocol):
     @property
     def provider_name(self) -> str:
         """Stable provider identifier."""
+        ...
 
     @property
     def model_name(self) -> str:
         """Configured model identifier."""
+        ...
 
     async def generate_report_narrative(
         self,
         request: ReportNarrativeRequest,
     ) -> ReportNarrative:
         """Generate narrative from supplied metrics only."""
+        ...
