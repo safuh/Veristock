@@ -399,6 +399,8 @@ class DemandForecastItemRead(BaseModel):
     average_daily_demand: Decimal
     quantity_on_hand: Decimal
     days_of_cover: Decimal | None
+    reorder_point_quantity: Decimal
+    days_until_reorder: Decimal | None
     recommended_replenishment_quantity: Decimal
     sales_source_reference: str
     stock_source_reference: str
@@ -422,6 +424,8 @@ async def inventory_demand_forecast(
     branch_id: str | None = None,
     lookback_days: int = Query(default=30, ge=7, le=365),
     target_days: int = Query(default=14, ge=1, le=180),
+    lead_time_days: int = Query(default=0, ge=0, le=180),
+    safety_stock_days: int = Query(default=0, ge=0, le=180),
     limit: int = Query(default=200, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> DemandForecastRead:
@@ -520,6 +524,8 @@ async def inventory_demand_forecast(
             quantity_on_hand=on_hand,
             lookback_days=lookback_days,
             target_days=target_days,
+            lead_time_days=lead_time_days,
+            safety_stock_days=safety_stock_days,
         )
         forecasts.append(
             DemandForecastItemRead(
@@ -531,6 +537,8 @@ async def inventory_demand_forecast(
                 average_daily_demand=metrics.average_daily_demand,
                 quantity_on_hand=on_hand,
                 days_of_cover=metrics.days_of_cover,
+                reorder_point_quantity=metrics.reorder_point_quantity,
+                days_until_reorder=metrics.days_until_reorder,
                 recommended_replenishment_quantity=(
                     metrics.recommended_replenishment_quantity
                 ),
@@ -550,11 +558,13 @@ async def inventory_demand_forecast(
         target_days=target_days,
         methodology=(
             "Average daily demand equals posted units sold divided by every "
-            "calendar day in the lookback window. Days of cover equals current "
-            "stock divided by average daily demand. Suggested replenishment "
-            "equals the non-negative gap between current stock and average "
-            "demand over the target horizon. No lead time, seasonality, safety "
-            "stock or supplier constraints are assumed."
+            "calendar day in the lookback window. Reorder point equals average "
+            "daily demand multiplied by supplier lead-time days plus safety-stock "
+            "days. Suggested replenishment raises stock to cover lead time, "
+            "safety stock and the requested post-replenishment target horizon. "
+            "Lead time and safety stock are caller-supplied planning assumptions; "
+            "seasonality, stockout-censored demand and supplier constraints are "
+            "not inferred."
         ),
         items=tuple(forecasts),
     )
