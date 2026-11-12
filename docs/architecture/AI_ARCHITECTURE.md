@@ -64,14 +64,20 @@ stock balances for the same tenant and optional branch. The baseline average
 includes zero-sale days. It reports average daily demand, days of cover and
 the non-negative quantity needed to reach a caller-selected target coverage
 horizon. Defaults are 30 days of sales history and 14 days of target coverage.
+Callers can also provide supplier lead-time days and safety-stock days (both
+default to zero). The API returns the resulting reorder point, days until the
+reorder point is reached, and suggested quantity to cover lead time, safety
+stock and the post-replenishment target horizon. The client portal exposes
+these two assumptions and shows them with each forecast snapshot. They are
+planning inputs, not yet supplier/item master-data settings.
+
 Results are ranked by the calculated replenishment gap in the database before
 limit/offset pagination, so later pages do not omit higher-priority items merely
 because an earlier page was selected alphabetically.
 
-This is an intentionally simple baseline, not a statistically evaluated
-forecast. It does not yet model supplier lead times, safety stock, service
-levels, seasonality, promotions, stockout-censored demand or uncertainty
-intervals. It never creates a purchase order or changes inventory. Replenishment
+This remains a simple trailing-average baseline, not a statistically evaluated
+forecast. It does not yet model service levels, seasonality, promotions,
+stockout-censored demand or uncertainty intervals. It never creates a purchase order or changes inventory. Replenishment
 decisions remain with an authorized human.
 
 ## Deliberately not implemented yet
