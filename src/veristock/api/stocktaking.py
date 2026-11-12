@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -403,6 +403,127 @@ async def open_recount_round(
     await session.commit()
     await session.refresh(new_round)
     return new_round
+
+
+class StocktakeReviewQueueItem(BaseModel):
+    """Submitted stocktake awaiting an independent supervisor decision."""
+
+    stocktake_id: str
+    reference: str
+    branch_id: str
+    branch_name: str
+    submitted_at: datetime | None
+    round_number: int
+    item_count: int
+    variance_count: int
+    shortage_count: int
+    surplus_count: int
+
+
+@router.get("/review-queue", response_model=list[StocktakeReviewQueueItem])
+async def list_stocktake_review_queue(
+    organization: StocktakeApprover,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    branch_id: str | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[StocktakeReviewQueueItem]:
+    """List this tenant's submitted stocktakes for independent approval."""
+    statement = (
+        select(Stocktake, Branch)
+        .join(
+            Branch,
+            (Branch.id == Stocktake.branch_id)
+            & (Branch.organization_id == organization.id),
+        )
+        .where(
+            Stocktake.organization_id == organization.id,
+            Stocktake.status == "submitted",
+        )
+    )
+    if branch_id is not None:
+        statement = statement.where(Stocktake.branch_id == branch_id)
+    records = (
+        await session.execute(
+            statement.order_by(Stocktake.submitted_at.asc(), Stocktake.created_at.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
+
+    queue = []
+    for stocktake, branch in records:
+        round_record = await session.scalar(
+            select(StocktakeRound)
+            .where(
+                StocktakeRound.organization_id == organization.id,
+                StocktakeRound.stocktake_id == stocktake.id,
+                StocktakeRound.status == "submitted",
+            )
+            .order_by(StocktakeRound.round_number.desc())
+        )
+        if round_record is None:
+            continue
+        counts = (
+            await session.execute(
+                select(
+                    func.count(StocktakeObservation.id),
+                    func.coalesce(
+                        func.sum(
+                            case(
+                                (
+                                    StocktakeObservation.counted_quantity
+                                    < StocktakeScopeItem.expected_quantity,
+                                    1,
+                                ),
+                                else_=0,
+                            )
+                        ),
+                        0,
+                    ),
+                    func.coalesce(
+                        func.sum(
+                            case(
+                                (
+                                    StocktakeObservation.counted_quantity
+                                    > StocktakeScopeItem.expected_quantity,
+                                    1,
+                                ),
+                                else_=0,
+                            )
+                        ),
+                        0,
+                    ),
+                )
+                .join(
+                    StocktakeScopeItem,
+                    (StocktakeScopeItem.stocktake_id == StocktakeObservation.stocktake_id)
+                    & (StocktakeScopeItem.item_id == StocktakeObservation.item_id)
+                    & (StocktakeScopeItem.organization_id == organization.id),
+                )
+                .where(
+                    StocktakeObservation.organization_id == organization.id,
+                    StocktakeObservation.stocktake_id == stocktake.id,
+                    StocktakeObservation.round_id == round_record.id,
+                )
+            )
+        ).one()
+        item_count, shortage_count, surplus_count = (int(value or 0) for value in counts)
+        queue.append(
+            StocktakeReviewQueueItem(
+                stocktake_id=stocktake.id,
+                reference=stocktake.reference,
+                branch_id=branch.id,
+                branch_name=branch.name,
+                submitted_at=round_record.submitted_at,
+                round_number=round_record.round_number,
+                item_count=item_count,
+                variance_count=shortage_count + surplus_count,
+                shortage_count=shortage_count,
+                surplus_count=surplus_count,
+            )
+        )
+    return queue
 
 
 class StocktakeReconciliationLine(BaseModel):

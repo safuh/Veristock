@@ -236,6 +236,19 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
 
         asyncio.run(record_post_count_movement())
 
+        review_queue = client.get("/api/stocktakes/review-queue", headers=headers)
+        assert review_queue.status_code == 200
+        assert len(review_queue.json()) == 1
+        queued = review_queue.json()[0]
+        assert queued["stocktake_id"] == stocktake_id
+        assert queued["reference"] == "ST-001"
+        assert queued["branch_name"] == "Main"
+        assert queued["round_number"] == 2
+        assert queued["item_count"] == 1
+        assert queued["variance_count"] == 1
+        assert queued["shortage_count"] == 1
+        assert queued["surplus_count"] == 0
+
         reconciliation = client.get(
             f"/api/stocktakes/{stocktake_id}/reconciliation",
             headers=headers,
