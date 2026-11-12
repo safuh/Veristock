@@ -23,6 +23,7 @@ from veristock.ai.service import (
     AIServiceUnavailable,
 )
 from veristock.inventory.availability import (
+    StockAvailability,
     StockMovementEvent,
     calculate_stock_availability,
 )
@@ -576,7 +577,7 @@ async def inventory_demand_forecast(
         )
     ).all()
 
-    availability_by_item = {}
+    availability_by_item: dict[str, StockAvailability | None] = {}
     if branch_id is not None and rows:
         movement_rows = (
             await session.execute(
@@ -595,7 +596,7 @@ async def inventory_demand_forecast(
                 .order_by(StockMovement.item_id, StockMovement.occurred_at)
             )
         ).all()
-        events_by_item = {}
+        events_by_item: dict[str, list[StockMovementEvent]] = {}
         for item_id, quantity_delta, source_type, occurred_at in movement_rows:
             events_by_item.setdefault(item_id, []).append(
                 StockMovementEvent(
