@@ -1,15 +1,15 @@
 """OpenAI-compatible chat-completions adapter.
 
-This adapter can target hosted gateways or self-hosted compatible servers. It is
-opt-in and receives only the bounded report request, never tenant identity or
-database access.
+The implementation uses the Python standard library, keeping the adapter free of
+vendor SDKs and optional HTTP-client dependencies.
 """
 
+import asyncio
 import json
 from time import perf_counter
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-
-import httpx
+from urllib.request import Request, urlopen
 
 from .contracts import ModelRun, ReportNarrative
 from .requests import ReportNarrativeRequest
@@ -25,7 +25,6 @@ class OpenAICompatibleProvider:
         model: str,
         api_key: str | None = None,
         timeout_seconds: float = 20.0,
-        client: httpx.AsyncClient | None = None,
         provider_name: str = "openai-compatible",
     ) -> None:
         parsed = urlsplit(base_url)
@@ -49,7 +48,6 @@ class OpenAICompatibleProvider:
         self._model = model
         self._api_key = api_key
         self._timeout_seconds = timeout_seconds
-        self._client = client
         self._provider_name = provider_name
 
     @property
@@ -59,6 +57,26 @@ class OpenAICompatibleProvider:
     @property
     def model_name(self) -> str:
         return self._model
+
+    def _post_json(self, payload: dict[str, object]) -> dict[str, object]:
+        """Perform a bounded synchronous HTTP request in a worker thread."""
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        request = Request(
+            self._endpoint,
+            data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        with urlopen(request, timeout=self._timeout_seconds) as response:
+            raw_body = response.read(1_000_001)
+        if len(raw_body) > 1_000_000:
+            raise ValueError("Provider response exceeded the maximum size")
+        body = json.loads(raw_body)
+        if not isinstance(body, dict):
+            raise ValueError("Provider returned a non-object response")
+        return body
 
     async def generate_report_narrative(
         self,
@@ -89,7 +107,7 @@ class OpenAICompatibleProvider:
             "source_references (array of strings). Cite only source_reference values "
             "present in the input. Recommendations are advisory and require human review."
         )
-        payload = {
+        payload: dict[str, object] = {
             "model": self._model,
             "temperature": 0,
             "response_format": {"type": "json_object"},
@@ -101,34 +119,29 @@ class OpenAICompatibleProvider:
                 },
             ],
         }
-        headers = {"Accept": "application/json"}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
 
         started = perf_counter()
         try:
-            if self._client is not None:
-                response = await self._client.post(
-                    self._endpoint,
-                    json=payload,
-                    headers=headers,
-                    timeout=self._timeout_seconds,
-                )
-            else:
-                async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-                    response = await client.post(
-                        self._endpoint,
-                        json=payload,
-                        headers=headers,
-                    )
-            response.raise_for_status()
-            body = response.json()
-            content = body["choices"][0]["message"]["content"]
+            body = await asyncio.to_thread(self._post_json, payload)
+            choices = body["choices"]
+            if not isinstance(choices, list) or not choices:
+                raise ValueError("Provider returned no choices")
+            message = choices[0]["message"]
+            content = message["content"]
             if not isinstance(content, str) or len(content) > 12_000:
                 raise ValueError("Provider returned an invalid narrative payload")
             narrative_data = json.loads(content)
             narrative = ReportNarrative.model_validate(narrative_data)
-        except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
+        except (
+            HTTPError,
+            URLError,
+            OSError,
+            TimeoutError,
+            KeyError,
+            IndexError,
+            TypeError,
+            ValueError,
+        ) as exc:
             raise RuntimeError("Compatible AI provider returned an invalid response") from exc
 
         return narrative.model_copy(
