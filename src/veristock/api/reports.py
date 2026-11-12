@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import case, distinct, func, select
+from sqlalchemy import and_, case, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from veristock.identity.authorization import Organization
@@ -105,6 +105,10 @@ async def inventory_report(
     stocked_item_count = int(stocked_item_count or 0)
     total_units = Decimal(total_units or 0)
 
+    active_stock_item = and_(
+        InventoryItem.id.is_not(None),
+        StockBalance.quantity_on_hand > 0,
+    )
     branch_rows = (
         await session.execute(
             select(
@@ -114,17 +118,34 @@ async def inventory_report(
                 func.count(
                     distinct(
                         case(
-                            (StockBalance.quantity_on_hand > 0, StockBalance.item_id),
+                            (active_stock_item, StockBalance.item_id),
                             else_=None,
                         )
                     )
                 ),
-                func.coalesce(func.sum(StockBalance.quantity_on_hand), 0),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                InventoryItem.id.is_not(None),
+                                StockBalance.quantity_on_hand,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
             )
             .outerjoin(
                 StockBalance,
                 (StockBalance.branch_id == Branch.id)
                 & (StockBalance.organization_id == organization.id),
+            )
+            .outerjoin(
+                InventoryItem,
+                (InventoryItem.id == StockBalance.item_id)
+                & (InventoryItem.organization_id == organization.id)
+                & (InventoryItem.status == "active"),
             )
             .where(
                 Branch.organization_id == organization.id,
@@ -151,7 +172,7 @@ async def inventory_report(
             branch_total,
         ) in branch_rows
     )
-    as_of = datetime.now(UTC)
+    zero_stock_item_count = max(active_item_count - stocked_item_count, 0)
     metrics = (
         InventoryReportMetric(
             key="inventory.active_items",
@@ -177,7 +198,7 @@ async def inventory_report(
         InventoryReportMetric(
             key="inventory.zero_stock_items",
             label="Active items with no stock in any branch",
-            value=Decimal(max(active_item_count - stocked_item_count, 0)),
+            value=Decimal(zero_stock_item_count),
             unit="items",
             source_reference="inventory:summary:zero-stock-items",
         ),
@@ -191,11 +212,11 @@ async def inventory_report(
     )
     return InventoryReportRead(
         organization_id=organization.id,
-        as_of=as_of,
+        as_of=datetime.now(UTC),
         active_item_count=active_item_count,
         active_branch_count=active_branch_count,
         stocked_item_count=stocked_item_count,
-        zero_stock_item_count=max(active_item_count - stocked_item_count, 0),
+        zero_stock_item_count=zero_stock_item_count,
         total_units_on_hand=total_units,
         branches=branches,
         metrics=metrics,
