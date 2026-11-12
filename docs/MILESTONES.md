@@ -248,7 +248,9 @@ Reference documents:
 - [ ] Complete Android runner configuration, field task APIs, count capture and release signing.
 - [x] Initial client portal sales posting and stocktaking count flows.
 - [ ] Client portal discrepancy and advanced forecast flows.
-- [x] Client portal deterministic demand-forecast and inventory report view.
+- [x] Client portal deterministic demand-forecast and inventory report view, including configurable lead-time and safety-stock assumptions.
+- [ ] Persist approved lead-time and safety-stock policies against supplier/item or branch-item records rather than request-level planning assumptions.
+- [ ] Evaluate forecast error against historical periods and identify stockout-censored demand.
 - [ ] Typed API integration and loading/error/empty states.
 - [ ] Browser authentication and permission-aware navigation.
 - [ ] End-to-end tests for core management, field and client journeys.
