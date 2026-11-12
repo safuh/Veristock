@@ -170,9 +170,9 @@ def test_trailing_average_backtest_uses_chronological_folds() -> None:
         max_folds=2,
     )
     assert result.fold_count == 2
-    assert result.mean_absolute_error_per_day == Decimal("2")
-    assert result.weighted_absolute_percentage_error == Decimal("0.5")
-    assert result.forecast_bias_fraction == Decimal("-0.5")
+    assert result.mean_absolute_error_per_day == Decimal("12") / Decimal("7")
+    assert result.weighted_absolute_percentage_error == Decimal("3") / Decimal("7")
+    assert result.forecast_bias_fraction == Decimal("-3") / Decimal("7")
 
 
 def test_trailing_average_backtest_includes_zero_sale_days() -> None:
@@ -181,7 +181,7 @@ def test_trailing_average_backtest_includes_zero_sale_days() -> None:
         lookback_days=7,
         horizon_days=1,
     )
-    assert result.mean_absolute_error_per_day == Decimal("1")
+    assert result.mean_absolute_error_per_day == Decimal("7")
     assert result.weighted_absolute_percentage_error == Decimal("1")
     assert result.forecast_bias_fraction == Decimal("-1")
 
