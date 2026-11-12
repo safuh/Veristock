@@ -12,6 +12,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ExceptionHandler
 
 from .ai.service import AIService
+from .ai.provider_http import OpenAICompatibleProvider
 from .api.router import api_router
 from .auth.application import AuthenticationApplication
 from .auth.tokens import TokenService
@@ -83,7 +84,22 @@ def create_app(
     app.state.settings = resolved
     app.state.auth_application_factory = auth_application_factory
     app.state.access_token_service = access_token_service
-    app.state.ai_service = ai_service or AIService()
+    configured_ai_service = ai_service
+    if configured_ai_service is None and resolved.ai_provider == "openai-compatible":
+        configured_ai_service = AIService(
+            OpenAICompatibleProvider(
+                base_url=resolved.ai_base_url or "",
+                model=resolved.ai_model or "",
+                api_key=(
+                    resolved.ai_api_key.get_secret_value()
+                    if resolved.ai_api_key is not None
+                    else None
+                ),
+                timeout_seconds=resolved.ai_timeout_seconds,
+            ),
+            timeout_seconds=resolved.ai_timeout_seconds,
+        )
+    app.state.ai_service = configured_ai_service or AIService()
 
     app.add_middleware(RequestContextMiddleware)
     if resolved.cors_origins:
