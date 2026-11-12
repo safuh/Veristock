@@ -139,3 +139,66 @@ def calculate_stockout_adjustment(
     adjusted = min(baseline * factor, baseline * maximum_adjustment_factor)
     status = "adjusted" if factor > 1 else "no_stockout"
     return StockoutDemandAdjustment(adjusted, factor, status)
+
+
+@dataclass(frozen=True, slots=True)
+class ForecastBacktestMetrics:
+    """Rolling-origin evaluation metrics for a trailing-average forecast."""
+
+    fold_count: int
+    horizon_days: int
+    mean_absolute_error_per_day: Decimal
+    weighted_absolute_percentage_error: Decimal | None
+    forecast_bias_fraction: Decimal | None
+
+
+def evaluate_trailing_average(
+    *,
+    daily_sales: list[Decimal],
+    lookback_days: int,
+    horizon_days: int,
+    max_folds: int = 6,
+) -> ForecastBacktestMetrics:
+    """Backtest a trailing average using contiguous closed-day sales history."""
+    if lookback_days <= 0:
+        raise ValueError("lookback_days must be positive")
+    if horizon_days <= 0:
+        raise ValueError("horizon_days must be positive")
+    if max_folds <= 0:
+        raise ValueError("max_folds must be positive")
+    if any(value < 0 for value in daily_sales):
+        raise ValueError("daily_sales cannot contain negative values")
+
+    available_folds = max((len(daily_sales) - lookback_days) // horizon_days, 0)
+    fold_count = min(available_folds, max_folds)
+    if fold_count == 0:
+        raise ValueError("insufficient_history")
+
+    first_origin = len(daily_sales) - fold_count * horizon_days
+    absolute_errors: list[Decimal] = []
+    total_forecast = Decimal("0")
+    total_actual = Decimal("0")
+    for fold_index in range(fold_count):
+        origin = first_origin + fold_index * horizon_days
+        history = daily_sales[origin - lookback_days : origin]
+        actual = daily_sales[origin : origin + horizon_days]
+        average_daily = sum(history, Decimal("0")) / Decimal(lookback_days)
+        forecast_total = average_daily * Decimal(horizon_days)
+        actual_total = sum(actual, Decimal("0"))
+        absolute_errors.append(
+            abs(forecast_total - actual_total) / Decimal(horizon_days)
+        )
+        total_forecast += forecast_total
+        total_actual += actual_total
+
+    mae = sum(absolute_errors, Decimal("0")) / Decimal(fold_count)
+    total_absolute_error = sum(absolute_errors, Decimal("0")) * Decimal(horizon_days)
+    wape = total_absolute_error / total_actual if total_actual > 0 else None
+    bias = (total_forecast - total_actual) / total_actual if total_actual > 0 else None
+    return ForecastBacktestMetrics(
+        fold_count=fold_count,
+        horizon_days=horizon_days,
+        mean_absolute_error_per_day=mae,
+        weighted_absolute_percentage_error=wape,
+        forecast_bias_fraction=bias,
+    )

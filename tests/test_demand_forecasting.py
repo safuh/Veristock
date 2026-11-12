@@ -7,6 +7,7 @@ import pytest
 from veristock.ai.forecasting import (
     calculate_demand_metrics,
     calculate_stockout_adjustment,
+    evaluate_trailing_average,
 )
 
 
@@ -159,3 +160,69 @@ def test_stockout_adjustment_returns_baseline_when_no_stockout_occurred() -> Non
     assert result.average_daily_demand == Decimal("2")
     assert result.adjustment_factor == Decimal("1")
     assert result.status == "no_stockout"
+
+
+def test_trailing_average_backtest_uses_chronological_folds() -> None:
+    result = evaluate_trailing_average(
+        daily_sales=[Decimal("2")] * 14 + [Decimal("4")] * 4,
+        lookback_days=7,
+        horizon_days=2,
+        max_folds=2,
+    )
+    assert result.fold_count == 2
+    assert result.mean_absolute_error_per_day == Decimal("2")
+    assert result.weighted_absolute_percentage_error == Decimal("0.5")
+    assert result.forecast_bias_fraction == Decimal("-0.5")
+
+
+def test_trailing_average_backtest_includes_zero_sale_days() -> None:
+    result = evaluate_trailing_average(
+        daily_sales=[Decimal("0")] * 7 + [Decimal("7")],
+        lookback_days=7,
+        horizon_days=1,
+    )
+    assert result.mean_absolute_error_per_day == Decimal("1")
+    assert result.weighted_absolute_percentage_error == Decimal("1")
+    assert result.forecast_bias_fraction == Decimal("-1")
+
+
+def test_trailing_average_backtest_handles_zero_actuals() -> None:
+    result = evaluate_trailing_average(
+        daily_sales=[Decimal("0")] * 14,
+        lookback_days=7,
+        horizon_days=7,
+    )
+    assert result.mean_absolute_error_per_day == Decimal("0")
+    assert result.weighted_absolute_percentage_error is None
+    assert result.forecast_bias_fraction is None
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"lookback_days": 0}, "lookback_days"),
+        ({"horizon_days": 0}, "horizon_days"),
+        ({"max_folds": 0}, "max_folds"),
+        ({"daily_sales": [Decimal("1"), Decimal("-1")]}, "negative"),
+    ],
+)
+def test_trailing_average_backtest_rejects_invalid_inputs(
+    overrides: dict, message: str
+) -> None:
+    values = {
+        "daily_sales": [Decimal("1")] * 14,
+        "lookback_days": 7,
+        "horizon_days": 7,
+    }
+    values.update(overrides)
+    with pytest.raises(ValueError, match=message):
+        evaluate_trailing_average(**values)
+
+
+def test_trailing_average_backtest_requires_one_complete_fold() -> None:
+    with pytest.raises(ValueError, match="insufficient_history"):
+        evaluate_trailing_average(
+            daily_sales=[Decimal("1")] * 10,
+            lookback_days=7,
+            horizon_days=4,
+        )

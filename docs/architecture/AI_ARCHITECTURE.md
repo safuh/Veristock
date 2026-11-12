@@ -8,6 +8,7 @@ The reporting API exposes:
 - `POST /api/reports/inventory/narrative`, protected by `inventory.read`, for an advisory narrative generated only from the authorized inventory snapshot.
 - `GET /api/reports/ai-executions`, protected by `inventory.read`, for the current tenant's recent AI execution history.
 - `GET /api/reports/inventory/demand-forecast`, protected by `inventory.read`, for deterministic trailing-sales-average demand and replenishment estimates, optionally scoped to an active branch.
+- `GET /api/reports/inventory/forecast-evaluation`, protected by `inventory.read`, for a tenant-scoped rolling-origin backtest of one item's trailing-average forecast.
 
 The AI package is isolated under `src/veristock/ai`. It contains strict Pydantic
 contracts for model provenance, vision assessments, demand forecasts, anomaly
@@ -86,8 +87,17 @@ status. This signal is displayed separately and does not currently alter
 replenishment quantities. It is a conservative exposure estimate, not measured
 lost sales.
 
+The forecast-evaluation endpoint runs a rolling-origin backtest on closed UTC
+calendar days. It uses non-overlapping forecast horizons, includes zero-sale
+days, and reports mean absolute error per day, weighted absolute percentage
+error and aggregate forecast bias when actuals are non-zero. It returns 422
+when the selected history cannot support at least one fold. Evaluation is
+against recorded sales, not latent demand during stockouts, and does not
+validate supplier lead-time assumptions. Results are historical diagnostics,
+not guarantees of future accuracy.
+
 This remains a simple trailing-average baseline, not a statistically evaluated
-forecast. It does not yet model service levels, seasonality, promotions or
+forecast model. It does not yet model service levels, seasonality, promotions or
 uncertainty intervals. It never creates a purchase order or changes inventory. Replenishment
 decisions remain with an authorized human.
 

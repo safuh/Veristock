@@ -1,6 +1,6 @@
 """Tenant-scoped deterministic reporting and advisory AI narratives."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from time import perf_counter
 from typing import Annotated, cast
@@ -17,6 +17,7 @@ from veristock.ai.contracts import ReportNarrative
 from veristock.ai.forecasting import (
     calculate_demand_metrics,
     calculate_stockout_adjustment,
+    evaluate_trailing_average,
 )
 from veristock.ai.models import AIExecutionRecord
 from veristock.ai.requests import ReportMetric, ReportNarrativeRequest
@@ -757,4 +758,132 @@ async def inventory_demand_forecast(
             "stockout-censored demand and supplier constraints are not inferred."
         ),
         items=tuple(forecasts),
+    )
+
+
+class ForecastEvaluationRead(BaseModel):
+    """Rolling-origin accuracy metrics for one tenant-owned item."""
+
+    item_id: str
+    branch_id: str | None
+    evaluated_through: date
+    lookback_days: int
+    horizon_days: int
+    history_days: int
+    fold_count: int
+    mean_absolute_error_per_day: Decimal
+    weighted_absolute_percentage_error: Decimal | None
+    forecast_bias_fraction: Decimal | None
+    methodology: str
+
+
+@router.get(
+    "/inventory/forecast-evaluation",
+    response_model=ForecastEvaluationRead,
+)
+async def evaluate_inventory_forecast(
+    organization: InventoryReporter,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    item_id: str,
+    branch_id: str | None = None,
+    lookback_days: int = Query(default=30, ge=7, le=180),
+    horizon_days: int = Query(default=7, ge=1, le=30),
+    folds: int = Query(default=6, ge=1, le=12),
+) -> ForecastEvaluationRead:
+    """Backtest one item's trailing-average forecast against closed sales days."""
+    item = await session.scalar(
+        select(InventoryItem.id).where(
+            InventoryItem.id == item_id,
+            InventoryItem.organization_id == organization.id,
+            InventoryItem.status == "active",
+        )
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Active item not found")
+
+    if branch_id is not None:
+        branch = await session.scalar(
+            select(Branch.id).where(
+                Branch.id == branch_id,
+                Branch.organization_id == organization.id,
+                Branch.status == "active",
+            )
+        )
+        if branch is None:
+            raise HTTPException(status_code=404, detail="Active branch not found")
+
+    evaluated_through = datetime.now(UTC).date() - timedelta(days=1)
+    required_days = lookback_days + (horizon_days * folds)
+    window_start = evaluated_through - timedelta(days=required_days - 1)
+    sales_day = func.date(Sale.posted_at)
+    statement = (
+        select(
+            sales_day.label("sales_day"),
+            func.coalesce(func.sum(SaleLine.quantity), 0).label("units_sold"),
+        )
+        .join(
+            Sale,
+            (Sale.id == SaleLine.sale_id)
+            & (Sale.organization_id == organization.id)
+            & (Sale.status == "posted"),
+        )
+        .where(
+            SaleLine.organization_id == organization.id,
+            SaleLine.item_id == item_id,
+            Sale.posted_at >= datetime.combine(window_start, datetime.min.time(), UTC),
+            Sale.posted_at < datetime.combine(
+                evaluated_through + timedelta(days=1), datetime.min.time(), UTC
+            ),
+        )
+        .group_by(sales_day)
+        .order_by(sales_day)
+    )
+    if branch_id is not None:
+        statement = statement.where(Sale.branch_id == branch_id)
+
+    rows = (await session.execute(statement)).all()
+    sales_by_day = {
+        date.fromisoformat(str(day)): Decimal(units or 0)
+        for day, units in rows
+    }
+    daily_sales = [
+        sales_by_day.get(window_start + timedelta(days=index), Decimal("0"))
+        for index in range(required_days)
+    ]
+    try:
+        metrics = evaluate_trailing_average(
+            daily_sales=daily_sales,
+            lookback_days=lookback_days,
+            horizon_days=horizon_days,
+            max_folds=folds,
+        )
+    except ValueError as exc:
+        if str(exc) == "insufficient_history":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Insufficient closed-day history for the requested backtest",
+            ) from exc
+        raise
+
+    return ForecastEvaluationRead(
+        item_id=item_id,
+        branch_id=branch_id,
+        evaluated_through=evaluated_through,
+        lookback_days=lookback_days,
+        horizon_days=horizon_days,
+        history_days=required_days,
+        fold_count=metrics.fold_count,
+        mean_absolute_error_per_day=metrics.mean_absolute_error_per_day,
+        weighted_absolute_percentage_error=(
+            metrics.weighted_absolute_percentage_error
+        ),
+        forecast_bias_fraction=metrics.forecast_bias_fraction,
+        methodology=(
+            "Rolling-origin trailing-average evaluation. Each fold uses the "
+            "immediately preceding lookback window to forecast the next "
+            "non-overlapping horizon. Zero-sale calendar days are included; "
+            "only closed UTC days are evaluated. WAPE and bias are null when "
+            "actual sales across evaluation folds are zero. This measures "
+            "recorded sales, not latent demand during stockouts."
+        ),
     )
