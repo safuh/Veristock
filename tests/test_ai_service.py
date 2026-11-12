@@ -7,7 +7,6 @@ import pytest
 
 from veristock.ai.context import AIExecutionContext
 from veristock.ai.contracts import ModelRun, ReportNarrative
-from veristock.ai.provider import AIProvider
 from veristock.ai.requests import ReportMetric, ReportNarrativeRequest
 from veristock.ai.service import (
     AIProviderFailure,
