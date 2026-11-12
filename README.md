@@ -4,7 +4,7 @@ Veristock One is the inventory verification and stocktaking platform for Veristo
 
 **Architecture:** Modular monolith · FastAPI · Python · SQLAlchemy 2.x · Alembic · PostgreSQL · React + TypeScript
 
-**AI policy:** No AI integration, AI dependencies, agents, LLM providers or vector database are included in the MVP.
+**AI policy:** AI contracts and a provider-neutral narrative execution boundary are implemented. No hosted model provider, mandatory AI SDK, autonomous agents or vector database is included.
 
 ## Current implementation status
 
@@ -22,14 +22,14 @@ Implemented capabilities:
 - React client workspace flows for item creation, opening balances, sales and stocktaking.
 - Flutter Android field workflows for open stocktake retrieval, barcode matching, count capture and round submission.
 - Installable PWA shell; service-worker caching is limited to static assets and does not cache authenticated API responses.
-- CI coverage for Python 3.11–3.13, React production builds, Flutter analysis/tests and Android debug builds.
+- Initial AI contracts for vision assessments, demand forecasts, anomaly findings and report narratives, plus a provider-neutral narrative service with tenant-context separation, bounded inputs, timeouts and source-reference validation.\n- CI coverage for Python 3.11–3.13, React production builds, Flutter analysis/tests and Android debug builds.
 
 Important MVP boundaries still being completed:
 
 - Veristock staff cross-tenant stocktake assignment and evidence upload.
 - Reconciliation runs, discrepancy review/approval and controlled ledger corrections.
 - Richer reporting, export, replenishment forecasts and anomaly detection.
-- AI stocktaking assistance and natural-language reporting, implemented as isolated services after deterministic workflows.
+- Hosted AI providers, AI operation audit persistence, deterministic anomaly detection, forecast execution, vision inference and user-facing AI workflows remain outstanding.
 - Email delivery, password recovery, rate limiting, production release signing, deployment secrets and operational monitoring.
 - Offline Android capture and conflict-safe synchronization are not enabled; current mobile count capture requires connectivity.
 
