@@ -221,7 +221,7 @@ export function ReportsPanel({
 
       <div className="panel-heading">
         <div><p className="eyebrow">DEMAND PLANNING</p><h3>Sales-velocity forecast</h3>
-          <p className="muted">Deterministic 30-day trailing average and 14-day post-replenishment coverage target. Lead time and safety stock are planning assumptions, not supplier records.</p>
+          <p className="muted">Deterministic 30-day trailing average and 14-day post-replenishment coverage target. Lead time and safety stock are planning assumptions, not supplier records; changing either refreshes the forecast.</p>
           <div className="form-row">
             <label>Supplier lead time (days)
               <input type="number" min="0" max="180" value={leadTimeDays} onChange={(event) => setLeadTimeDays(Math.max(0, Number(event.target.value)))} />
@@ -229,7 +229,6 @@ export function ReportsPanel({
             <label>Safety stock (days)
               <input type="number" min="0" max="180" value={safetyStockDays} onChange={(event) => setSafetyStockDays(Math.max(0, Number(event.target.value)))} />
             </label>
-            <button className="secondary" onClick={() => void refresh()} disabled={loading}>Apply assumptions</button>
           </div>
         </div>
       </div>
