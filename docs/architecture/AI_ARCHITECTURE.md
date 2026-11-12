@@ -55,11 +55,26 @@ Without one, the API uses an unconfigured service and returns HTTP 503 for the
 narrative endpoint while recording the unavailable attempt. Provider execution
 failures return HTTP 502 after recording a safe failure code.
 
+## Deterministic demand planning baseline
+
+The demand-forecast endpoint is independent of AI providers. It aggregates
+posted sale-line quantities over a trailing UTC lookback window and current
+stock balances for the same tenant and optional branch. The baseline average
+includes zero-sale days. It reports average daily demand, days of cover and
+the non-negative quantity needed to reach a caller-selected target coverage
+horizon. Defaults are 30 days of sales history and 14 days of target coverage.
+
+This is an intentionally simple baseline, not a statistically evaluated
+forecast. It does not yet model supplier lead times, safety stock, service
+levels, seasonality, promotions, stockout-censored demand or uncertainty
+intervals. It never creates a purchase order or changes inventory. Replenishment
+decisions remain with an authorized human.
+
 ## Deliberately not implemented yet
 
 - Additional hosted LLM or vision adapters beyond the generic OpenAI-compatible chat-completions adapter.
 - Token/cost metering and provider-specific usage reporting.
-- Demand forecast execution and evaluation pipelines.
+- Advanced demand forecast evaluation, seasonality and uncertainty pipelines.
 - Deterministic anomaly detection and evidence collection.
 - Vision model inference and private image storage.
 - User-facing AI chat or autonomous agents.
