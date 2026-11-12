@@ -210,10 +210,13 @@ Reference documents:
 
 ### M14 — Forecasting, reporting and business intelligence
 
-- [ ] SQL-backed daily/weekly sales, stock movement and stock-on-hand metrics.
+**Status: in progress — tenant-scoped inventory reporting and an initial deterministic sales-velocity forecast are implemented; advanced planning and evaluation remain open.**
+
+- [x] SQL-backed posted-sales and current-stock aggregates for the initial demand forecast.
 - [ ] Branch/item inventory valuation only where verified unit cost and currency exist.
 - [ ] Low-stock, fast/slow-moving and stockout-risk reports.
-- [ ] CPU-friendly baseline demand forecasts and reorder suggestions with uncertainty.
+- [x] CPU-friendly trailing-average demand baseline and target-coverage replenishment suggestions.
+- [ ] Forecast evaluation, uncertainty bounds, seasonality and backtesting.
 - [ ] Replenishment calculations use lead time, safety stock and configured service levels.
 - [ ] Report period, filters, generation timestamp and source watermark are recorded.
 - [ ] PDF/spreadsheet exports from deterministic query results.
@@ -244,7 +247,8 @@ Reference documents:
 - [x] Flutter Android client foundation with secure token storage, session restoration, organization selection and camera barcode-scanning screen.
 - [ ] Complete Android runner configuration, field task APIs, count capture and release signing.
 - [x] Initial client portal sales posting and stocktaking count flows.
-- [ ] Client portal discrepancy, forecast and report flows.
+- [ ] Client portal discrepancy and advanced forecast flows.
+- [x] Client portal deterministic demand-forecast and inventory report view.
 - [ ] Typed API integration and loading/error/empty states.
 - [ ] Browser authentication and permission-aware navigation.
 - [ ] End-to-end tests for core management, field and client journeys.
