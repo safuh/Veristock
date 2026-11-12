@@ -64,6 +64,9 @@ stock balances for the same tenant and optional branch. The baseline average
 includes zero-sale days. It reports average daily demand, days of cover and
 the non-negative quantity needed to reach a caller-selected target coverage
 horizon. Defaults are 30 days of sales history and 14 days of target coverage.
+Results are ranked by the calculated replenishment gap in the database before
+limit/offset pagination, so later pages do not omit higher-priority items merely
+because an earlier page was selected alphabetically.
 
 This is an intentionally simple baseline, not a statistically evaluated
 forecast. It does not yet model supplier lead times, safety stock, service
