@@ -64,17 +64,17 @@ def calculate_stock_availability(
         key=lambda movement: movement.occurred_at.astimezone(UTC),
     )
 
-    first_at = ordered[0].occurred_at.astimezone(timezone.utc)
+    first_at = ordered[0].occurred_at.astimezone(UTC)
     first_group = [
         movement
         for movement in ordered
-        if movement.occurred_at.astimezone(timezone.utc) == first_at
+        if movement.occurred_at.astimezone(UTC) == first_at
     ]
     if len(first_group) != 1 or first_group[0].source_type != "opening_balance":
         return None
 
-    start = window_start.astimezone(timezone.utc)
-    end = window_end.astimezone(timezone.utc)
+    start = window_start.astimezone(UTC)
+    end = window_end.astimezone(UTC)
     if first_at >= end:
         return None
 
@@ -93,7 +93,7 @@ def calculate_stock_availability(
     index = 1
 
     while index < len(ordered):
-        event_at = ordered[index].occurred_at.astimezone(timezone.utc)
+        event_at = ordered[index].occurred_at.astimezone(UTC)
         if event_at > end:
             break
 
@@ -111,7 +111,7 @@ def calculate_stock_availability(
         delta = Decimal("0")
         while index < len(ordered):
             current = ordered[index]
-            current_at = current.occurred_at.astimezone(timezone.utc)
+            current_at = current.occurred_at.astimezone(UTC)
             if current_at != event_at:
                 break
             delta += current.quantity_delta

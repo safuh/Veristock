@@ -29,7 +29,6 @@ from veristock.identity.authorization_dependencies import (
     require_permission,
 )
 from veristock.identity.models import User
-
 from veristock.inventory.availability import (
     StockAvailability,
     StockMovementEvent,
