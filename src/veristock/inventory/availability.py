@@ -6,7 +6,7 @@ stock balances are never used to backfill missing history.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 
@@ -61,7 +61,7 @@ def calculate_stock_availability(
         raise ValueError("movement timestamps must be timezone-aware")
     ordered = sorted(
         movements,
-        key=lambda movement: movement.occurred_at.astimezone(timezone.utc),
+        key=lambda movement: movement.occurred_at.astimezone(UTC),
     )
 
     first_at = ordered[0].occurred_at.astimezone(timezone.utc)
