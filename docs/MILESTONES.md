@@ -195,13 +195,14 @@ Reference documents:
 - [ ] Batch, serial, expiry and condition capture where enabled by item policy.
 - [x] Idempotent count observations and immutable count rounds with completeness checks.
 - [x] Recount round creation and separately authorized approval of submitted counts; approved variances post idempotent `stocktake_adjustment` ledger movements while preserving movements recorded after each observation.
-- [ ] Supervisor queue, enforced count/approval separation of duties and richer audit events.
+- [x] API-enforced count/approval separation of duties.
+- [ ] Supervisor queue, recount/rejection reason codes and richer audit events.
 
 ### M13 — Reconciliation and discrepancy intelligence
 
-- [ ] Reconciliation against frozen expected-stock snapshots and accepted count rounds.
+- [x] Read-only reconciliation breakdown against frozen expected-stock snapshots and the latest accepted count round, including post-count movement context.
 - [ ] Configurable matching grain and unit validation.
-- [ ] Shortage, surplus, missing, unrecognized and condition exceptions.
+- [x] Deterministic shortage, surplus and match classifications; missing-scope, unrecognized-item and condition exceptions remain open.
 - [ ] Quantity variance and verified-cost financial variance.
 - [ ] Exception resolution and recount handoff.
 - [ ] Reviewer approval and separation-of-duties enforcement.

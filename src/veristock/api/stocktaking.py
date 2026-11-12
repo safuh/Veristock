@@ -405,6 +405,141 @@ async def open_recount_round(
     return new_round
 
 
+class StocktakeReconciliationLine(BaseModel):
+    """Read-only variance detail for one item in the latest submitted count."""
+
+    item_id: str
+    sku: str
+    item_name: str
+    unit_code: str
+    expected_quantity: Decimal
+    counted_quantity: Decimal
+    variance_quantity: Decimal
+    variance_status: str
+    post_count_movement_delta: Decimal
+    reconciled_quantity: Decimal
+    current_quantity: Decimal
+
+
+class StocktakeReconciliationRead(BaseModel):
+    stocktake_id: str
+    status: str
+    round_number: int
+    submitted_at: datetime | None
+    lines: list[StocktakeReconciliationLine]
+
+
+@router.get("/{stocktake_id}/reconciliation", response_model=StocktakeReconciliationRead)
+async def get_stocktake_reconciliation(
+    stocktake_id: str,
+    organization: StocktakeReader,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> StocktakeReconciliationRead:
+    """Return frozen-snapshot variance and post-count movement context.
+
+    This endpoint is read-only. It never changes stock balances or ledger rows.
+    """
+    stocktake = await session.scalar(
+        select(Stocktake).where(
+            Stocktake.id == stocktake_id,
+            Stocktake.organization_id == organization.id,
+            Stocktake.status.in_(( "submitted", "completed")),
+        )
+    )
+    if stocktake is None:
+        raise HTTPException(status_code=404, detail="Submitted stocktake not found")
+
+    round_record = await session.scalar(
+        select(StocktakeRound)
+        .where(
+            StocktakeRound.stocktake_id == stocktake.id,
+            StocktakeRound.organization_id == organization.id,
+            StocktakeRound.status == "submitted",
+        )
+        .order_by(StocktakeRound.round_number.desc())
+    )
+    if round_record is None:
+        raise HTTPException(status_code=409, detail="No submitted count round to reconcile")
+
+    rows = (
+        await session.execute(
+            select(StocktakeObservation, StocktakeScopeItem, InventoryItem)
+            .join(
+                StocktakeScopeItem,
+                (StocktakeScopeItem.stocktake_id == StocktakeObservation.stocktake_id)
+                & (StocktakeScopeItem.item_id == StocktakeObservation.item_id)
+                & (StocktakeScopeItem.organization_id == organization.id),
+            )
+            .join(InventoryItem, InventoryItem.id == StocktakeObservation.item_id)
+            .where(
+                StocktakeObservation.organization_id == organization.id,
+                StocktakeObservation.stocktake_id == stocktake.id,
+                StocktakeObservation.round_id == round_record.id,
+            )
+            .order_by(InventoryItem.name)
+        )
+    ).all()
+
+    lines = []
+    for observation, scope, item in rows:
+        later_movements = await session.scalar(
+            select(func.coalesce(func.sum(StockMovement.quantity_delta), 0)).where(
+                StockMovement.organization_id == organization.id,
+                StockMovement.branch_id == stocktake.branch_id,
+                StockMovement.item_id == observation.item_id,
+                StockMovement.occurred_at > observation.counted_at,
+            )
+        )
+        post_count_delta = Decimal(later_movements or 0)
+        variance = observation.counted_quantity - scope.expected_quantity
+        current_balance = await session.scalar(
+            select(StockBalance).where(
+                StockBalance.organization_id == organization.id,
+                StockBalance.branch_id == stocktake.branch_id,
+                StockBalance.item_id == observation.item_id,
+            )
+        )
+        current_quantity = (
+            current_balance.quantity_on_hand
+            if current_balance is not None
+            else Decimal("0")
+        )
+        lines.append(
+            StocktakeReconciliationLine(
+                item_id=item.id,
+                sku=item.sku or "",
+                item_name=item.name,
+                unit_code=scope.unit_code,
+                expected_quantity=scope.expected_quantity,
+                counted_quantity=observation.counted_quantity,
+                variance_quantity=variance,
+                variance_status=(
+                    "shortage" if variance < 0 else "surplus" if variance > 0 else "match"
+                ),
+                post_count_movement_delta=post_count_delta,
+                reconciled_quantity=observation.counted_quantity + post_count_delta,
+                current_quantity=current_quantity,
+            )
+        )
+
+    expected_count = await session.scalar(
+        select(func.count(StocktakeScopeItem.id)).where(
+            StocktakeScopeItem.organization_id == organization.id,
+            StocktakeScopeItem.stocktake_id == stocktake.id,
+        )
+    )
+    if len(lines) != int(expected_count or 0):
+        raise HTTPException(status_code=409, detail="Latest count round is incomplete")
+
+    return StocktakeReconciliationRead(
+        stocktake_id=stocktake.id,
+        status=stocktake.status,
+        round_number=round_record.round_number,
+        submitted_at=round_record.submitted_at,
+        lines=lines,
+    )
+
+
 class StocktakeApprovalRead(BaseModel):
     """Result of applying an approved physical count to the stock ledger."""
 

@@ -236,6 +236,20 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
 
         asyncio.run(record_post_count_movement())
 
+        reconciliation = client.get(
+            f"/api/stocktakes/{stocktake_id}/reconciliation",
+            headers=headers,
+        )
+        assert reconciliation.status_code == 200
+        line = reconciliation.json()["lines"][0]
+        assert line["expected_quantity"] == "14.0000"
+        assert line["counted_quantity"] == "10.0000"
+        assert line["variance_quantity"] == "-4.0000"
+        assert line["variance_status"] == "shortage"
+        assert line["post_count_movement_delta"] == "-2.0000"
+        assert line["reconciled_quantity"] == "8.0000"
+        assert line["current_quantity"] == "12.0000"
+
         same_user_approval = client.post(
             f"/api/stocktakes/{stocktake_id}/approve", headers=headers
         )
