@@ -197,7 +197,8 @@ Reference documents:
 - [x] Recount round creation and separately authorized approval of submitted counts; approved variances post idempotent `stocktake_adjustment` ledger movements while preserving movements recorded after each observation.
 - [x] API-enforced count/approval separation of duties.
 - [x] Tenant-scoped supervisor review queue with branch filtering, latest-round totals and shortage/surplus counts.
-- [ ] Recount/rejection reason codes and richer audit events.
+- [x] Standardized recount reason codes and mandatory explanation, plus append-only recount-requested and approval decision history.
+- [ ] Rejection reason codes and a formal reject/reopen workflow.
 
 ### M13 — Reconciliation and discrepancy intelligence
 
