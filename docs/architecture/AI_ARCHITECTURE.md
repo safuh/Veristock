@@ -7,6 +7,7 @@ The reporting API exposes:
 - `GET /api/reports/inventory/summary`, protected by `inventory.read`, for deterministic tenant-scoped inventory metrics and branch totals.
 - `POST /api/reports/inventory/narrative`, protected by `inventory.read`, for an advisory narrative generated only from the authorized inventory snapshot.
 - `GET /api/reports/ai-executions`, protected by `inventory.read`, for the current tenant's recent AI execution history.
+- `GET /api/reports/inventory/demand-forecast`, protected by `inventory.read`, for deterministic trailing-sales-average demand and replenishment estimates, optionally scoped to an active branch.
 
 The AI package is isolated under `src/veristock/ai`. It contains strict Pydantic
 contracts for model provenance, vision assessments, demand forecasts, anomaly
