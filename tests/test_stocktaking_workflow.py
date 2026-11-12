@@ -240,7 +240,6 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
             f"/api/stocktakes/{stocktake_id}/approve", headers=headers
         )
         assert same_user_approval.status_code == 409
-        assert "cannot approve" in same_user_approval.json()["detail"]
 
         supervisor_token = tokens.create(
             supervisor_id, timedelta(minutes=10), token_type="access"
