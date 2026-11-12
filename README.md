@@ -23,7 +23,7 @@ Implemented capabilities:
 - Flutter Android field workflows for open stocktake retrieval, barcode matching, count capture and round submission.
 - Installable PWA shell; service-worker caching is limited to static assets and does not cache authenticated API responses.
 - Tenant-scoped deterministic inventory summary reporting, including branch totals and traceable source metrics.
-- Tenant-scoped demand planning endpoint and client reporting table using posted sales velocity, current stock, days of cover, caller-configured supplier lead time and safety stock, and a configurable target coverage horizon.
+- Tenant-scoped demand planning endpoint and client reporting table using posted sales velocity, current stock, days of cover, caller-configured supplier lead time and safety stock, and a configurable target coverage horizon. Lead-time and safety-stock assumptions default to zero until an organization supplies planning values.
 - Initial AI contracts for vision assessments, demand forecasts, anomaly findings and report narratives, plus a provider-neutral narrative service with tenant-context separation, bounded inputs, timeouts and source-reference validation.
 - Tenant-scoped AI execution audit persistence and a permission-protected inventory narrative endpoint. Audit records retain actor, organization, provider/model provenance, latency, source references and safe failure codes without storing prompts or raw report payloads.
 - CI coverage for Python 3.11–3.13, React production builds, Flutter analysis/tests and Android debug builds.
