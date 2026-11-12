@@ -193,6 +193,8 @@ async def test_demand_forecast_uses_tenant_scoped_sales_and_stock_totals():
         session=session,
         lookback_days=30,
         target_days=14,
+        limit=200,
+        offset=0,
     )
 
     assert result.branch_id is None
