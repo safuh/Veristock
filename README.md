@@ -23,7 +23,7 @@ Implemented capabilities:
 - Flutter Android field workflows for open stocktake retrieval, barcode matching, count capture and round submission.
 - Installable PWA shell; service-worker caching is limited to static assets and does not cache authenticated API responses.
 - Tenant-scoped deterministic inventory summary reporting, including branch totals and traceable source metrics.
-- Tenant-scoped demand planning endpoint and client reporting table using posted sales velocity, current stock, days of cover and a configurable target coverage horizon.
+- Tenant-scoped demand planning endpoint and client reporting table using posted sales velocity, current stock, days of cover, caller-configured supplier lead time and safety stock, and a configurable target coverage horizon.
 - Initial AI contracts for vision assessments, demand forecasts, anomaly findings and report narratives, plus a provider-neutral narrative service with tenant-context separation, bounded inputs, timeouts and source-reference validation.
 - Tenant-scoped AI execution audit persistence and a permission-protected inventory narrative endpoint. Audit records retain actor, organization, provider/model provenance, latency, source references and safe failure codes without storing prompts or raw report payloads.
 - CI coverage for Python 3.11–3.13, React production builds, Flutter analysis/tests and Android debug builds.
@@ -32,7 +32,7 @@ Important MVP boundaries still being completed:
 
 - Veristock staff cross-tenant stocktake assignment and evidence upload.
 - Reconciliation runs, discrepancy review/approval and controlled ledger corrections.
-- Richer reporting, export, lead-time/safety-stock-aware replenishment planning and anomaly detection.
+- Richer reporting, supplier/item master-data lead times and safety-stock policies, forecast evaluation and anomaly detection.
 - Hosted AI providers, deterministic anomaly detection, vision inference and user-facing AI workflows remain outstanding. The first deterministic sales-velocity forecast is implemented; advanced forecast evaluation and seasonality remain outstanding.
 - Email delivery, password recovery, rate limiting, production release signing, deployment secrets and operational monitoring.
 - Offline Android capture and conflict-safe synchronization are not enabled; current mobile count capture requires connectivity.
