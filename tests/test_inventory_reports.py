@@ -216,3 +216,5 @@ async def test_demand_forecast_uses_tenant_scoped_sales_and_stock_totals():
     assert "sale_lines.organization_id" in sql
     assert "stock_balances.organization_id" in sql
     assert "inventory_items.organization_id" in sql
+    assert "CASE WHEN" in sql
+    assert "ORDER BY" in sql
