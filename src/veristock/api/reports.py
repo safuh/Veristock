@@ -15,16 +15,16 @@ from sqlalchemy.sql.elements import ColumnElement
 from veristock.ai.context import AIExecutionContext
 from veristock.ai.contracts import ReportNarrative
 from veristock.ai.forecasting import calculate_demand_metrics
-from veristock.inventory.availability import (
-    StockMovementEvent,
-    calculate_stock_availability,
-)
 from veristock.ai.models import AIExecutionRecord
 from veristock.ai.requests import ReportMetric, ReportNarrativeRequest
 from veristock.ai.service import (
     AIProviderFailure,
     AIService,
     AIServiceUnavailable,
+)
+from veristock.inventory.availability import (
+    StockMovementEvent,
+    calculate_stock_availability,
 )
 from veristock.identity.authorization import Organization
 from veristock.identity.authorization_dependencies import (
