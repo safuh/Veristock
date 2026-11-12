@@ -149,7 +149,7 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
             headers=headers,
             json={
                 "item_id": item_id,
-                "counted_quantity": "0",
+                "counted_quantity": "10",
                 "unit_code": "EA",
                 "idempotency_key": "count-device-0002",
             },
@@ -161,13 +161,52 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         )
         assert final_submit.status_code == 200
 
+        async def record_post_count_movement() -> None:
+            engine = create_async_engine(database_url)
+            try:
+                async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                    observation = await session.scalar(
+                        select(StocktakeObservation)
+                        .where(StocktakeObservation.stocktake_id == stocktake_id)
+                        .order_by(StocktakeObservation.counted_at.desc())
+                    )
+                    balance = await session.scalar(
+                        select(StockBalance).where(
+                            StockBalance.organization_id == org_id,
+                            StockBalance.branch_id == branch_id,
+                            StockBalance.item_id == item_id,
+                        )
+                    )
+                    assert observation is not None
+                    assert balance is not None
+                    balance.quantity_on_hand -= Decimal("2")
+                    session.add(
+                        StockMovement(
+                            id=str(uuid4()),
+                            organization_id=org_id,
+                            branch_id=branch_id,
+                            item_id=item_id,
+                            quantity_delta=Decimal("-2"),
+                            unit_code="EA",
+                            source_type="manual_adjustment",
+                            idempotency_key="manual-after-count-0001",
+                            actor_user_id=user_id,
+                            occurred_at=observation.counted_at + timedelta(seconds=1),
+                        )
+                    )
+                    await session.commit()
+            finally:
+                await engine.dispose()
+
+        asyncio.run(record_post_count_movement())
+
         approved = client.post(
             f"/api/stocktakes/{stocktake_id}/approve", headers=headers
         )
         assert approved.status_code == 200
         assert approved.json()["status"] == "completed"
         assert approved.json()["adjustment_count"] == 1
-        assert approved.json()["total_quantity_delta"] == "-14.0000"
+        assert approved.json()["total_quantity_delta"] == "-4.0000"
 
     async def verify() -> None:
         engine = create_async_engine(database_url)
@@ -201,7 +240,7 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
                 )
                 assert len(observations) == 2
                 assert balance is not None
-                assert balance.quantity_on_hand == Decimal("0")
+                assert balance.quantity_on_hand == Decimal("8")
                 assert len(movements) == 1
         finally:
             await engine.dispose()
