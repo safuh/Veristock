@@ -354,3 +354,29 @@ async def generate_inventory_narrative(
         report_as_of=report.as_of,
         narrative=narrative,
     )
+
+class AIProviderStatusRead(BaseModel):
+    """Safe configuration status; never includes endpoint or credential data."""
+
+    configured: bool
+    provider: str | None = None
+    model: str | None = None
+
+
+@router.get("/ai-provider/status", response_model=AIProviderStatusRead)
+async def ai_provider_status(
+    organization: InventoryReporter,
+    ai_service: Annotated[AIService, Depends(get_ai_service)],
+) -> AIProviderStatusRead:
+    """Report whether AI execution is configured for this authorized tenant.
+
+    This is a configuration check, not a remote provider health probe. It does
+    not make an external request and never returns the provider URL or API key.
+    """
+    if not ai_service.is_configured:
+        return AIProviderStatusRead(configured=False)
+    return AIProviderStatusRead(
+        configured=True,
+        provider=ai_service.provider_name,
+        model=ai_service.model_name,
+    )
