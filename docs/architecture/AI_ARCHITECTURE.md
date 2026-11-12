@@ -6,6 +6,7 @@ The reporting API exposes:
 
 - `GET /api/reports/inventory/summary`, protected by `inventory.read`, for deterministic tenant-scoped inventory metrics and branch totals.
 - `POST /api/reports/inventory/narrative`, protected by `inventory.read`, for an advisory narrative generated only from the authorized inventory snapshot.
+- `GET /api/reports/ai-executions`, protected by `inventory.read`, for the current tenant's recent AI execution history.
 
 The AI package is isolated under `src/veristock/ai`. It contains strict Pydantic
 contracts for model provenance, vision assessments, demand forecasts, anomaly
@@ -17,7 +18,8 @@ AI execution metadata is persisted in `ai_execution_records`. Records identify
 the organization and requesting user, operation, outcome, provider/model
 provenance, latency, request ID, approved source references and a stable failure
 code when applicable. Prompts, raw report payloads and generated narrative text
-are deliberately not copied into the audit table.
+are deliberately not copied into the audit table. The history API returns only
+safe operational fields and applies an explicit organization filter.
 
 ## Design rules
 
