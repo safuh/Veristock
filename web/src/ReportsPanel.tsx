@@ -43,6 +43,8 @@ type DemandForecast = {
   }[];
 };
 
+type OrganizationContext = { can_manage_inventory: boolean };
+
 type AIProviderStatus = {
   configured: boolean;
   provider: string | null;
@@ -114,6 +116,7 @@ export function ReportsPanel({
   const [executions, setExecutions] = useState<AIExecution[]>([]);
   const [forecast, setForecast] = useState<DemandForecast | null>(null);
   const [providerStatus, setProviderStatus] = useState<AIProviderStatus | null>(null);
+  const [canManageInventory, setCanManageInventory] = useState(false);
   const [narrative, setNarrative] = useState<NarrativeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -129,7 +132,7 @@ export function ReportsPanel({
     setLoading(true);
     setError("");
     try {
-      const [snapshot, activity, aiStatus, demand] = await Promise.all([
+      const [snapshot, activity, aiStatus, demand, organizationContext] = await Promise.all([
         apiRequest<OrganizationReport>(
           "/reports/inventory/summary", token, organizationId,
         ),
@@ -144,11 +147,13 @@ export function ReportsPanel({
           token,
           organizationId,
         ),
+        apiRequest<OrganizationContext>("/identity/context", token, organizationId),
       ]);
       setReport(snapshot);
       setExecutions(activity);
       setProviderStatus(aiStatus);
       setForecast(demand);
+      setCanManageInventory(organizationContext.can_manage_inventory);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load reports");
     } finally {
@@ -293,9 +298,9 @@ export function ReportsPanel({
                   <td>{item.days_of_cover === null ? "—" : formatNumber(item.days_of_cover)}</td>
                   <td>{formatNumber(item.reorder_point_quantity)}</td>
                   <td>{item.days_until_reorder === null ? "—" : formatNumber(item.days_until_reorder)}</td>
-                  <td>{branchId ? <input aria-label={`Lead time for ${item.item_name}`} type="number" min="0" max="180" value={policyDrafts[item.item_id]?.leadTimeDays ?? item.lead_time_days} onChange={(event) => setPolicyDrafts((current) => ({ ...current, [item.item_id]: { leadTimeDays: Math.max(0, Number(event.target.value)), safetyStockDays: current[item.item_id]?.safetyStockDays ?? item.safety_stock_days } }))} /> : formatNumber(item.lead_time_days)}</td>
-                  <td>{branchId ? <input aria-label={`Safety stock for ${item.item_name}`} type="number" min="0" max="180" value={policyDrafts[item.item_id]?.safetyStockDays ?? item.safety_stock_days} onChange={(event) => setPolicyDrafts((current) => ({ ...current, [item.item_id]: { leadTimeDays: current[item.item_id]?.leadTimeDays ?? item.lead_time_days, safetyStockDays: Math.max(0, Number(event.target.value)) } }))} /> : formatNumber(item.safety_stock_days)}</td>
-                  <td>{branchId ? <button className="secondary" disabled={savingPolicyId === item.item_id} onClick={() => void savePolicy(item)}>{savingPolicyId === item.item_id ? "Saving…" : "Save policy"}</button> : item.planning_policy_source === "default" ? "Shared default" : "Override"}</td>
+                  <td>{branchId && canManageInventory ? <input aria-label={`Lead time for ${item.item_name}`} type="number" min="0" max="180" value={policyDrafts[item.item_id]?.leadTimeDays ?? item.lead_time_days} onChange={(event) => setPolicyDrafts((current) => ({ ...current, [item.item_id]: { leadTimeDays: Math.max(0, Number(event.target.value)), safetyStockDays: current[item.item_id]?.safetyStockDays ?? item.safety_stock_days } }))} /> : formatNumber(item.lead_time_days)}</td>
+                  <td>{branchId && canManageInventory ? <input aria-label={`Safety stock for ${item.item_name}`} type="number" min="0" max="180" value={policyDrafts[item.item_id]?.safetyStockDays ?? item.safety_stock_days} onChange={(event) => setPolicyDrafts((current) => ({ ...current, [item.item_id]: { leadTimeDays: current[item.item_id]?.leadTimeDays ?? item.lead_time_days, safetyStockDays: Math.max(0, Number(event.target.value)) } }))} /> : formatNumber(item.safety_stock_days)}</td>
+                  <td>{branchId && canManageInventory ? <button className="secondary" disabled={savingPolicyId === item.item_id} onClick={() => void savePolicy(item)}>{savingPolicyId === item.item_id ? "Saving…" : "Save policy"}</button> : item.planning_policy_source === "saved_policy" ? "Saved policy" : item.planning_policy_source === "default" ? "Shared default" : "Override"}</td>
                   <td><strong>{formatNumber(item.recommended_replenishment_quantity)}</strong></td>
                 </tr>
               ))}
