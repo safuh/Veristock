@@ -478,12 +478,22 @@ async def inventory_demand_forecast(
 
     sales_totals = sales_statement.subquery()
     stock_totals = stock_statement.subquery()
+    units_sold_expression = func.coalesce(sales_totals.c.units_sold, 0)
+    stock_expression = func.coalesce(stock_totals.c.quantity_on_hand, 0)
+    target_stock_expression = (
+        units_sold_expression * target_days / lookback_days
+    )
+    replenishment_priority = case(
+        (target_stock_expression > stock_expression,
+         target_stock_expression - stock_expression),
+        else_=0,
+    )
     rows = (
         await session.execute(
             select(
                 InventoryItem,
-                func.coalesce(sales_totals.c.units_sold, 0),
-                func.coalesce(stock_totals.c.quantity_on_hand, 0),
+                units_sold_expression,
+                stock_expression,
             )
             .outerjoin(sales_totals, sales_totals.c.item_id == InventoryItem.id)
             .outerjoin(stock_totals, stock_totals.c.item_id == InventoryItem.id)
@@ -491,7 +501,11 @@ async def inventory_demand_forecast(
                 InventoryItem.organization_id == organization.id,
                 InventoryItem.status == "active",
             )
-            .order_by(InventoryItem.name)
+            .order_by(
+                replenishment_priority.desc(),
+                units_sold_expression.desc(),
+                InventoryItem.name.asc(),
+            )
             .limit(limit)
             .offset(offset)
         )
@@ -529,14 +543,6 @@ async def inventory_demand_forecast(
             )
         )
 
-    forecasts.sort(
-        key=lambda entry: (
-            entry.recommended_replenishment_quantity,
-            entry.average_daily_demand,
-            entry.item_name.casefold(),
-        ),
-        reverse=True,
-    )
     return DemandForecastRead(
         generated_at=generated_at,
         branch_id=branch_id,
