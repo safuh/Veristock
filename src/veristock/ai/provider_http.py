@@ -131,6 +131,13 @@ class OpenAICompatibleProvider:
             if not isinstance(content, str) or len(content) > 12_000:
                 raise ValueError("Provider returned an invalid narrative payload")
             narrative_data = json.loads(content)
+            if not isinstance(narrative_data, dict):
+                raise ValueError("Provider returned a non-object narrative")
+            narrative_data["run"] = ModelRun(
+                provider=self._provider_name,
+                model=self._model,
+                latency_ms=max(0, int((perf_counter() - started) * 1000)),
+            ).model_dump()
             narrative = ReportNarrative.model_validate(narrative_data)
         except (
             HTTPError,
@@ -144,12 +151,4 @@ class OpenAICompatibleProvider:
         ) as exc:
             raise RuntimeError("Compatible AI provider returned an invalid response") from exc
 
-        return narrative.model_copy(
-            update={
-                "run": ModelRun(
-                    provider=self._provider_name,
-                    model=self._model,
-                    latency_ms=max(0, int((perf_counter() - started) * 1000)),
-                )
-            }
-        )
+        return narrative
