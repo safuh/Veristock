@@ -22,7 +22,9 @@ Implemented capabilities:
 - React client workspace flows for item creation, opening balances, sales and stocktaking.
 - Flutter Android field workflows for open stocktake retrieval, barcode matching, count capture and round submission.
 - Installable PWA shell; service-worker caching is limited to static assets and does not cache authenticated API responses.
-- Initial AI contracts for vision assessments, demand forecasts, anomaly findings and report narratives, plus a provider-neutral narrative service with tenant-context separation, bounded inputs, timeouts and source-reference validation.\n- CI coverage for Python 3.11–3.13, React production builds, Flutter analysis/tests and Android debug builds.
+- Tenant-scoped deterministic inventory summary reporting, including branch totals and traceable source metrics for later AI narration.
+- Initial AI contracts for vision assessments, demand forecasts, anomaly findings and report narratives, plus a provider-neutral narrative service with tenant-context separation, bounded inputs, timeouts and source-reference validation.
+- CI coverage for Python 3.11–3.13, React production builds, Flutter analysis/tests and Android debug builds.
 
 Important MVP boundaries still being completed:
 
