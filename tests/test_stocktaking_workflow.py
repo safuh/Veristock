@@ -30,11 +30,15 @@ from veristock.stocktaking.models import StocktakeObservation
 def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
     import asyncio
 
-    async def seed(database_url: str) -> tuple[str, str, str, str]:
+    async def seed(database_url: str) -> tuple[str, str, str, str, str]:
         engine = create_async_engine(database_url)
         factory = async_sessionmaker(engine, expire_on_commit=False)
-        user_id, org_id, branch_id, item_id = (str(uuid4()) for _ in range(4))
-        membership_id, role_id = str(uuid4()), str(uuid4())
+        user_id, supervisor_id, org_id, branch_id, item_id = (
+            str(uuid4()) for _ in range(5)
+        )
+        membership_id, supervisor_membership_id, role_id, approver_role_id = (
+            str(uuid4()) for _ in range(4)
+        )
         try:
             async with engine.begin() as connection:
                 await connection.run_sync(Base.metadata.create_all)
@@ -42,6 +46,11 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
                 session.add_all(
                     [
                         User(id=user_id, identifier="counter@example.com", password_hash="x"),
+                        User(
+                            id=supervisor_id,
+                            identifier="supervisor@example.com",
+                            password_hash="x",
+                        ),
                         Organization(id=org_id, kind="client", legal_name="Count Tenant"),
                         OrganizationMembership(
                             id=membership_id,
@@ -50,7 +59,27 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
                             status="active",
                         ),
                         Role(id=role_id, code="count_team", name="Count Team", scope="client"),
+                        Role(
+                            id=approver_role_id,
+                            code="stocktake_approver",
+                            name="Stocktake Approver",
+                            scope="client",
+                        ),
                         MembershipRole(membership_id=membership_id, role_id=role_id),
+                        MembershipRole(
+                            membership_id=membership_id,
+                            role_id=approver_role_id,
+                        ),
+                        OrganizationMembership(
+                            id=supervisor_membership_id,
+                            organization_id=org_id,
+                            user_id=supervisor_id,
+                            status="active",
+                        ),
+                        MembershipRole(
+                            membership_id=supervisor_membership_id,
+                            role_id=approver_role_id,
+                        ),
                         Branch(
                             id=branch_id,
                             organization_id=org_id,
@@ -83,13 +112,20 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
                     session.add(
                         RolePermission(role_id=role_id, permission_id=permission_id)
                     )
+                    if code == "stocktake.approve":
+                        session.add(
+                            RolePermission(
+                                role_id=approver_role_id,
+                                permission_id=permission_id,
+                            )
+                        )
                 await session.commit()
         finally:
             await engine.dispose()
-        return user_id, org_id, branch_id, item_id
+        return user_id, supervisor_id, org_id, branch_id, item_id
 
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'stocktaking.db'}"
-    user_id, org_id, branch_id, item_id = asyncio.run(seed(database_url))
+    user_id, supervisor_id, org_id, branch_id, item_id = asyncio.run(seed(database_url))
     tokens = TokenService("s" * 32)
     token = tokens.create(user_id, timedelta(minutes=10), token_type="access")
     settings = Settings(environment=Environment.TEST, database_url=database_url)
@@ -200,8 +236,21 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
 
         asyncio.run(record_post_count_movement())
 
-        approved = client.post(
+        same_user_approval = client.post(
             f"/api/stocktakes/{stocktake_id}/approve", headers=headers
+        )
+        assert same_user_approval.status_code == 409
+        assert "cannot approve" in same_user_approval.json()["detail"]
+
+        supervisor_token = tokens.create(
+            supervisor_id, timedelta(minutes=10), token_type="access"
+        )
+        supervisor_headers = {
+            "Authorization": f"Bearer {supervisor_token}",
+            "X-Organization-ID": org_id,
+        }
+        approved = client.post(
+            f"/api/stocktakes/{stocktake_id}/approve", headers=supervisor_headers
         )
         assert approved.status_code == 200
         assert approved.json()["status"] == "completed"

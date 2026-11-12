@@ -449,6 +449,21 @@ async def approve_stocktake(
     if round_record is None:
         raise HTTPException(status_code=409, detail="No submitted count round to approve")
 
+    counter_user_ids = set(
+        (
+            await session.scalars(
+                select(StocktakeObservation.counted_by_user_id)
+                .where(StocktakeObservation.round_id == round_record.id)
+                .distinct()
+            )
+        ).all()
+    )
+    if user.id in counter_user_ids:
+        raise HTTPException(
+            status_code=409,
+            detail="A user who counted this round cannot approve it",
+        )
+
     rows = (
         await session.execute(
             select(StocktakeObservation, StocktakeScopeItem)
