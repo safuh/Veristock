@@ -17,6 +17,12 @@ type OrganizationReport = {
   }[];
 };
 
+type AIProviderStatus = {
+  configured: boolean;
+  provider: string | null;
+  model: string | null;
+};
+
 type AIExecution = {
   id: string;
   operation: string;
@@ -80,6 +86,7 @@ export function ReportsPanel({
 }) {
   const [report, setReport] = useState<OrganizationReport | null>(null);
   const [executions, setExecutions] = useState<AIExecution[]>([]);
+  const [providerStatus, setProviderStatus] = useState<AIProviderStatus | null>(null);
   const [narrative, setNarrative] = useState<NarrativeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -90,16 +97,20 @@ export function ReportsPanel({
     setLoading(true);
     setError("");
     try {
-      const [snapshot, activity] = await Promise.all([
+      const [snapshot, activity, aiStatus] = await Promise.all([
         apiRequest<OrganizationReport>(
           "/reports/inventory/summary", token, organizationId,
         ),
         apiRequest<AIExecution[]>(
           "/reports/ai-executions?limit=10", token, organizationId,
         ),
+        apiRequest<AIProviderStatus>(
+          "/reports/ai-provider/status", token, organizationId,
+        ),
       ]);
       setReport(snapshot);
       setExecutions(activity);
+      setProviderStatus(aiStatus);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load reports");
     } finally {
@@ -178,7 +189,12 @@ export function ReportsPanel({
 
       <div className="panel-heading">
         <div><p className="eyebrow">AI-ASSISTED ANALYSIS</p><h3>Inventory narrative</h3>
-          <p className="muted">AI can explain authorized report metrics. It cannot change stock or post transactions.</p></div>
+          <p className="muted">AI can explain authorized report metrics. It cannot change stock or post transactions.</p>
+          {providerStatus && <p className="footnote" role="status">
+            AI provider: {providerStatus.configured
+              ? `configured · ${providerStatus.provider} / ${providerStatus.model}`
+              : "not configured"}
+          </p>}</div>
         <button className="primary" disabled={generating || loading || !report} onClick={() => void generateNarrative()}>
           {generating ? "Generating…" : "Generate narrative"}
         </button>
