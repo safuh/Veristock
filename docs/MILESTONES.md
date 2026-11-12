@@ -163,7 +163,7 @@ Reference documents:
 
 ### M11 — Inventory and sales ledger
 
-**Status: in progress — catalogue creation, opening balances and atomic idempotent sales posting are implemented; stocktake and reconciliation remain open.**
+**Status: in progress — catalogue creation, opening balances, append-only stock movements, current-balance projections and atomic idempotent sales posting are implemented; full reconciliation and correction workflows remain open.**
 
 - [x] Tenant-owned inventory items with barcode/SKU identifiers and explicit base-unit codes.
 - [ ] Controlled unit-of-measure catalogue and item categories.
@@ -171,7 +171,7 @@ Reference documents:
 - [ ] Optional warehouse/bin locations.
 - [x] Validated manual opening-stock entry with actor provenance and idempotency.
 - [ ] Validated structured import with row-level error reporting.
-- [ ] Append-only stock movement ledger and current-balance projection.
+- [x] Append-only stock movement ledger and current-balance projection.
 - [x] Client portal/API sales entry with line items and posting validation.
 - [x] Atomic sale + stock-out movement posting with idempotency.
 - [ ] Reversal/correction workflow; no direct edits to posted sales or movements.
@@ -182,7 +182,7 @@ Reference documents:
 
 ### M12 — Physical stocktaking
 
-**Status: in progress — tenant-scoped branch snapshots, blind scope listing, immutable count observations, idempotent capture, complete-round submission and recount rounds are implemented for client-organization counters. Veristock cross-tenant staff assignment and evidence upload remain open.**
+**Status: in progress — tenant-scoped branch snapshots, blind scope listing, immutable count observations, idempotent capture, complete-round submission, recount rounds and separately authorized approval-to-ledger reconciliation are implemented for client-organization counters. Veristock cross-tenant staff assignment, evidence upload and supervisor separation-of-duties enforcement remain open.**
 
 - [x] Stocktake creation and branch/item scope definition with frozen expected quantities.
 - [ ] Performer type: client employee or assigned Veristock employee (client-member counter access is implemented).
@@ -194,7 +194,8 @@ Reference documents:
 - [ ] Vision-assisted barcode/OCR/catalogue matching with confidence and manual confirmation.
 - [ ] Batch, serial, expiry and condition capture where enabled by item policy.
 - [x] Idempotent count observations and immutable count rounds with completeness checks.
-- [x] Recount round creation; [ ] supervisor queue and richer audit events.
+- [x] Recount round creation and separately authorized approval of submitted counts; approved variances post idempotent `stocktake_adjustment` ledger movements while preserving movements recorded after each observation.
+- [ ] Supervisor queue, enforced count/approval separation of duties and richer audit events.
 
 ### M13 — Reconciliation and discrepancy intelligence
 
@@ -210,13 +211,14 @@ Reference documents:
 
 ### M14 — Forecasting, reporting and business intelligence
 
-**Status: in progress — tenant-scoped inventory reporting and an initial deterministic sales-velocity forecast are implemented; advanced planning and evaluation remain open.**
+**Status: in progress — tenant-scoped inventory reporting, deterministic sales-velocity forecasts, stock-availability evidence and an initial rolling-origin forecast evaluation are implemented; advanced planning and evaluation remain open.**
 
 - [x] SQL-backed posted-sales and current-stock aggregates for the initial demand forecast.
 - [ ] Branch/item inventory valuation only where verified unit cost and currency exist.
 - [ ] Low-stock, fast/slow-moving and stockout-risk reports.
 - [x] CPU-friendly trailing-average demand baseline and target-coverage replenishment suggestions.
-- [ ] Forecast evaluation, uncertainty bounds, seasonality and backtesting.
+- [x] Initial rolling-origin backtesting for an explicitly selected item/branch, with MAE per day, WAPE and forecast-bias diagnostics.
+- [ ] Broader portfolio evaluation, uncertainty bounds, seasonality and stockout-censored demand validation.
 - [x] Replenishment calculations use saved or explicitly overridden lead-time and safety-stock days.
 - [ ] Configured service levels, order multiples and minimum order quantities.
 - [ ] Report period, filters, generation timestamp and source watermark are recorded.
@@ -253,7 +255,8 @@ Reference documents:
 - [x] Persist branch/item lead-time and safety-stock policies with tenant-scoped read/write APIs and updater provenance.
 - [x] Apply saved policies automatically in branch-scoped forecasts, support explicit request overrides, and expose policy source per item.
 - [x] Add client portal branch selection and inline policy editing/saving; all-branch forecasts intentionally use shared overrides or zero-day defaults.
-- [ ] Evaluate forecast error against historical periods and identify stockout-censored demand.
+- [x] Expose historical forecast error diagnostics through the tenant-scoped rolling-origin evaluation API.
+- [ ] Add client UI for forecast evaluation and improve stockout-censored demand validation.
 - [ ] Typed API integration and loading/error/empty states.
 - [ ] Browser authentication and permission-aware navigation.
 - [ ] End-to-end tests for core management, field and client journeys.

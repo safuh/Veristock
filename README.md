@@ -31,9 +31,9 @@ Implemented capabilities:
 Important MVP boundaries still being completed:
 
 - Veristock staff cross-tenant stocktake assignment and evidence upload.
-- Reconciliation runs, discrepancy review/approval and controlled ledger corrections.
-- Richer reporting, supplier master data, forecast evaluation and anomaly detection. Persisted branch/item replenishment policies are implemented; applying them automatically in branch forecasts remains outstanding.
-- Hosted AI providers, deterministic anomaly detection, vision inference and user-facing AI workflows remain outstanding. The first deterministic sales-velocity forecast is implemented; advanced forecast evaluation and seasonality remain outstanding.
+- Full reconciliation runs, discrepancy classification/resolution and controlled correction workflows. Physical stocktake approval is implemented separately and posts approved variances to the stock movement ledger.
+- Richer reporting, supplier master data, broader forecast evaluation and anomaly detection. Initial rolling-origin evaluation is available for a selected item/branch; portfolio-wide accuracy and seasonality remain outstanding. Persisted branch/item replenishment policies are applied automatically in branch forecasts.
+- Deterministic anomaly detection, vision inference and user-facing AI workflows remain outstanding. The first deterministic sales-velocity forecast, stockout-availability evidence and an initial rolling-origin forecast evaluation are implemented; advanced evaluation and seasonality remain outstanding.
 - Email delivery, password recovery, rate limiting, production release signing, deployment secrets and operational monitoring.
 - Offline Android capture and conflict-safe synchronization are not enabled; current mobile count capture requires connectivity.
 
