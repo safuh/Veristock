@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     database_pool_pre_ping: bool = True
     log_level: str = "INFO"
     log_json: bool = False
+    ai_provider: str | None = None
+    ai_base_url: str | None = None
+    ai_model: str | None = None
+    ai_api_key: SecretStr | None = None
+    ai_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
     cors_origins: list[str] = Field(default_factory=list)
     cors_allow_credentials: bool = False
     cors_allow_methods: list[str] = Field(
@@ -62,6 +67,13 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_profile(self) -> "Settings":
+        if self.ai_provider is not None:
+            if self.ai_provider != "openai-compatible":
+                raise ValueError("AI_PROVIDER must be openai-compatible when configured")
+            if not self.ai_base_url or not self.ai_model:
+                raise ValueError(
+                    "AI_BASE_URL and AI_MODEL are required when AI_PROVIDER is configured"
+                )
         if self.environment is Environment.PRODUCTION:
             if self.debug:
                 raise ValueError("debug must be false in production")
