@@ -11,8 +11,8 @@ from .invitations import router as invitations_router
 from .memberships import router as memberships_router
 from .organization_enrollments import router as organization_enrollments_router
 from .organizations import router as organizations_router
-from .reports import router as reports_router
 from .replenishment import router as replenishment_router
+from .reports import router as reports_router
 from .sales import router as sales_router
 from .stocktaking import router as stocktaking_router
 from .workforce import router as workforce_router
