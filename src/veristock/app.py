@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ExceptionHandler
 
+from .ai.service import AIService
 from .api.router import api_router
 from .auth.application import AuthenticationApplication
 from .auth.tokens import TokenService
@@ -34,12 +35,13 @@ def create_app(
     settings: Settings | None = None,
     auth_application_factory: AuthApplicationFactory | None = None,
     access_token_service: TokenService | None = None,
+    ai_service: AIService | None = None,
 ) -> FastAPI:
-    """Create the API application with explicit authentication composition.
+    """Create the API application with explicit infrastructure composition.
 
-    When JWT settings are provided, the standard SQLAlchemy authentication
-    application and access-token validator are composed automatically. Custom
-    implementations can be injected for tests or alternate identity providers.
+    Authentication and AI implementations can be injected for tests or alternate
+    providers. With no AI implementation, advisory AI endpoints return a safe
+    unavailable response and do not call an external service.
     """
     resolved = settings or get_settings()
     configure_logging(resolved)
@@ -47,6 +49,7 @@ def create_app(
     if resolved.jwt_secret_key is not None:
         secret_key = resolved.jwt_secret_key.get_secret_value()
         if auth_application_factory is None:
+
             def configured_auth_application(
                 session: AsyncSession,
             ) -> AuthenticationApplication:
@@ -80,6 +83,7 @@ def create_app(
     app.state.settings = resolved
     app.state.auth_application_factory = auth_application_factory
     app.state.access_token_service = access_token_service
+    app.state.ai_service = ai_service or AIService()
 
     app.add_middleware(RequestContextMiddleware)
     if resolved.cors_origins:
