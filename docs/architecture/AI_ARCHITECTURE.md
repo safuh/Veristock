@@ -68,3 +68,9 @@ failures return HTTP 502 after recording a safe failure code.
 Natural-language reporting must not execute model-generated SQL. It should use
 predefined, parameterized report queries and provide only their authorized results
 to the narrative provider.
+
+The client reporting API also exposes `GET /api/reports/ai-provider/status`,
+protected by `inventory.read`. It reports whether a provider is configured and,
+when configured, its provider/model identifiers. This is deliberately a
+configuration-status check rather than a network health probe: it makes no
+outbound request and never returns the provider endpoint or API credential.
