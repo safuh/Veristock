@@ -23,10 +23,10 @@ from veristock.inventory.models import InventoryItem, StockBalance, StockMovemen
 from veristock.organizations.models import Branch
 from veristock.stocktaking.models import (
     Stocktake,
+    StocktakeDecision,
     StocktakeObservation,
     StocktakeRound,
     StocktakeScopeItem,
-    StocktakeDecision,
 )
 
 router = APIRouter(prefix="/stocktakes", tags=["stocktaking"])

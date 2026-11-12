@@ -24,7 +24,7 @@ from veristock.identity import (
 )
 from veristock.inventory.models import InventoryItem, StockBalance, StockMovement
 from veristock.organizations.models import Branch
-from veristock.stocktaking.models import StocktakeDecision, StocktakeObservation
+from veristock.stocktaking.models import StocktakeObservation
 
 
 def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
