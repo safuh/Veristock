@@ -427,6 +427,7 @@ async def open_recount_round(
         reason_code=payload.reason_code,
         reason=payload.reason.strip(),
         actor_user_id=user.id,
+        created_at=datetime.now(UTC),
     )
     new_round = StocktakeRound(
         id=str(uuid4()),
@@ -899,6 +900,7 @@ async def approve_stocktake(
                 round_id=round_record.id,
                 action="approved",
                 actor_user_id=user.id,
+                created_at=completed_at,
             )
         )
         stocktake.status = "completed"
