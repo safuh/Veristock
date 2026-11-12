@@ -2,7 +2,7 @@
 
 ## Current implementation
 
-The AI package is isolated under `src/veristock/ai`. It contains strict Pydantic
+The reporting API currently exposes `GET /api/reports/inventory/summary`, protected by `inventory.read`. It returns organization-scoped inventory totals, branch breakdowns and stable source references. These deterministic metrics are the first approved input source for future narrative generation.\n\nThe AI package is isolated under `src/veristock/ai`. It contains strict Pydantic
 contracts for model provenance, vision assessments, demand forecasts, anomaly
 findings and report narratives. The provider execution boundary currently supports
 an injectable report-narrative provider; no commercial or hosted model SDK is a
