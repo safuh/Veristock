@@ -35,6 +35,16 @@ class AIService:
         """Whether a provider has been explicitly configured."""
         return self._provider is not None
 
+    @property
+    def provider_name(self) -> str | None:
+        """Configured provider identifier for audit metadata."""
+        return self._provider.provider_name if self._provider is not None else None
+
+    @property
+    def model_name(self) -> str | None:
+        """Configured model identifier for audit metadata."""
+        return self._provider.model_name if self._provider is not None else None
+
     async def generate_report_narrative(
         self,
         request: ReportNarrativeRequest,
