@@ -4,7 +4,7 @@ Veristock One is the inventory verification and stocktaking platform for Veristo
 
 **Architecture:** Modular monolith · FastAPI · Python · SQLAlchemy 2.x · Alembic · PostgreSQL · React + TypeScript
 
-**AI policy:** AI contracts, provider-neutral narrative execution, tenant-scoped execution audit persistence and the first inventory narrative API are implemented. No hosted model provider, mandatory AI SDK, autonomous agents or vector database is included.
+**AI policy:** AI contracts, provider-neutral narrative execution, tenant-scoped execution audit persistence and the first inventory narrative API are implemented. No hosted model provider is enabled by default. An optional OpenAI-compatible adapter can be enabled for compatible hosted gateways or self-hosted Ollama endpoints; no vendor SDK is required.
 
 ## Current implementation status
 
@@ -56,7 +56,7 @@ make check
 make run
 ```
 
-API documentation is available at http://127.0.0.1:8000/docs.
+API documentation is available at http://127.0.0.1:8000/docs.\n\nTo enable optional AI narrative generation, install the HTTP adapter and configure `AI_PROVIDER`, `AI_BASE_URL`, and `AI_MODEL` in `.env` (plus `AI_API_KEY` when your endpoint requires it), then restart the API:\n\n```bash\nuv sync --extra dev --extra ai\n```\n\nLeave `AI_PROVIDER` unset to keep AI disabled. For a local Ollama-compatible endpoint, the base URL is commonly `http://localhost:11434/v1`; select a model already pulled by your Ollama instance. Provider configuration is server-side only and should never be exposed to client browsers.
 
 In a second terminal, run the browser application:
 
