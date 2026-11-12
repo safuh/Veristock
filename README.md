@@ -4,7 +4,7 @@ Veristock One is the inventory verification and stocktaking platform for Veristo
 
 **Architecture:** Modular monolith · FastAPI · Python · SQLAlchemy 2.x · Alembic · PostgreSQL · React + TypeScript
 
-**AI policy:** AI contracts and a provider-neutral narrative execution boundary are implemented. No hosted model provider, mandatory AI SDK, autonomous agents or vector database is included.
+**AI policy:** AI contracts, provider-neutral narrative execution, tenant-scoped execution audit persistence and the first inventory narrative API are implemented. No hosted model provider, mandatory AI SDK, autonomous agents or vector database is included.
 
 ## Current implementation status
 
@@ -22,8 +22,9 @@ Implemented capabilities:
 - React client workspace flows for item creation, opening balances, sales and stocktaking.
 - Flutter Android field workflows for open stocktake retrieval, barcode matching, count capture and round submission.
 - Installable PWA shell; service-worker caching is limited to static assets and does not cache authenticated API responses.
-- Tenant-scoped deterministic inventory summary reporting, including branch totals and traceable source metrics for later AI narration.
+- Tenant-scoped deterministic inventory summary reporting, including branch totals and traceable source metrics.
 - Initial AI contracts for vision assessments, demand forecasts, anomaly findings and report narratives, plus a provider-neutral narrative service with tenant-context separation, bounded inputs, timeouts and source-reference validation.
+- Tenant-scoped AI execution audit persistence and a permission-protected inventory narrative endpoint. Audit records retain actor, organization, provider/model provenance, latency, source references and safe failure codes without storing prompts or raw report payloads.
 - CI coverage for Python 3.11–3.13, React production builds, Flutter analysis/tests and Android debug builds.
 
 Important MVP boundaries still being completed:
@@ -31,11 +32,12 @@ Important MVP boundaries still being completed:
 - Veristock staff cross-tenant stocktake assignment and evidence upload.
 - Reconciliation runs, discrepancy review/approval and controlled ledger corrections.
 - Richer reporting, export, replenishment forecasts and anomaly detection.
-- Hosted AI providers, AI operation audit persistence, deterministic anomaly detection, forecast execution, vision inference and user-facing AI workflows remain outstanding.
+- Hosted AI providers, deterministic anomaly detection, forecast execution, vision inference and user-facing AI workflows remain outstanding.
 - Email delivery, password recovery, rate limiting, production release signing, deployment secrets and operational monitoring.
 - Offline Android capture and conflict-safe synchronization are not enabled; current mobile count capture requires connectivity.
 
 See [Product Architecture](docs/architecture/PRODUCT_ARCHITECTURE.md), [Domain Model](docs/architecture/DOMAIN_MODEL.md), and [MVP Acceptance Tracker](docs/MILESTONES.md).
+
 ## Quick start
 
 Requirements: Python 3.11+, [uv](https://docs.astral.sh/uv/), and Docker if you use the container workflow.
