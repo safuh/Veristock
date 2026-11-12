@@ -11,9 +11,9 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import and_, case, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from veristock.ai.contracts import ReportNarrative
 from veristock.ai.context import AIExecutionContext
 from veristock.ai.forecasting import calculate_demand_metrics
-from veristock.ai.contracts import ReportNarrative
 from veristock.ai.models import AIExecutionRecord
 from veristock.ai.requests import ReportMetric, ReportNarrativeRequest
 from veristock.ai.service import (
