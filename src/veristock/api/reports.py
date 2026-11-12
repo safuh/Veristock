@@ -15,6 +15,10 @@ from sqlalchemy.sql.elements import ColumnElement
 from veristock.ai.context import AIExecutionContext
 from veristock.ai.contracts import ReportNarrative
 from veristock.ai.forecasting import calculate_demand_metrics
+from veristock.inventory.availability import (
+    StockMovementEvent,
+    calculate_stock_availability,
+)
 from veristock.ai.models import AIExecutionRecord
 from veristock.ai.requests import ReportMetric, ReportNarrativeRequest
 from veristock.ai.service import (
@@ -34,6 +38,7 @@ from veristock.inventory.models import (
     Sale,
     SaleLine,
     StockBalance,
+    StockMovement,
 )
 from veristock.inventory.policies import ReplenishmentPolicy
 from veristock.organizations.models import Branch
@@ -410,6 +415,10 @@ class DemandForecastItemRead(BaseModel):
     planning_policy_source: str
     sales_source_reference: str
     stock_source_reference: str
+    stock_availability_fraction: Decimal | None
+    stock_availability_coverage_fraction: Decimal | None
+    stock_availability_status: str
+    stock_availability_source_reference: str | None
 
 
 class DemandForecastRead(BaseModel):
@@ -567,6 +576,41 @@ async def inventory_demand_forecast(
         )
     ).all()
 
+    availability_by_item = {}
+    if branch_id is not None and rows:
+        movement_rows = (
+            await session.execute(
+                select(
+                    StockMovement.item_id,
+                    StockMovement.quantity_delta,
+                    StockMovement.source_type,
+                    StockMovement.occurred_at,
+                )
+                .where(
+                    StockMovement.organization_id == organization.id,
+                    StockMovement.branch_id == branch_id,
+                    StockMovement.item_id.in_([row[0].id for row in rows]),
+                    StockMovement.occurred_at <= generated_at,
+                )
+                .order_by(StockMovement.item_id, StockMovement.occurred_at)
+            )
+        ).all()
+        events_by_item = {}
+        for item_id, quantity_delta, source_type, occurred_at in movement_rows:
+            events_by_item.setdefault(item_id, []).append(
+                StockMovementEvent(
+                    occurred_at=occurred_at,
+                    quantity_delta=Decimal(quantity_delta),
+                    source_type=source_type,
+                )
+            )
+        for item in (row[0] for row in rows):
+            availability_by_item[item.id] = calculate_stock_availability(
+                movements=events_by_item.get(item.id, []),
+                window_start=window_start,
+                window_end=generated_at,
+            )
+
     forecasts: list[DemandForecastItemRead] = []
     for (
         item,
@@ -590,6 +634,7 @@ async def inventory_demand_forecast(
             and (saved_lead_time is not None or saved_safety_stock is not None)
             else "default"
         )
+        availability = availability_by_item.get(item.id)
         metrics = calculate_demand_metrics(
             units_sold=units_sold,
             quantity_on_hand=on_hand,
@@ -621,6 +666,30 @@ async def inventory_demand_forecast(
                 stock_source_reference=(
                     f"stock:balance:{item.id}:{branch_id or 'all-branches'}"
                 ),
+                stock_availability_fraction=(
+                    availability.availability_fraction
+                    if availability is not None
+                    else None
+                ),
+                stock_availability_coverage_fraction=(
+                    availability.coverage_fraction
+                    if availability is not None
+                    else None
+                ),
+                stock_availability_status=(
+                    "branch_required"
+                    if branch_id is None
+                    else "unavailable"
+                    if availability is None
+                    else "complete"
+                    if availability.history_complete
+                    else "partial"
+                ),
+                stock_availability_source_reference=(
+                    f"stock-movements:{item.id}:{branch_id}"
+                    if branch_id is not None
+                    else None
+                ),
             )
         )
 
@@ -649,7 +718,10 @@ async def inventory_demand_forecast(
             "safety stock and the requested post-replenishment target horizon. "
             "Branch forecasts use saved branch/item policies unless explicitly "
             "overridden. All-branch forecasts use shared request overrides or "
-            "zero-day defaults because branch policies may differ. Seasonality, "
+            "zero-day defaults because branch policies may differ. Branch-scoped "
+            "availability exposure is reconstructed from opening-balance-anchored "
+            "stock movements; incomplete history is marked unavailable or partial. "
+            "This evidence is not yet used to adjust demand. Seasonality, "
             "stockout-censored demand and supplier constraints are not inferred."
         ),
         items=tuple(forecasts),

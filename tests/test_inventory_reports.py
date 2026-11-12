@@ -1,5 +1,6 @@
 """Tests for deterministic tenant inventory reports and AI narratives."""
 
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -171,8 +172,12 @@ async def test_ai_provider_status_does_not_expose_configuration_secrets():
 class FakeForecastSession:
     def __init__(self):
         self.statement = None
+        self.execute_count = 0
 
     async def execute(self, statement):
+        self.execute_count += 1
+        if self.execute_count > 1:
+            return FakeResult(rows=[])
         self.statement = statement
         item = SimpleNamespace(
             id="item-1",
@@ -255,6 +260,7 @@ class FakeBranchForecastSession(FakeForecastSession):
         super().__init__()
         self.policy = policy
         self.policy_statement = None
+        self.movement_rows = []
 
     async def scalar(self, statement):
         return "branch-1"
@@ -278,6 +284,9 @@ async def test_branch_forecast_uses_saved_item_policy_and_tenant_scope():
     session = FakeBranchForecastSession(policy=policy)
     # Effective planning values are selected from the joined policy row.
     async def execute(statement):
+        session.execute_count += 1
+        if session.execute_count > 1:
+            return FakeResult(rows=session.movement_rows)
         session.statement = statement
         return await async_branch_execute_with_policy(statement)
 
@@ -319,7 +328,14 @@ async def test_branch_forecast_request_override_takes_precedence_over_saved_poli
         safety_stock_days=2,
     )
     session = FakeBranchForecastSession(policy=policy)
-    session.execute = async_branch_execute_with_override
+    async def execute(statement):
+        session.execute_count += 1
+        if session.execute_count > 1:
+            return FakeResult(rows=session.movement_rows)
+        session.statement = statement
+        return await async_branch_execute_with_override(statement)
+
+    session.execute = execute
     result = await inventory_demand_forecast(
         organization=SimpleNamespace(id="org-1"),
         session=session,
@@ -355,3 +371,56 @@ async def async_branch_execute_with_override(statement):
     return FakeResult(
         rows=[(item, Decimal("60"), 12, Decimal("10"), 1, 1, 5, 2)]
     )
+
+
+
+@pytest.mark.asyncio
+async def test_branch_forecast_exposes_opening_balance_anchored_availability():
+    from veristock.api.reports import inventory_demand_forecast
+
+    session = FakeBranchForecastSession()
+    now = datetime.now(UTC)
+    session.movement_rows = [
+        ("item-1", Decimal("10"), "opening_balance", now - timedelta(days=10)),
+        ("item-1", Decimal("-10"), "sale", now - timedelta(days=8)),
+    ]
+    result = await inventory_demand_forecast(
+        organization=SimpleNamespace(id="org-1"),
+        session=session,
+        branch_id="branch-1",
+        lookback_days=7,
+        target_days=14,
+        lead_time_days=None,
+        safety_stock_days=None,
+        limit=200,
+        offset=0,
+    )
+
+    item = result.items[0]
+    assert item.stock_availability_status == "complete"
+    assert item.stock_availability_fraction == Decimal("0")
+    assert item.stock_availability_coverage_fraction == Decimal("1")
+    assert item.stock_availability_source_reference == "stock-movements:item-1:branch-1"
+    # Availability is evidence only; this release does not inflate demand.
+    assert item.average_daily_demand == Decimal("60") / Decimal("7")
+
+
+@pytest.mark.asyncio
+async def test_all_branch_forecast_does_not_claim_pooled_availability():
+    from veristock.api.reports import inventory_demand_forecast
+
+    result = await inventory_demand_forecast(
+        organization=SimpleNamespace(id="org-1"),
+        session=FakeForecastSession(),
+        lookback_days=30,
+        target_days=14,
+        lead_time_days=None,
+        safety_stock_days=None,
+        limit=200,
+        offset=0,
+    )
+
+    item = result.items[0]
+    assert item.stock_availability_status == "branch_required"
+    assert item.stock_availability_fraction is None
+    assert item.stock_availability_coverage_fraction is None
