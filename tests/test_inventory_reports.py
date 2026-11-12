@@ -193,6 +193,8 @@ async def test_demand_forecast_uses_tenant_scoped_sales_and_stock_totals():
         session=session,
         lookback_days=30,
         target_days=14,
+        lead_time_days=5,
+        safety_stock_days=2,
         limit=200,
         offset=0,
     )
@@ -207,7 +209,9 @@ async def test_demand_forecast_uses_tenant_scoped_sales_and_stock_totals():
     assert item.average_daily_demand == Decimal("2")
     assert item.quantity_on_hand == Decimal("10")
     assert item.days_of_cover == Decimal("5")
-    assert item.recommended_replenishment_quantity == Decimal("18")
+    assert item.reorder_point_quantity == Decimal("14")
+    assert item.days_until_reorder == Decimal("0")
+    assert item.recommended_replenishment_quantity == Decimal("32")
     assert item.sales_source_reference == "sales:posted:item-1:30d"
     assert item.stock_source_reference == "stock:balance:item-1:all-branches"
     assert session.statement is not None
