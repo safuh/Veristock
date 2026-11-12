@@ -22,7 +22,7 @@ from veristock.identity import (
     RolePermission,
     User,
 )
-from veristock.inventory.models import InventoryItem, StockBalance
+from veristock.inventory.models import InventoryItem, StockBalance, StockMovement
 from veristock.organizations.models import Branch
 from veristock.stocktaking.models import StocktakeObservation
 
@@ -75,7 +75,7 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
                         ),
                     ]
                 )
-                for code in ("stocktake.manage", "stocktake.read", "stocktake.count", "stocktake.submit"):
+                for code in ("stocktake.manage", "stocktake.read", "stocktake.count", "stocktake.submit", "stocktake.approve"):
                     permission_id = str(uuid4())
                     session.add(
                         Permission(id=permission_id, code=code, description=code)
@@ -161,10 +161,35 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         )
         assert final_submit.status_code == 200
 
+        approved = client.post(
+            f"/api/stocktakes/{stocktake_id}/approve", headers=headers
+        )
+        assert approved.status_code == 200
+        assert approved.json()["status"] == "completed"
+        assert approved.json()["adjustment_count"] == 1
+        assert approved.json()["total_quantity_delta"] == "-14.0000"
+
     async def verify() -> None:
         engine = create_async_engine(database_url)
         try:
             async with async_sessionmaker(engine)() as session:
+                balance = await session.scalar(
+                    select(StockBalance).where(
+                        StockBalance.organization_id == org_id,
+                        StockBalance.branch_id == branch_id,
+                        StockBalance.item_id == item_id,
+                    )
+                )
+                movements = list(
+                    (
+                        await session.scalars(
+                            select(StockMovement).where(
+                                StockMovement.organization_id == org_id,
+                                StockMovement.source_type == "stocktake_adjustment",
+                            )
+                        )
+                    ).all()
+                )
                 observations = list(
                     (
                         await session.scalars(
@@ -175,6 +200,9 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
                     ).all()
                 )
                 assert len(observations) == 2
+                assert balance is not None
+                assert balance.quantity_on_hand == Decimal("0")
+                assert len(movements) == 1
         finally:
             await engine.dispose()
 

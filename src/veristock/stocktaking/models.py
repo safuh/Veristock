@@ -25,7 +25,7 @@ class Stocktake(Base):
     __tablename__ = "stocktakes"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('open', 'submitted', 'cancelled')",
+            "status IN ('open', 'submitted', 'cancelled', 'completed')",
             name="ck_stocktakes_status",
         ),
         Index("ix_stocktakes_org_branch_status", "organization_id", "branch_id", "status"),
@@ -48,6 +48,10 @@ class Stocktake(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approved_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
 
 
 class StocktakeScopeItem(Base):

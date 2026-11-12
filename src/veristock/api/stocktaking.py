@@ -19,7 +19,7 @@ from veristock.identity.authorization_dependencies import (
     require_permission,
 )
 from veristock.identity.models import User
-from veristock.inventory.models import InventoryItem, StockBalance
+from veristock.inventory.models import InventoryItem, StockBalance, StockMovement
 from veristock.organizations.models import Branch
 from veristock.stocktaking.models import (
     Stocktake,
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/stocktakes", tags=["stocktaking"])
 StocktakeManager = Annotated[Organization, Depends(require_permission("stocktake.manage"))]
 StocktakeReader = Annotated[Organization, Depends(require_permission("stocktake.read"))]
 StocktakeCounter = Annotated[Organization, Depends(require_permission("stocktake.count"))]
-StocktakeSubmitter = Annotated[Organization, Depends(require_permission("stocktake.submit"))]
+StocktakeSubmitter = Annotated[Organization, Depends(require_permission("stocktake.submit"))]\nStocktakeApprover = Annotated[Organization, Depends(require_permission("stocktake.approve"))]
 
 
 class StocktakeCreate(BaseModel):
@@ -402,3 +402,157 @@ async def open_recount_round(
     await session.commit()
     await session.refresh(new_round)
     return new_round
+
+
+class StocktakeApprovalRead(BaseModel):
+    """Result of applying an approved physical count to the stock ledger."""
+
+    stocktake_id: str
+    status: str
+    adjustment_count: int
+    total_quantity_delta: Decimal
+    completed_at: datetime
+
+
+@router.post("/{stocktake_id}/approve", response_model=StocktakeApprovalRead)
+async def approve_stocktake(
+    stocktake_id: str,
+    organization: StocktakeApprover,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> StocktakeApprovalRead:
+    """Approve the latest submitted count and reconcile stock atomically.
+
+    Movements posted after an observation are carried forward so sales and
+    adjustments made while counting are not overwritten by the physical count.
+    """
+    stocktake = await session.scalar(
+        select(Stocktake)
+        .where(
+            Stocktake.id == stocktake_id,
+            Stocktake.organization_id == organization.id,
+            Stocktake.status == "submitted",
+        )
+        .with_for_update()
+    )
+    if stocktake is None:
+        raise HTTPException(status_code=409, detail="Submitted stocktake not found or already approved")
+
+    round_record = await session.scalar(
+        select(StocktakeRound).where(
+            StocktakeRound.stocktake_id == stocktake.id,
+            StocktakeRound.organization_id == organization.id,
+            StocktakeRound.status == "submitted",
+        ).order_by(StocktakeRound.round_number.desc())
+    )
+    if round_record is None:
+        raise HTTPException(status_code=409, detail="No submitted count round to approve")
+
+    rows = (
+        await session.execute(
+            select(StocktakeObservation, StocktakeScopeItem)
+            .join(
+                StocktakeScopeItem,
+                (StocktakeScopeItem.stocktake_id == StocktakeObservation.stocktake_id)
+                & (StocktakeScopeItem.item_id == StocktakeObservation.item_id)
+                & (StocktakeScopeItem.organization_id == organization.id),
+            )
+            .where(
+                StocktakeObservation.organization_id == organization.id,
+                StocktakeObservation.stocktake_id == stocktake.id,
+                StocktakeObservation.round_id == round_record.id,
+            )
+            .order_by(StocktakeObservation.item_id)
+        )
+    ).all()
+    expected_count = await session.scalar(
+        select(func.count(StocktakeScopeItem.id)).where(
+            StocktakeScopeItem.organization_id == organization.id,
+            StocktakeScopeItem.stocktake_id == stocktake.id,
+        )
+    )
+    if len(rows) != int(expected_count or 0):
+        raise HTTPException(status_code=409, detail="Latest count round is incomplete")
+
+    adjustment_count = 0
+    total_delta = Decimal("0")
+    try:
+        for observation, _scope in rows:
+            balance = await session.scalar(
+                select(StockBalance)
+                .where(
+                    StockBalance.organization_id == organization.id,
+                    StockBalance.branch_id == stocktake.branch_id,
+                    StockBalance.item_id == observation.item_id,
+                )
+                .with_for_update()
+            )
+            current_quantity = (
+                balance.quantity_on_hand if balance is not None else Decimal("0")
+            )
+            later_movements = await session.scalar(
+                select(func.coalesce(func.sum(StockMovement.quantity_delta), 0)).where(
+                    StockMovement.organization_id == organization.id,
+                    StockMovement.branch_id == stocktake.branch_id,
+                    StockMovement.item_id == observation.item_id,
+                    StockMovement.occurred_at > observation.counted_at,
+                )
+            )
+            target_quantity = observation.counted_quantity + Decimal(later_movements or 0)
+            if target_quantity < 0:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Post-count movements produce a negative reconciled balance",
+                )
+            quantity_delta = target_quantity - current_quantity
+            if quantity_delta == 0:
+                continue
+            if balance is None:
+                balance = StockBalance(
+                    id=str(uuid4()),
+                    organization_id=organization.id,
+                    branch_id=stocktake.branch_id,
+                    item_id=observation.item_id,
+                    quantity_on_hand=target_quantity,
+                )
+                session.add(balance)
+            else:
+                balance.quantity_on_hand = target_quantity
+            session.add(
+                StockMovement(
+                    id=str(uuid4()),
+                    organization_id=organization.id,
+                    branch_id=stocktake.branch_id,
+                    item_id=observation.item_id,
+                    quantity_delta=quantity_delta,
+                    unit_code=observation.unit_code,
+                    source_type="stocktake_adjustment",
+                    source_id=stocktake.id,
+                    idempotency_key=(
+                        f"stocktake:{stocktake.id}:{round_record.id}:{observation.item_id}"
+                    ),
+                    actor_user_id=user.id,
+                )
+            )
+            adjustment_count += 1
+            total_delta += quantity_delta
+
+        completed_at = datetime.now(UTC)
+        stocktake.status = "completed"
+        stocktake.completed_at = completed_at
+        stocktake.approved_by_user_id = user.id
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="Stocktake reconciliation conflicted with another operation") from exc
+    except HTTPException:
+        await session.rollback()
+        raise
+
+    return StocktakeApprovalRead(
+        stocktake_id=stocktake.id,
+        status=stocktake.status,
+        adjustment_count=adjustment_count,
+        total_quantity_delta=total_delta,
+        completed_at=completed_at,
+    )
