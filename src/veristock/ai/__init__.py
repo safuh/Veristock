@@ -12,6 +12,7 @@ from .contracts import (
 )
 from .models import AIExecutionRecord
 from .provider import AIProvider
+from .provider_http import OpenAICompatibleProvider
 from .requests import ReportMetric, ReportNarrativeRequest
 from .service import AIProviderFailure, AIService, AIServiceUnavailable
 
@@ -22,6 +23,7 @@ __all__ = [
     "AIProviderFailure",
     "AIService",
     "AIServiceUnavailable",
+    "OpenAICompatibleProvider",
     "AnomalyFinding",
     "DemandForecast",
     "DemandForecastPoint",
