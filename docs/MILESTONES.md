@@ -196,7 +196,8 @@ Reference documents:
 - [x] Idempotent count observations and immutable count rounds with completeness checks.
 - [x] Recount round creation and separately authorized approval of submitted counts; approved variances post idempotent `stocktake_adjustment` ledger movements while preserving movements recorded after each observation.
 - [x] API-enforced count/approval separation of duties.
-- [ ] Supervisor queue, recount/rejection reason codes and richer audit events.
+- [x] Tenant-scoped supervisor review queue with branch filtering, latest-round totals and shortage/surplus counts.
+- [ ] Recount/rejection reason codes and richer audit events.
 
 ### M13 — Reconciliation and discrepancy intelligence
 
