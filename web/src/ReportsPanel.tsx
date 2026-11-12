@@ -31,6 +31,8 @@ type DemandForecast = {
     item_name: string;
     unit_code: string;
     units_sold_in_window: string;
+    sales_activity_days: number;
+    sales_activity_fraction: string;
     average_daily_demand: string;
     quantity_on_hand: string;
     days_of_cover: string | null;

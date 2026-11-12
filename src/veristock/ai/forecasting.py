@@ -116,6 +116,10 @@ def calculate_stockout_adjustment(
 
     if in_stock_days is None or availability_fraction is None:
         return StockoutDemandAdjustment(None, None, "unavailable")
+    if in_stock_days > Decimal(lookback_days):
+        raise ValueError("in_stock_days cannot exceed lookback_days")
+    if not Decimal("0") <= availability_fraction <= Decimal("1"):
+        raise ValueError("availability_fraction must be between 0 and 1")
     if not history_complete:
         return StockoutDemandAdjustment(None, None, "partial_history")
     if in_stock_days <= 0:
