@@ -22,11 +22,6 @@ from veristock.ai.service import (
     AIService,
     AIServiceUnavailable,
 )
-from veristock.inventory.availability import (
-    StockAvailability,
-    StockMovementEvent,
-    calculate_stock_availability,
-)
 from veristock.identity.authorization import Organization
 from veristock.identity.authorization_dependencies import (
     get_current_user,
@@ -34,6 +29,12 @@ from veristock.identity.authorization_dependencies import (
     require_permission,
 )
 from veristock.identity.models import User
+
+from veristock.inventory.availability import (
+    StockAvailability,
+    StockMovementEvent,
+    calculate_stock_availability,
+)
 from veristock.inventory.models import (
     InventoryItem,
     Sale,
