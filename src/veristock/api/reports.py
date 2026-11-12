@@ -14,7 +14,10 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from veristock.ai.context import AIExecutionContext
 from veristock.ai.contracts import ReportNarrative
-from veristock.ai.forecasting import calculate_demand_metrics
+from veristock.ai.forecasting import (
+    calculate_demand_metrics,
+    calculate_stockout_adjustment,
+)
 from veristock.ai.models import AIExecutionRecord
 from veristock.ai.requests import ReportMetric, ReportNarrativeRequest
 from veristock.ai.service import (
@@ -421,6 +424,9 @@ class DemandForecastItemRead(BaseModel):
     stock_availability_coverage_fraction: Decimal | None
     stock_availability_status: str
     stock_availability_source_reference: str | None
+    stockout_adjusted_average_daily_demand: Decimal | None
+    stockout_adjustment_factor: Decimal | None
+    stockout_adjustment_status: str
 
 
 class DemandForecastRead(BaseModel):
@@ -637,6 +643,19 @@ async def inventory_demand_forecast(
             else "default"
         )
         availability = availability_by_item.get(item.id)
+        stockout_adjustment = calculate_stockout_adjustment(
+            units_sold=units_sold,
+            lookback_days=lookback_days,
+            in_stock_days=(
+                availability.in_stock_days if availability is not None else None
+            ),
+            availability_fraction=(
+                availability.availability_fraction if availability is not None else None
+            ),
+            history_complete=(
+                availability.history_complete if availability is not None else False
+            ),
+        )
         metrics = calculate_demand_metrics(
             units_sold=units_sold,
             quantity_on_hand=on_hand,
@@ -695,6 +714,11 @@ async def inventory_demand_forecast(
                     if branch_id is not None
                     else None
                 ),
+                stockout_adjusted_average_daily_demand=(
+                    stockout_adjustment.average_daily_demand
+                ),
+                stockout_adjustment_factor=stockout_adjustment.adjustment_factor,
+                stockout_adjustment_status=stockout_adjustment.status,
             )
         )
 
@@ -726,7 +750,10 @@ async def inventory_demand_forecast(
             "zero-day defaults because branch policies may differ. Branch-scoped "
             "availability exposure is reconstructed from opening-balance-anchored "
             "stock movements; incomplete history is marked unavailable or partial. "
-            "This evidence is not yet used to adjust demand. Seasonality, "
+            "A separate stockout-adjusted sales-velocity signal is exposed only when "
+            "the full ledger history is available, at least seven in-stock days "
+            "are observed and availability is at least 50%; uplift is capped at "
+            "2x and is not yet used in replenishment quantities. Seasonality, "
             "stockout-censored demand and supplier constraints are not inferred."
         ),
         items=tuple(forecasts),

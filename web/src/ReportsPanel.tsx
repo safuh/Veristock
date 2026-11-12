@@ -40,6 +40,9 @@ type DemandForecast = {
     lead_time_days: number;
     safety_stock_days: number;
     planning_policy_source: "saved_policy" | "request_override" | "default";
+    stockout_adjusted_average_daily_demand: string | null;
+    stockout_adjustment_factor: string | null;
+    stockout_adjustment_status: string;
   }[];
 };
 
@@ -287,7 +290,7 @@ export function ReportsPanel({
       {forecast && <>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>ITEM</th><th>SOLD / 30 DAYS</th><th>ACTIVE SALES DAYS</th><th>AVG. DAILY</th><th>ON HAND</th><th>DAYS COVER</th><th>REORDER POINT</th><th>DAYS TO REORDER</th><th>LEAD TIME</th><th>SAFETY STOCK</th><th>POLICY</th><th>SUGGESTED QTY</th></tr></thead>
+            <thead><tr><th>ITEM</th><th>SOLD / 30 DAYS</th><th>ACTIVE SALES DAYS</th><th>AVG. DAILY</th><th>STOCKOUT-ADJUSTED</th><th>ON HAND</th><th>DAYS COVER</th><th>REORDER POINT</th><th>DAYS TO REORDER</th><th>LEAD TIME</th><th>SAFETY STOCK</th><th>POLICY</th><th>SUGGESTED QTY</th></tr></thead>
             <tbody>
               {forecast.items.map((item) => (
                 <tr key={item.item_id}>
@@ -295,6 +298,7 @@ export function ReportsPanel({
                   <td>{formatNumber(item.units_sold_in_window)}</td>
                   <td>{item.sales_activity_days} ({formatNumber(Number(item.sales_activity_fraction) * 100)}%)</td>
                   <td>{formatNumber(item.average_daily_demand)} {item.unit_code}/day</td>
+                  <td>{item.stockout_adjusted_average_daily_demand === null ? `— (${statusLabel(item.stockout_adjustment_status)})` : `${formatNumber(item.stockout_adjusted_average_daily_demand)} ${item.unit_code}/day`}</td>
                   <td>{formatNumber(item.quantity_on_hand)}</td>
                   <td>{item.days_of_cover === null ? "—" : formatNumber(item.days_of_cover)}</td>
                   <td>{formatNumber(item.reorder_point_quantity)}</td>
@@ -305,7 +309,7 @@ export function ReportsPanel({
                   <td><strong>{formatNumber(item.recommended_replenishment_quantity)}</strong></td>
                 </tr>
               ))}
-              {!forecast.items.length && <tr><td colSpan={12} className="muted">No active items are available for forecasting.</td></tr>}
+              {!forecast.items.length && <tr><td colSpan={13} className="muted">No active items are available for forecasting.</td></tr>}
             </tbody>
           </table>
         </div>

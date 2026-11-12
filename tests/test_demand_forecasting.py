@@ -4,7 +4,10 @@ from decimal import Decimal
 
 import pytest
 
-from veristock.ai.forecasting import calculate_demand_metrics
+from veristock.ai.forecasting import (
+    calculate_demand_metrics,
+    calculate_stockout_adjustment,
+)
 
 
 def test_forecast_uses_full_lookback_window_and_target_coverage() -> None:
@@ -83,3 +86,76 @@ def test_forecast_rejects_invalid_inputs(overrides: dict, message: str) -> None:
 
     with pytest.raises(ValueError, match=message):
         calculate_demand_metrics(**values)
+
+
+
+def test_stockout_adjustment_uses_only_complete_sufficient_exposure() -> None:
+    result = calculate_stockout_adjustment(
+        units_sold=Decimal("60"),
+        lookback_days=30,
+        in_stock_days=Decimal("15"),
+        availability_fraction=Decimal("0.5"),
+        history_complete=True,
+    )
+
+    assert result.average_daily_demand == Decimal("4")
+    assert result.adjustment_factor == Decimal("2")
+    assert result.status == "adjusted"
+
+
+def test_stockout_adjustment_caps_uplift_at_two_times_baseline() -> None:
+    result = calculate_stockout_adjustment(
+        units_sold=Decimal("60"),
+        lookback_days=30,
+        in_stock_days=Decimal("7"),
+        availability_fraction=Decimal("0.233333"),
+        history_complete=True,
+        minimum_availability_fraction=Decimal("0.2"),
+    )
+
+    assert result.average_daily_demand == Decimal("4")
+    assert result.adjustment_factor == Decimal("2")
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected_status"),
+    [
+        ({"in_stock_days": None, "availability_fraction": None}, "unavailable"),
+        ({"history_complete": False}, "partial_history"),
+        ({"in_stock_days": Decimal("0")}, "no_in_stock_exposure"),
+        ({"units_sold": Decimal("0")}, "no_observed_sales"),
+        ({"in_stock_days": Decimal("3")}, "insufficient_in_stock_history"),
+        ({"availability_fraction": Decimal("0.25")}, "low_availability"),
+    ],
+)
+def test_stockout_adjustment_refuses_weak_evidence(
+    overrides: dict, expected_status: str
+) -> None:
+    values = {
+        "units_sold": Decimal("60"),
+        "lookback_days": 30,
+        "in_stock_days": Decimal("20"),
+        "availability_fraction": Decimal("0.666666"),
+        "history_complete": True,
+    }
+    values.update(overrides)
+
+    result = calculate_stockout_adjustment(**values)
+
+    assert result.average_daily_demand is None
+    assert result.adjustment_factor is None
+    assert result.status == expected_status
+
+
+def test_stockout_adjustment_returns_baseline_when_no_stockout_occurred() -> None:
+    result = calculate_stockout_adjustment(
+        units_sold=Decimal("60"),
+        lookback_days=30,
+        in_stock_days=Decimal("30"),
+        availability_fraction=Decimal("1"),
+        history_complete=True,
+    )
+
+    assert result.average_daily_demand == Decimal("2")
+    assert result.adjustment_factor == Decimal("1")
+    assert result.status == "no_stockout"

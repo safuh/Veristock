@@ -77,9 +77,18 @@ Results are ranked by the calculated replenishment gap in the database before
 limit/offset pagination, so later pages do not omit higher-priority items merely
 because an earlier page was selected alphabetically.
 
+The API also exposes a separate stockout-adjusted sales-velocity evidence
+signal. It is calculated only with complete opening-balance-anchored history,
+at least seven in-stock days and at least 50% availability; uplift is capped at
+2x the trailing baseline. Partial/missing history, no in-stock exposure, no
+observed sales and low availability suppress the estimate with an explicit
+status. This signal is displayed separately and does not currently alter
+replenishment quantities. It is a conservative exposure estimate, not measured
+lost sales.
+
 This remains a simple trailing-average baseline, not a statistically evaluated
-forecast. It does not yet model service levels, seasonality, promotions,
-stockout-censored demand or uncertainty intervals. It never creates a purchase order or changes inventory. Replenishment
+forecast. It does not yet model service levels, seasonality, promotions or
+uncertainty intervals. It never creates a purchase order or changes inventory. Replenishment
 decisions remain with an authorized human.
 
 ## Deliberately not implemented yet
