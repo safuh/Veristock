@@ -398,6 +398,7 @@ class DemandForecastItemRead(BaseModel):
     item_name: str
     unit_code: str
     units_sold_in_window: Decimal
+    sales_activity_days: int
     average_daily_demand: Decimal
     quantity_on_hand: Decimal
     days_of_cover: Decimal | None
@@ -461,6 +462,7 @@ async def inventory_demand_forecast(
         select(
             SaleLine.item_id.label("item_id"),
             func.coalesce(func.sum(SaleLine.quantity), 0).label("units_sold"),
+            func.count(distinct(func.date(Sale.posted_at))).label("sales_activity_days"),
         )
         .join(
             Sale,
@@ -536,6 +538,7 @@ async def inventory_demand_forecast(
         select(
             InventoryItem,
             units_sold_expression,
+            sales_totals.c.sales_activity_days,
             stock_expression,
             lead_expression.label("lead_time_days"),
             safety_expression.label("safety_stock_days"),
@@ -568,6 +571,7 @@ async def inventory_demand_forecast(
     for (
         item,
         raw_units_sold,
+        raw_sales_activity_days,
         raw_on_hand,
         raw_lead_time,
         raw_safety_stock,
@@ -601,6 +605,7 @@ async def inventory_demand_forecast(
                 item_name=item.name,
                 unit_code=item.base_unit_code,
                 units_sold_in_window=metrics.units_sold,
+                sales_activity_days=int(raw_sales_activity_days or 0),
                 average_daily_demand=metrics.average_daily_demand,
                 quantity_on_hand=on_hand,
                 days_of_cover=metrics.days_of_cover,
@@ -636,7 +641,9 @@ async def inventory_demand_forecast(
         ),
         methodology=(
             "Average daily demand equals posted units sold divided by every "
-            "calendar day in the lookback window. Reorder point equals average "
+            "calendar day in the lookback window. Sales activity days count "
+            "distinct dates with at least one posted sale; they do not measure "
+            "product availability or days with zero demand. Reorder point equals average "
             "daily demand multiplied by supplier lead-time days plus safety-stock "
             "days. Suggested replenishment raises stock to cover lead time, "
             "safety stock and the requested post-replenishment target horizon. "

@@ -185,6 +185,7 @@ class FakeForecastSession:
                 (
                     item,
                     Decimal("60"),
+                    12,
                     Decimal("10"),
                     5,
                     2,
@@ -220,6 +221,7 @@ async def test_demand_forecast_uses_tenant_scoped_sales_and_stock_totals():
     item = result.items[0]
     assert item.item_id == "item-1"
     assert item.units_sold_in_window == Decimal("60")
+    assert item.sales_activity_days == 12
     assert item.average_daily_demand == Decimal("2")
     assert item.quantity_on_hand == Decimal("10")
     assert item.days_of_cover == Decimal("5")
@@ -342,7 +344,7 @@ async def async_branch_execute_with_policy(statement):
         id="item-1", sku="SKU-1", name="Cooking oil", base_unit_code="bottle"
     )
     return FakeResult(
-        rows=[(item, Decimal("60"), Decimal("10"), 5, 2, 5, 2)]
+        rows=[(item, Decimal("60"), 12, Decimal("10"), 5, 2, 5, 2)]
     )
 
 
@@ -351,5 +353,5 @@ async def async_branch_execute_with_override(statement):
         id="item-1", sku="SKU-1", name="Cooking oil", base_unit_code="bottle"
     )
     return FakeResult(
-        rows=[(item, Decimal("60"), Decimal("10"), 1, 1, 5, 2)]
+        rows=[(item, Decimal("60"), 12, Decimal("10"), 1, 1, 5, 2)]
     )
