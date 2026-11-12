@@ -8,8 +8,9 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import and_, case, distinct, func, literal, select
+from sqlalchemy import Integer, and_, case, distinct, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from veristock.ai.context import AIExecutionContext
 from veristock.ai.contracts import ReportNarrative
@@ -492,6 +493,8 @@ async def inventory_demand_forecast(
     units_sold_expression = func.coalesce(sales_totals.c.units_sold, 0)
     stock_expression = func.coalesce(stock_totals.c.quantity_on_hand, 0)
 
+    saved_lead_expression: ColumnElement[int]
+    saved_safety_expression: ColumnElement[int]
     if branch_id is not None:
         policy_join = and_(
             ReplenishmentPolicy.organization_id == organization.id,
@@ -511,8 +514,8 @@ async def inventory_demand_forecast(
             else func.coalesce(saved_safety_expression, 0)
         )
     else:
-        saved_lead_expression = literal(None)
-        saved_safety_expression = literal(None)
+        saved_lead_expression = literal(None, type_=Integer)
+        saved_safety_expression = literal(None, type_=Integer)
         lead_expression = literal(lead_time_days or 0)
         safety_expression = literal(safety_stock_days or 0)
 
