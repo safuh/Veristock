@@ -485,7 +485,9 @@ async def inventory_demand_forecast(
     units_sold_expression = func.coalesce(sales_totals.c.units_sold, 0)
     stock_expression = func.coalesce(stock_totals.c.quantity_on_hand, 0)
     target_stock_expression = (
-        units_sold_expression * target_days / lookback_days
+        units_sold_expression
+        * (target_days + lead_time_days + safety_stock_days)
+        / lookback_days
     )
     replenishment_priority = case(
         (target_stock_expression > stock_expression,
