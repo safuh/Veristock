@@ -32,7 +32,9 @@ def test_token_protects_security_claims_from_custom_claim_override() -> None:
 def test_tampered_token_is_rejected() -> None:
     service = TokenService(SECRET)
     token = service.create("user-123", timedelta(minutes=15))
-    tampered_token = token[:-1] + ("A" if token[-1] != "A" else "B")
+    header, payload, signature = token.split(".")
+    replacement = "A" if signature[0] != "A" else "B"
+    tampered_token = ".".join((header, payload, replacement + signature[1:]))
 
     try:
         service.decode(tampered_token)
