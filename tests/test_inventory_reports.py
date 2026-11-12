@@ -202,6 +202,8 @@ async def test_demand_forecast_uses_tenant_scoped_sales_and_stock_totals():
     assert result.branch_id is None
     assert result.lookback_days == 30
     assert result.target_days == 14
+    assert result.lead_time_days == 5
+    assert result.safety_stock_days == 2
     assert len(result.items) == 1
     item = result.items[0]
     assert item.item_id == "item-1"
