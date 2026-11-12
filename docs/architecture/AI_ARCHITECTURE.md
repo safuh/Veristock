@@ -50,14 +50,14 @@ safe operational fields and applies an explicit organization filter.
 7. The narrative is returned as advisory content; deterministic metrics remain
    authoritative.
 
-The application factory accepts an `AIService` instance for provider injection.
+The application factory accepts an `AIService` instance for provider injection. An optional `OpenAICompatibleProvider` adapter supports compatible hosted gateways and self-hosted servers such as Ollama. It activates only when `AI_PROVIDER=openai-compatible` and its base URL/model are configured. Install it with `uv sync --extra ai`; the core platform does not require this dependency.
 Without one, the API uses an unconfigured service and returns HTTP 503 for the
 narrative endpoint while recording the unavailable attempt. Provider execution
 failures return HTTP 502 after recording a safe failure code.
 
 ## Deliberately not implemented yet
 
-- Hosted LLM or vision provider adapters and secret configuration.
+- Additional hosted LLM or vision adapters beyond the generic OpenAI-compatible chat-completions adapter.
 - Token/cost metering and provider-specific usage reporting.
 - Demand forecast execution and evaluation pipelines.
 - Deterministic anomaly detection and evidence collection.
