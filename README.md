@@ -56,7 +56,7 @@ make check
 make run
 ```
 
-API documentation is available at http://127.0.0.1:8000/docs.\n\nTo enable optional AI narrative generation, install the HTTP adapter and configure `AI_PROVIDER`, `AI_BASE_URL`, and `AI_MODEL` in `.env` (plus `AI_API_KEY` when your endpoint requires it), then restart the API:\n\n```bash\nuv sync --extra dev --extra ai\n```\n\nLeave `AI_PROVIDER` unset to keep AI disabled. For a local Ollama-compatible endpoint, the base URL is commonly `http://localhost:11434/v1`; select a model already pulled by your Ollama instance. Provider configuration is server-side only and should never be exposed to client browsers.
+API documentation is available at http://127.0.0.1:8000/docs.\n\nTo enable optional AI narrative generation, install the HTTP adapter and configure `AI_PROVIDER`, `AI_BASE_URL`, and `AI_MODEL` in `.env` (plus `AI_API_KEY` when your endpoint requires it), then restart the API:\n\n```bash\nuv sync --extra dev\n```\n\nLeave `AI_PROVIDER` unset to keep AI disabled. For a local Ollama-compatible endpoint, the base URL is commonly `http://localhost:11434/v1`; select a model already pulled by your Ollama instance. Provider configuration is server-side only and should never be exposed to client browsers.
 
 In a second terminal, run the browser application:
 
