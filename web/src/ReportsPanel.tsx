@@ -32,6 +32,8 @@ type DemandForecast = {
     average_daily_demand: string;
     quantity_on_hand: string;
     days_of_cover: string | null;
+    reorder_point_quantity: string;
+    days_until_reorder: string | null;
     recommended_replenishment_quantity: string;
   }[];
 };
@@ -112,6 +114,8 @@ export function ReportsPanel({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [leadTimeDays, setLeadTimeDays] = useState(0);
+  const [safetyStockDays, setSafetyStockDays] = useState(0);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -128,7 +132,7 @@ export function ReportsPanel({
           "/reports/ai-provider/status", token, organizationId,
         ),
         apiRequest<DemandForecast>(
-          "/reports/inventory/demand-forecast?lookback_days=30&target_days=14",
+          `/reports/inventory/demand-forecast?lookback_days=30&target_days=14&lead_time_days=${leadTimeDays}&safety_stock_days=${safetyStockDays}`,
           token,
           organizationId,
         ),
@@ -142,7 +146,7 @@ export function ReportsPanel({
     } finally {
       setLoading(false);
     }
-  }, [organizationId, token]);
+  }, [leadTimeDays, organizationId, safetyStockDays, token]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -215,12 +219,22 @@ export function ReportsPanel({
 
       <div className="panel-heading">
         <div><p className="eyebrow">DEMAND PLANNING</p><h3>Sales-velocity forecast</h3>
-          <p className="muted">Deterministic 30-day trailing average, with a 14-day stock coverage target. Suggestions do not create purchase orders or change inventory.</p></div>
+          <p className="muted">Deterministic 30-day trailing average and 14-day post-replenishment coverage target. Lead time and safety stock are planning assumptions, not supplier records.</p>
+          <div className="form-row">
+            <label>Supplier lead time (days)
+              <input type="number" min="0" max="180" value={leadTimeDays} onChange={(event) => setLeadTimeDays(Math.max(0, Number(event.target.value)))} />
+            </label>
+            <label>Safety stock (days)
+              <input type="number" min="0" max="180" value={safetyStockDays} onChange={(event) => setSafetyStockDays(Math.max(0, Number(event.target.value)))} />
+            </label>
+            <button className="secondary" onClick={() => void refresh()} disabled={loading}>Apply assumptions</button>
+          </div>
+        </div>
       </div>
       {forecast && <>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>ITEM</th><th>SOLD / 30 DAYS</th><th>AVG. DAILY</th><th>ON HAND</th><th>DAYS COVER</th><th>SUGGESTED QTY</th></tr></thead>
+            <thead><tr><th>ITEM</th><th>SOLD / 30 DAYS</th><th>AVG. DAILY</th><th>ON HAND</th><th>DAYS COVER</th><th>REORDER POINT</th><th>DAYS TO REORDER</th><th>SUGGESTED QTY</th></tr></thead>
             <tbody>
               {forecast.items.map((item) => (
                 <tr key={item.item_id}>
@@ -229,10 +243,12 @@ export function ReportsPanel({
                   <td>{formatNumber(item.average_daily_demand)} {item.unit_code}/day</td>
                   <td>{formatNumber(item.quantity_on_hand)}</td>
                   <td>{item.days_of_cover === null ? "—" : formatNumber(item.days_of_cover)}</td>
+                  <td>{formatNumber(item.reorder_point_quantity)}</td>
+                  <td>{item.days_until_reorder === null ? "—" : formatNumber(item.days_until_reorder)}</td>
                   <td><strong>{formatNumber(item.recommended_replenishment_quantity)}</strong></td>
                 </tr>
               ))}
-              {!forecast.items.length && <tr><td colSpan={6} className="muted">No active items are available for forecasting.</td></tr>}
+              {!forecast.items.length && <tr><td colSpan={8} className="muted">No active items are available for forecasting.</td></tr>}
             </tbody>
           </table>
         </div>
