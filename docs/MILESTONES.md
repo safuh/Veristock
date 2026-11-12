@@ -198,7 +198,7 @@ Reference documents:
 - [x] API-enforced count/approval separation of duties.
 - [x] Tenant-scoped supervisor review queue with branch filtering, latest-round totals and shortage/surplus counts.
 - [x] Standardized recount reason codes and mandatory explanation, plus append-only recount-requested and approval decision history.
-- [ ] Rejection reason codes and a formal reject/reopen workflow.
+- [x] Supervisor rejection with mandatory reason code and explanation; rejected submissions are reopened as a new immutable count round, with actor and decision retained in the audit history.
 
 ### M13 — Reconciliation and discrepancy intelligence
 

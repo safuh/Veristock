@@ -136,11 +136,12 @@ class StocktakeDecision(Base):
     __tablename__ = "stocktake_decisions"
     __table_args__ = (
         CheckConstraint(
-            "action IN ('recount_requested', 'approved')",
+            "action IN ('recount_requested', 'rejected', 'approved')",
             name="ck_stocktake_decisions_action",
         ),
         CheckConstraint(
             "(action = 'recount_requested' AND reason_code IS NOT NULL AND reason IS NOT NULL) "
+            "OR (action = 'rejected' AND reason_code IS NOT NULL AND reason IS NOT NULL) "
             "OR (action = 'approved' AND reason_code IS NULL AND reason IS NULL)",
             name="ck_stocktake_decisions_reason",
         ),

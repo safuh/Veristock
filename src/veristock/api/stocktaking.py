@@ -383,6 +383,17 @@ class StocktakeRecountRequest(BaseModel):
     reason: str = Field(min_length=10, max_length=500)
 
 
+class StocktakeRejectRequest(BaseModel):
+    reason_code: Literal[
+        "variance_unexplained",
+        "evidence_insufficient",
+        "counting_procedure",
+        "scope_or_unit_error",
+        "other",
+    ]
+    reason: str = Field(min_length=10, max_length=500)
+
+
 class StocktakeDecisionRead(BaseModel):
     id: str
     stocktake_id: str
@@ -428,6 +439,78 @@ async def open_recount_round(
         reason=payload.reason.strip(),
         actor_user_id=user.id,
         created_at=datetime.now(UTC),
+    )
+    new_round = StocktakeRound(
+        id=str(uuid4()),
+        organization_id=organization.id,
+        stocktake_id=stocktake.id,
+        round_number=latest.round_number + 1,
+        status="open",
+        opened_by_user_id=user.id,
+    )
+    stocktake.status = "open"
+    session.add_all([decision, new_round])
+    await session.commit()
+    await session.refresh(new_round)
+    return new_round
+
+
+@router.post("/{stocktake_id}/reject", response_model=RoundRead, status_code=201)
+async def reject_stocktake(
+    stocktake_id: str,
+    payload: StocktakeRejectRequest,
+    organization: StocktakeApprover,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> StocktakeRound:
+    """Reject a submitted count and reopen it as a new immutable count round."""
+    stocktake = await session.scalar(
+        select(Stocktake)
+        .where(
+            Stocktake.id == stocktake_id,
+            Stocktake.organization_id == organization.id,
+            Stocktake.status == "submitted",
+        )
+        .with_for_update()
+    )
+    if stocktake is None:
+        raise HTTPException(status_code=409, detail="Submitted stocktake not found")
+
+    latest = await session.scalar(
+        select(StocktakeRound).where(
+            StocktakeRound.organization_id == organization.id,
+            StocktakeRound.stocktake_id == stocktake.id,
+        ).order_by(StocktakeRound.round_number.desc())
+    )
+    if latest is None or latest.status != "submitted":
+        raise HTTPException(status_code=409, detail="Latest count round is not submitted")
+
+    counter_user_ids = set(
+        (
+            await session.scalars(
+                select(StocktakeObservation.counted_by_user_id)
+                .where(StocktakeObservation.round_id == latest.id)
+                .distinct()
+            )
+        ).all()
+    )
+    if user.id in counter_user_ids:
+        raise HTTPException(
+            status_code=409,
+            detail="A user who counted this round cannot reject it",
+        )
+
+    decided_at = datetime.now(UTC)
+    decision = StocktakeDecision(
+        id=str(uuid4()),
+        organization_id=organization.id,
+        stocktake_id=stocktake.id,
+        round_id=latest.id,
+        action="rejected",
+        reason_code=payload.reason_code,
+        reason=payload.reason.strip(),
+        actor_user_id=user.id,
+        created_at=decided_at,
     )
     new_round = StocktakeRound(
         id=str(uuid4()),

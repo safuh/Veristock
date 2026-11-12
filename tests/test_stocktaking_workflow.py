@@ -176,6 +176,46 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         assert submitted.status_code == 200
         assert submitted.json()["status"] == "submitted"
 
+        supervisor_token = tokens.create(
+            supervisor_id, timedelta(minutes=10), token_type="access"
+        )
+        supervisor_headers = {
+            "Authorization": f"Bearer {supervisor_token}",
+            "X-Organization-ID": org_id,
+        }
+        missing_rejection_reason = client.post(
+            f"/api/stocktakes/{stocktake_id}/reject",
+            headers=supervisor_headers,
+        )
+        assert missing_rejection_reason.status_code == 422
+        rejected = client.post(
+            f"/api/stocktakes/{stocktake_id}/reject",
+            headers=supervisor_headers,
+            json={
+                "reason_code": "evidence_insufficient",
+                "reason": "The submitted count needs supporting evidence.",
+            },
+        )
+        assert rejected.status_code == 201
+        assert rejected.json()["round_number"] == 2
+
+        rejection_recount = client.post(
+            f"/api/stocktakes/{stocktake_id}/observations",
+            headers=headers,
+            json={
+                "item_id": item_id,
+                "counted_quantity": "11",
+                "unit_code": "EA",
+                "idempotency_key": "count-device-rejected-0001",
+            },
+        )
+        assert rejection_recount.status_code == 201
+        rejection_submit = client.post(
+            f"/api/stocktakes/{stocktake_id}/submit",
+            headers=headers,
+        )
+        assert rejection_submit.status_code == 200
+
         missing_reason = client.post(
             f"/api/stocktakes/{stocktake_id}/recount",
             headers=headers,
@@ -191,7 +231,7 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
             },
         )
         assert recount.status_code == 201
-        assert recount.json()["round_number"] == 2
+        assert recount.json()["round_number"] == 3
 
         zero_count = client.post(
             f"/api/stocktakes/{stocktake_id}/observations",
@@ -256,7 +296,7 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         assert queued["stocktake_id"] == stocktake_id
         assert queued["reference"] == "ST-001"
         assert queued["branch_name"] == "Main"
-        assert queued["round_number"] == 2
+        assert queued["round_number"] == 3
         assert queued["item_count"] == 1
         assert queued["variance_count"] == 1
         assert queued["shortage_count"] == 1
@@ -281,13 +321,6 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         )
         assert same_user_approval.status_code == 409
 
-        supervisor_token = tokens.create(
-            supervisor_id, timedelta(minutes=10), token_type="access"
-        )
-        supervisor_headers = {
-            "Authorization": f"Bearer {supervisor_token}",
-            "X-Organization-ID": org_id,
-        }
         approved = client.post(
             f"/api/stocktakes/{stocktake_id}/approve", headers=supervisor_headers
         )
@@ -303,15 +336,21 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         assert decision_history.status_code == 200
         decisions = decision_history.json()
         assert [entry["action"] for entry in decisions] == [
+            "rejected",
             "recount_requested",
             "approved",
         ]
-        assert decisions[0]["reason_code"] == "count_discrepancy"
+        assert decisions[0]["reason_code"] == "evidence_insufficient"
         assert decisions[0]["reason"] == (
+            "The submitted count needs supporting evidence."
+        )
+        assert decisions[0]["actor_user_id"] == supervisor_id
+        assert decisions[1]["reason_code"] == "count_discrepancy"
+        assert decisions[1]["reason"] == (
             "Initial physical count did not match expected stock."
         )
-        assert decisions[0]["actor_user_id"] == user_id
-        assert decisions[1]["actor_user_id"] == supervisor_id
+        assert decisions[1]["actor_user_id"] == user_id
+        assert decisions[2]["actor_user_id"] == supervisor_id
 
     async def verify() -> None:
         engine = create_async_engine(database_url)
