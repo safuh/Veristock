@@ -19,3 +19,32 @@
 .count-row input{width:100%}
 @media(max-width:760px){.operation-form{display:grid;grid-template-columns:1fr 1fr}.count-row{grid-template-columns:minmax(0,1fr) 100px}.count-row button{grid-column:2}.operation-form .primary{width:100%}}
 @media(max-width:480px){.operation-form{grid-template-columns:1fr}.count-row{grid-template-columns:1fr 100px}.count-row button{grid-column:1 / -1}}
+
+
+/* Forecast planning assumptions */
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.form-row label {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 12rem;
+  color: var(--muted, #64748b);
+  font-size: 0.875rem;
+}
+
+.form-row input {
+  width: 100%;
+  min-height: 2.5rem;
+}
+
+@media (max-width: 640px) {
+  .form-row > * {
+    flex: 1 1 100%;
+  }
+}
