@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import { ReportsPanel } from "./ReportsPanel";
 
 const API = "/api";
 
@@ -509,6 +510,8 @@ function ClientDashboard({ token, organization }: { token: string; organization:
     </div>
 
     <section className="panel">
+      <ReportsPanel token={token} organizationId={organization.id} />
+
       <div className="panel-heading"><div><p className="eyebrow">CATALOGUE</p><h2>Inventory items</h2>
         <p className="muted">Create and maintain the items your organization counts and sells.</p></div></div>
       <div className="operation-form">
