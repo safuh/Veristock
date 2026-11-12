@@ -1,19 +1,32 @@
-"""Tenant-scoped deterministic inventory reporting endpoints."""
+"""Tenant-scoped deterministic reporting and advisory AI narratives."""
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from time import perf_counter
 from typing import Annotated
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import and_, case, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from veristock.ai.context import AIExecutionContext
+from veristock.ai.contracts import ReportNarrative
+from veristock.ai.models import AIExecutionRecord
+from veristock.ai.requests import ReportMetric, ReportNarrativeRequest
+from veristock.ai.service import (
+    AIProviderFailure,
+    AIService,
+    AIServiceUnavailable,
+)
 from veristock.identity.authorization import Organization
 from veristock.identity.authorization_dependencies import (
+    get_current_user,
     get_db_session,
     require_permission,
 )
+from veristock.identity.models import User
 from veristock.inventory.models import InventoryItem, StockBalance
 from veristock.organizations.models import Branch
 
@@ -57,6 +70,21 @@ class InventoryReportRead(BaseModel):
     total_units_on_hand: Decimal
     branches: tuple[BranchInventoryReport, ...]
     metrics: tuple[InventoryReportMetric, ...]
+
+
+class InventoryNarrativeRead(BaseModel):
+    """Advisory AI narrative with its durable audit identifier."""
+
+    audit_id: str
+    report_as_of: datetime
+    advisory_only: bool = True
+    narrative: ReportNarrative
+
+
+def get_ai_service(request: Request) -> AIService:
+    """Resolve the application-configured provider-neutral AI service."""
+    service = getattr(request.app.state, "ai_service", None)
+    return service if service is not None else AIService()
 
 
 @router.get("/inventory/summary", response_model=InventoryReportRead)
@@ -220,4 +248,109 @@ async def inventory_report(
         total_units_on_hand=total_units,
         branches=branches,
         metrics=metrics,
+    )
+
+
+@router.post(
+    "/inventory/narrative",
+    response_model=InventoryNarrativeRead,
+    status_code=status.HTTP_200_OK,
+)
+async def generate_inventory_narrative(
+    request: Request,
+    organization: InventoryReporter,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    ai_service: Annotated[AIService, Depends(get_ai_service)],
+) -> InventoryNarrativeRead:
+    """Generate an advisory narrative from this tenant's authorized snapshot."""
+    report = await inventory_report(organization, session)
+    narrative_request = ReportNarrativeRequest(
+        period_start=report.as_of.date(),
+        period_end=report.as_of.date(),
+        metrics=tuple(
+            ReportMetric(
+                key=metric.key,
+                label=metric.label,
+                value=metric.value,
+                unit=metric.unit,
+                source_reference=metric.source_reference,
+            )
+            for metric in report.metrics
+        ),
+    )
+    request_id = getattr(request.state, "request_id", None)
+    context = AIExecutionContext(
+        organization_id=organization.id,
+        user_id=user.id,
+        request_id=request_id,
+    )
+    started = perf_counter()
+
+    try:
+        narrative = await ai_service.generate_report_narrative(
+            narrative_request,
+            context,
+        )
+    except AIServiceUnavailable as exc:
+        record = AIExecutionRecord(
+            id=str(uuid4()),
+            organization_id=organization.id,
+            user_id=user.id,
+            status="unavailable",
+            provider=ai_service.provider_name,
+            model=ai_service.model_name,
+            latency_ms=int((perf_counter() - started) * 1000),
+            request_id=request_id,
+            source_references=[
+                metric.source_reference for metric in narrative_request.metrics
+            ],
+            failure_code="provider_not_configured",
+        )
+        session.add(record)
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI narrative generation is not configured",
+        ) from exc
+    except AIProviderFailure as exc:
+        record = AIExecutionRecord(
+            id=str(uuid4()),
+            organization_id=organization.id,
+            user_id=user.id,
+            status="failed",
+            provider=ai_service.provider_name,
+            model=ai_service.model_name,
+            latency_ms=int((perf_counter() - started) * 1000),
+            request_id=request_id,
+            source_references=[
+                metric.source_reference for metric in narrative_request.metrics
+            ],
+            failure_code="provider_failure",
+        )
+        session.add(record)
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI provider could not complete the narrative request",
+        ) from exc
+
+    record = AIExecutionRecord(
+        id=str(uuid4()),
+        organization_id=organization.id,
+        user_id=user.id,
+        status="succeeded",
+        provider=narrative.run.provider,
+        model=narrative.run.model,
+        model_version=narrative.run.model_version,
+        latency_ms=int((perf_counter() - started) * 1000),
+        request_id=request_id,
+        source_references=list(narrative.source_references),
+    )
+    session.add(record)
+    await session.commit()
+    return InventoryNarrativeRead(
+        audit_id=record.id,
+        report_as_of=report.as_of,
+        narrative=narrative,
     )
