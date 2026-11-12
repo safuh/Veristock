@@ -10,12 +10,14 @@ from .contracts import (
     VisionAssessment,
     VisionMatchCandidate,
 )
+from .models import AIExecutionRecord
 from .provider import AIProvider
 from .requests import ReportMetric, ReportNarrativeRequest
 from .service import AIProviderFailure, AIService, AIServiceUnavailable
 
 __all__ = [
     "AIExecutionContext",
+    "AIExecutionRecord",
     "AIProvider",
     "AIProviderFailure",
     "AIService",
