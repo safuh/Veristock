@@ -3,7 +3,7 @@
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -26,6 +26,7 @@ from veristock.stocktaking.models import (
     StocktakeObservation,
     StocktakeRound,
     StocktakeScopeItem,
+    StocktakeDecision,
 )
 
 router = APIRouter(prefix="/stocktakes", tags=["stocktaking"])
@@ -367,9 +368,36 @@ async def submit_count_round(
     return round_record
 
 
+StocktakeRecountReasonCode = Literal[
+    "count_discrepancy",
+    "damaged_stock",
+    "unit_mismatch",
+    "suspected_loss",
+    "counting_error",
+    "other",
+]
+
+
+class StocktakeRecountRequest(BaseModel):
+    reason_code: StocktakeRecountReasonCode
+    reason: str = Field(min_length=10, max_length=500)
+
+
+class StocktakeDecisionRead(BaseModel):
+    id: str
+    stocktake_id: str
+    round_id: str
+    action: str
+    reason_code: str | None
+    reason: str | None
+    actor_user_id: str
+    created_at: datetime
+
+
 @router.post("/{stocktake_id}/recount", response_model=RoundRead, status_code=201)
 async def open_recount_round(
     stocktake_id: str,
+    payload: StocktakeRecountRequest,
     organization: StocktakeManager,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
@@ -390,6 +418,16 @@ async def open_recount_round(
     )
     if latest is None or latest.status != "submitted":
         raise HTTPException(status_code=409, detail="Previous count round must be submitted")
+    decision = StocktakeDecision(
+        id=str(uuid4()),
+        organization_id=organization.id,
+        stocktake_id=stocktake.id,
+        round_id=latest.id,
+        action="recount_requested",
+        reason_code=payload.reason_code,
+        reason=payload.reason.strip(),
+        actor_user_id=user.id,
+    )
     new_round = StocktakeRound(
         id=str(uuid4()),
         organization_id=organization.id,
@@ -399,7 +437,7 @@ async def open_recount_round(
         opened_by_user_id=user.id,
     )
     stocktake.status = "open"
-    session.add(new_round)
+    session.add_all([decision, new_round])
     await session.commit()
     await session.refresh(new_round)
     return new_round
@@ -418,6 +456,49 @@ class StocktakeReviewQueueItem(BaseModel):
     variance_count: int
     shortage_count: int
     surplus_count: int
+
+
+@router.get(
+    "/{stocktake_id}/decisions",
+    response_model=list[StocktakeDecisionRead],
+)
+async def list_stocktake_decisions(
+    stocktake_id: str,
+    organization: StocktakeReader,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> list[StocktakeDecisionRead]:
+    """Return the tenant-scoped, chronological stocktake decision history."""
+    stocktake = await session.scalar(
+        select(Stocktake.id).where(
+            Stocktake.id == stocktake_id,
+            Stocktake.organization_id == organization.id,
+        )
+    )
+    if stocktake is None:
+        raise HTTPException(status_code=404, detail="Stocktake not found")
+    records = (
+        await session.scalars(
+            select(StocktakeDecision)
+            .where(
+                StocktakeDecision.organization_id == organization.id,
+                StocktakeDecision.stocktake_id == stocktake_id,
+            )
+            .order_by(StocktakeDecision.created_at, StocktakeDecision.id)
+        )
+    ).all()
+    return [
+        StocktakeDecisionRead(
+            id=record.id,
+            stocktake_id=record.stocktake_id,
+            round_id=record.round_id,
+            action=record.action,
+            reason_code=record.reason_code,
+            reason=record.reason,
+            actor_user_id=record.actor_user_id,
+            created_at=record.created_at,
+        )
+        for record in records
+    ]
 
 
 @router.get("/review-queue", response_model=list[StocktakeReviewQueueItem])
@@ -810,6 +891,16 @@ async def approve_stocktake(
             total_delta += quantity_delta
 
         completed_at = datetime.now(UTC)
+        session.add(
+            StocktakeDecision(
+                id=str(uuid4()),
+                organization_id=organization.id,
+                stocktake_id=stocktake.id,
+                round_id=round_record.id,
+                action="approved",
+                actor_user_id=user.id,
+            )
+        )
         stocktake.status = "completed"
         stocktake.completed_at = completed_at
         stocktake.approved_by_user_id = user.id

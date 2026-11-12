@@ -24,7 +24,7 @@ from veristock.identity import (
 )
 from veristock.inventory.models import InventoryItem, StockBalance, StockMovement
 from veristock.organizations.models import Branch
-from veristock.stocktaking.models import StocktakeObservation
+from veristock.stocktaking.models import StocktakeDecision, StocktakeObservation
 
 
 def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
@@ -176,7 +176,14 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         assert submitted.status_code == 200
         assert submitted.json()["status"] == "submitted"
 
-        recount = client.post(f"/api/stocktakes/{stocktake_id}/recount", headers=headers)
+        recount = client.post(
+            f"/api/stocktakes/{stocktake_id}/recount",
+            headers=headers,
+            json={
+                "reason_code": "count_discrepancy",
+                "reason": "Initial physical count did not match expected stock.",
+            },
+        )
         assert recount.status_code == 201
         assert recount.json()["round_number"] == 2
 
@@ -282,6 +289,23 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         assert approved.json()["status"] == "completed"
         assert approved.json()["adjustment_count"] == 1
         assert approved.json()["total_quantity_delta"] == "-4.0000"
+
+        decision_history = client.get(
+            f"/api/stocktakes/{stocktake_id}/decisions",
+            headers=headers,
+        )
+        assert decision_history.status_code == 200
+        decisions = decision_history.json()
+        assert [entry["action"] for entry in decisions] == [
+            "recount_requested",
+            "approved",
+        ]
+        assert decisions[0]["reason_code"] == "count_discrepancy"
+        assert decisions[0]["reason"] == (
+            "Initial physical count did not match expected stock."
+        )
+        assert decisions[0]["actor_user_id"] == user_id
+        assert decisions[1]["actor_user_id"] == supervisor_id
 
     async def verify() -> None:
         engine = create_async_engine(database_url)

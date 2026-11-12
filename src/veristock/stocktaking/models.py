@@ -128,3 +128,46 @@ class StocktakeObservation(Base):
     counted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class StocktakeDecision(Base):
+    """Append-only record of supervisor actions on a physical stocktake."""
+
+    __tablename__ = "stocktake_decisions"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('recount_requested', 'approved')",
+            name="ck_stocktake_decisions_action",
+        ),
+        CheckConstraint(
+            "(action = 'recount_requested' AND reason_code IS NOT NULL AND reason IS NOT NULL) "
+            "OR (action = 'approved' AND reason_code IS NULL AND reason IS NULL)",
+            name="ck_stocktake_decisions_reason",
+        ),
+        Index(
+            "ix_stocktake_decisions_org_stocktake_created",
+            "organization_id",
+            "stocktake_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    stocktake_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("stocktakes.id", ondelete="CASCADE"), nullable=False
+    )
+    round_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("stocktake_rounds.id", ondelete="RESTRICT"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason_code: Mapped[str | None] = mapped_column(String(40))
+    reason: Mapped[str | None] = mapped_column(String(500))
+    actor_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
