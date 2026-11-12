@@ -1,6 +1,8 @@
 """Top-level API router."""
+
 from fastapi import APIRouter
 
+from .ai_audit import router as ai_audit_router
 from .auth import router as auth_router
 from .health import router as health_router
 from .identity import router as identity_router
@@ -18,6 +20,7 @@ api_router = APIRouter()
 api_router.include_router(health_router)
 api_router.include_router(inventory_router)
 api_router.include_router(reports_router)
+api_router.include_router(ai_audit_router)
 api_router.include_router(sales_router)
 api_router.include_router(stocktaking_router)
 api_router.include_router(auth_router)
