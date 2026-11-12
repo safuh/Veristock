@@ -413,6 +413,8 @@ class DemandForecastRead(BaseModel):
     branch_id: str | None
     lookback_days: int
     target_days: int
+    lead_time_days: int
+    safety_stock_days: int
     methodology: str
     items: tuple[DemandForecastItemRead, ...]
 
@@ -558,6 +560,8 @@ async def inventory_demand_forecast(
         branch_id=branch_id,
         lookback_days=lookback_days,
         target_days=target_days,
+        lead_time_days=lead_time_days,
+        safety_stock_days=safety_stock_days,
         methodology=(
             "Average daily demand equals posted units sold divided by every "
             "calendar day in the lookback window. Reorder point equals average "
