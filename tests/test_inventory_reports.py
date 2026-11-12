@@ -282,6 +282,8 @@ async def test_branch_forecast_uses_saved_item_policy_and_tenant_scope():
         branch_id="branch-1",
         lookback_days=30,
         target_days=14,
+        lead_time_days=None,
+        safety_stock_days=None,
         limit=200,
         offset=0,
     )
