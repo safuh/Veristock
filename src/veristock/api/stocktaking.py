@@ -32,7 +32,8 @@ router = APIRouter(prefix="/stocktakes", tags=["stocktaking"])
 StocktakeManager = Annotated[Organization, Depends(require_permission("stocktake.manage"))]
 StocktakeReader = Annotated[Organization, Depends(require_permission("stocktake.read"))]
 StocktakeCounter = Annotated[Organization, Depends(require_permission("stocktake.count"))]
-StocktakeSubmitter = Annotated[Organization, Depends(require_permission("stocktake.submit"))]\nStocktakeApprover = Annotated[Organization, Depends(require_permission("stocktake.approve"))]
+StocktakeSubmitter = Annotated[Organization, Depends(require_permission("stocktake.submit"))]
+StocktakeApprover = Annotated[Organization, Depends(require_permission("stocktake.approve"))]
 
 
 class StocktakeCreate(BaseModel):
