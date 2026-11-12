@@ -6,7 +6,7 @@ from time import perf_counter
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import and_, case, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
