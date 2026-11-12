@@ -262,6 +262,32 @@ class FakeBranchForecastSession(FakeForecastSession):
         self.policy_statement = None
         self.movement_rows = []
 
+    async def execute(self, statement):
+        self.execute_count += 1
+        if self.execute_count > 1:
+            return FakeResult(rows=self.movement_rows)
+        self.statement = statement
+        item = SimpleNamespace(
+            id="item-1",
+            sku="SKU-1",
+            name="Cooking oil",
+            base_unit_code="bottle",
+        )
+        return FakeResult(
+            rows=[
+                (
+                    item,
+                    Decimal("60"),
+                    12,
+                    Decimal("10"),
+                    5,
+                    2,
+                    None,
+                    None,
+                )
+            ]
+        )
+
     async def scalar(self, statement):
         return "branch-1"
 
