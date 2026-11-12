@@ -176,6 +176,12 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         assert submitted.status_code == 200
         assert submitted.json()["status"] == "submitted"
 
+        missing_reason = client.post(
+            f"/api/stocktakes/{stocktake_id}/recount",
+            headers=headers,
+        )
+        assert missing_reason.status_code == 422
+
         recount = client.post(
             f"/api/stocktakes/{stocktake_id}/recount",
             headers=headers,

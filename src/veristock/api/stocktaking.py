@@ -398,7 +398,7 @@ class StocktakeDecisionRead(BaseModel):
 async def open_recount_round(
     stocktake_id: str,
     payload: StocktakeRecountRequest,
-    organization: StocktakeManager,
+    organization: StocktakeApprover,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> StocktakeRound:
