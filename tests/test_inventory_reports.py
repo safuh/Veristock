@@ -275,7 +275,11 @@ async def test_branch_forecast_uses_saved_item_policy_and_tenant_scope():
     )
     session = FakeBranchForecastSession(policy=policy)
     # Effective planning values are selected from the joined policy row.
-    session.execute = async_branch_execute_with_policy
+    async def execute(statement):
+        session.statement = statement
+        return await async_branch_execute_with_policy(statement)
+
+    session.execute = execute
     result = await inventory_demand_forecast(
         organization=SimpleNamespace(id="org-1"),
         session=session,
@@ -295,8 +299,8 @@ async def test_branch_forecast_uses_saved_item_policy_and_tenant_scope():
     assert item.reorder_point_quantity == Decimal("14")
     assert item.recommended_replenishment_quantity == Decimal("32")
     assert result.lead_time_days is None
-    assert session.policy_statement is not None
-    policy_sql = str(session.policy_statement)
+    assert session.statement is not None
+    policy_sql = str(session.statement)
     assert "replenishment_policies.organization_id" in policy_sql
     assert "replenishment_policies.branch_id" in policy_sql
 
