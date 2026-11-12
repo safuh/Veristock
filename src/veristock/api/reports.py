@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from time import perf_counter
-from typing import Annotated
+from typing import Annotated, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -501,8 +501,8 @@ async def inventory_demand_forecast(
             ReplenishmentPolicy.branch_id == branch_id,
             ReplenishmentPolicy.item_id == InventoryItem.id,
         )
-        saved_lead_expression = ReplenishmentPolicy.lead_time_days
-        saved_safety_expression = ReplenishmentPolicy.safety_stock_days
+        saved_lead_expression = cast(ColumnElement[int], ReplenishmentPolicy.lead_time_days)
+        saved_safety_expression = cast(ColumnElement[int], ReplenishmentPolicy.safety_stock_days)
         lead_expression = (
             literal(lead_time_days)
             if lead_time_days is not None
