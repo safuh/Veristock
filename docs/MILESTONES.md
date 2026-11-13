@@ -183,7 +183,7 @@ Reference documents:
 
 ### M12 — Physical stocktaking
 
-**Status: in progress — tenant-scoped branch snapshots, blind scope listing, immutable count observations, idempotent capture, complete-round submission, recount rounds and separately authorized approval-to-ledger reconciliation are implemented for client-organization counters. Veristock cross-tenant staff assignment, production-grade shared evidence storage/scanning and broader supervisor separation-of-duties enforcement remain open.**
+**Status: in progress — tenant-scoped branch snapshots, blind scope listing, immutable count observations, idempotent capture, complete-round submission, recount rounds and separately authorized approval-to-ledger reconciliation are implemented for client-organization counters. Veristock cross-tenant staff assignment, production-grade shared evidence storage/scanning and broader supervisor separation-of-duties enforcement remain open. React and Android photo-evidence controls are implemented; full end-to-end device/browser acceptance remains open.**
 
 - [x] Stocktake creation and branch/item scope definition with frozen expected quantities.
 - [ ] Performer type: client employee or assigned Veristock employee (client-member counter access is implemented).
@@ -256,6 +256,7 @@ Reference documents:
 - [x] Flutter Android client foundation with secure token storage, session restoration, organization selection and camera barcode-scanning screen.
 - [ ] Complete Android runner configuration, field task APIs, count capture and release signing.
 - [x] Initial client portal sales posting and stocktaking count flows.
+- [ ] Verify end-to-end browser and Android photo-evidence upload/retrieval on supported devices and tenant roles.
 - [ ] Client portal discrepancy and advanced forecast flows.
 - [x] Client portal deterministic demand-forecast and inventory report view, including configurable lead-time and safety-stock assumptions.
 - [x] Persist branch/item lead-time and safety-stock policies with tenant-scoped read/write APIs and updater provenance.
