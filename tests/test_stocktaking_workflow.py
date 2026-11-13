@@ -382,7 +382,7 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
                         )
                     ).all()
                 )
-                assert len(observations) == 2
+                assert len(observations) == 3
                 assert balance is not None
                 assert balance.quantity_on_hand == Decimal("8")
                 assert len(movements) == 1

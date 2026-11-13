@@ -340,6 +340,28 @@ type StocktakeRecord = {
 type StocktakeScopeItem = {
   item_id: string; sku: string; barcode: string; name: string; unit_code: string;
 };
+type StocktakeReviewItem = {
+  stocktake_id: string;
+  reference: string;
+  branch_id: string;
+  branch_name: string;
+  submitted_at: string | null;
+  round_number: number;
+  item_count: number;
+  variance_count: number;
+  shortage_count: number;
+  surplus_count: number;
+};
+type StocktakeDecision = {
+  id: string;
+  stocktake_id: string;
+  round_id: string;
+  action: string;
+  reason_code: string | null;
+  reason: string | null;
+  actor_user_id: string;
+  created_at: string;
+};
 
 function ClientDashboard({ token, organization }: { token: string; organization: Organization }) {
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -348,6 +370,14 @@ function ClientDashboard({ token, organization }: { token: string; organization:
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [stocktakes, setStocktakes] = useState<StocktakeRecord[]>([]);
+  const [reviewQueue, setReviewQueue] = useState<StocktakeReviewItem[]>([]);
+  const [reviewAccess, setReviewAccess] = useState<boolean | null>(null);
+  const [reviewingStocktakeId, setReviewingStocktakeId] = useState<string | null>(null);
+  const [rejectingStocktakeId, setRejectingStocktakeId] = useState<string | null>(null);
+  const [rejectionReasonCode, setRejectionReasonCode] = useState("variance_unexplained");
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [decisionHistory, setDecisionHistory] = useState<Record<string, StocktakeDecision[]>>({});
+  const [historyStocktakeId, setHistoryStocktakeId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -389,6 +419,21 @@ function ClientDashboard({ token, organization }: { token: string; organization:
       setItems(itemRows);
       setSales(saleRows);
       setStocktakes(stocktakeRows);
+      try {
+        const queue = await request<StocktakeReviewItem[]>(
+          "/stocktakes/review-queue", token, organization.id,
+        );
+        setReviewQueue(queue);
+        setReviewAccess(true);
+      } catch (reason) {
+        const message = reason instanceof Error ? reason.message : "";
+        if (/permission|forbidden|403/i.test(message)) {
+          setReviewQueue([]);
+          setReviewAccess(false);
+        } else {
+          throw reason;
+        }
+      }
       setOpeningBranch((current) => current || branchRows[0]?.id || "");
       setSaleBranch((current) => current || branchRows[0]?.id || "");
       setStocktakeBranch((current) => current || branchRows[0]?.id || "");
@@ -494,6 +539,74 @@ function ClientDashboard({ token, organization }: { token: string; organization:
     setStocktakeScope([]);
   }, "Count round submitted for review.");
 
+  const approveStocktake = (stocktakeId: string) => perform(async () => {
+    setReviewingStocktakeId(stocktakeId);
+    try {
+      await request(
+        `/stocktakes/${encodeURIComponent(stocktakeId)}/approve`,
+        token,
+        organization.id,
+        { method: "POST", body: JSON.stringify({}) },
+      );
+      setDecisionHistory((current) => {
+        const next = { ...current };
+        delete next[stocktakeId];
+        return next;
+      });
+    } finally {
+      setReviewingStocktakeId(null);
+    }
+  }, "Stocktake approved and ledger reconciliation completed.");
+
+  const rejectStocktake = (stocktakeId: string) => perform(async () => {
+    if (rejectionReason.trim().length < 10) {
+      throw new Error("Explain why this count is being rejected (at least 10 characters).");
+    }
+    setReviewingStocktakeId(stocktakeId);
+    try {
+      await request(
+        `/stocktakes/${encodeURIComponent(stocktakeId)}/reject`,
+        token,
+        organization.id,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            reason_code: rejectionReasonCode,
+            reason: rejectionReason.trim(),
+          }),
+        },
+      );
+      setRejectingStocktakeId(null);
+      setRejectionReason("");
+      setDecisionHistory((current) => {
+        const next = { ...current };
+        delete next[stocktakeId];
+        return next;
+      });
+    } finally {
+      setReviewingStocktakeId(null);
+    }
+  }, "Stocktake rejected. A new count round is now open.");
+
+  const toggleDecisionHistory = async (stocktakeId: string) => {
+    if (historyStocktakeId === stocktakeId) {
+      setHistoryStocktakeId(null);
+      return;
+    }
+    setHistoryStocktakeId(stocktakeId);
+    setError("");
+    try {
+      const history = await request<StocktakeDecision[]>(
+        `/stocktakes/${encodeURIComponent(stocktakeId)}/decisions`,
+        token,
+        organization.id,
+      );
+      setDecisionHistory((current) => ({ ...current, [stocktakeId]: history }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to load decision history");
+    }
+  };
+
   const name = organization.trading_name ?? organization.legal_name;
   return <div className="content">
     <div className="page-heading"><div><p className="eyebrow">CLIENT WORKSPACE</p><h1>Welcome to {name}.</h1>
@@ -584,6 +697,51 @@ function ClientDashboard({ token, organization }: { token: string; organization:
           <td>{new Date(record.created_at).toLocaleDateString()}</td><td>{record.item_count}</td>
           <td><span className={`status ${record.status}`}>{record.status}</span></td></tr>)}
           {!stocktakes.length && <tr><td colSpan={4} className="muted">No stocktakes created yet.</td></tr>}</tbody></table></div>
+      {reviewAccess && <div className="review-queue">
+        <div className="panel-heading"><div><p className="eyebrow">SUPERVISOR WORKFLOW</p><h3>Submitted counts awaiting review</h3>
+          <p className="muted">Review the latest submitted round. Approval posts variances to the stock ledger; rejection opens a new count round.</p></div>
+          <span className="count-pill">{reviewQueue.length} pending</span></div>
+        <div className="table-wrap"><table><thead><tr><th>STOCKTAKE</th><th>BRANCH</th><th>ROUND</th><th>ITEMS</th><th>VARIANCES</th><th>SHORT / SURPLUS</th><th>REVIEW</th></tr></thead>
+          <tbody>{reviewQueue.map((entry) => <tr key={entry.stocktake_id}>
+            <td><strong>{entry.reference}</strong><small>{entry.submitted_at ? new Date(entry.submitted_at).toLocaleString() : "Submission time unavailable"}</small></td>
+            <td>{entry.branch_name}</td><td>{entry.round_number}</td><td>{entry.item_count}</td>
+            <td><strong>{entry.variance_count}</strong></td><td>{entry.shortage_count} / {entry.surplus_count}</td>
+            <td><div className="review-actions">
+              <button className="approve" disabled={busy || reviewingStocktakeId === entry.stocktake_id} onClick={() => void approveStocktake(entry.stocktake_id)}>
+                {reviewingStocktakeId === entry.stocktake_id ? "Saving…" : "Approve"}
+              </button>
+              <button className="reject" disabled={busy || reviewingStocktakeId === entry.stocktake_id} onClick={() => {
+                setRejectingStocktakeId((current) => current === entry.stocktake_id ? null : entry.stocktake_id);
+                setRejectionReason("");
+              }}>Reject</button>
+              <button className="secondary" disabled={busy} onClick={() => void toggleDecisionHistory(entry.stocktake_id)}>
+                {historyStocktakeId === entry.stocktake_id ? "Hide history" : "History"}
+              </button>
+            </div>
+            {rejectingStocktakeId === entry.stocktake_id && <div className="reject-form">
+              <label>Reason code<select value={rejectionReasonCode} onChange={(event) => setRejectionReasonCode(event.target.value)}>
+                <option value="variance_unexplained">Variance unexplained</option>
+                <option value="evidence_insufficient">Evidence insufficient</option>
+                <option value="counting_procedure">Counting procedure</option>
+                <option value="scope_or_unit_error">Scope or unit error</option>
+                <option value="other">Other</option>
+              </select></label>
+              <label>Explanation<textarea rows={3} minLength={10} maxLength={500} value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} placeholder="Explain what needs to be corrected (10–500 characters)." /></label>
+              <button className="reject" disabled={busy || rejectionReason.trim().length < 10} onClick={() => void rejectStocktake(entry.stocktake_id)}>Confirm rejection and reopen count</button>
+            </div>}
+            {historyStocktakeId === entry.stocktake_id && <div className="decision-history">
+              {(decisionHistory[entry.stocktake_id] ?? []).map((decision) => <div key={decision.id}>
+                <strong>{decision.action.replaceAll("_", " ")}</strong>
+                <small>{decision.reason_code ? statusLabel(decision.reason_code) : "No reason required"} · {new Date(decision.created_at).toLocaleString()}</small>
+                {decision.reason && <p>{decision.reason}</p>}
+              </div>)}
+              {decisionHistory[entry.stocktake_id]?.length === 0 && <p className="muted">No supervisor decisions recorded yet.</p>}
+              {!decisionHistory[entry.stocktake_id] && <p className="muted">Loading decision history…</p>}
+            </div>}
+            </td>
+          </tr>)}
+          {!reviewQueue.length && <tr><td colSpan={7} className="muted">No submitted stocktakes are awaiting a decision.</td></tr>}</tbody></table></div>
+      </div>}
     </section>
 
     <section className="panel">
