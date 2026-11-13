@@ -1,6 +1,7 @@
 // ignore_for_file: prefer_const_constructors
 
 import 'package:dio/dio.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -243,6 +244,9 @@ class _StocktakeCountPageState extends State<StocktakeCountPage> {
   List<Map<String, dynamic>> _scope = const [];
   final Map<String, TextEditingController> _quantities = {};
   final Set<String> _saved = {};
+  final Map<String, String> _observationIds = {};
+  final Map<String, List<String>> _evidenceNames = {};
+  final ImagePicker _imagePicker = ImagePicker();
   String? _matchedItemId;
 
   @override
@@ -324,16 +328,74 @@ class _StocktakeCountPageState extends State<StocktakeCountPage> {
       _error = null;
     });
     try {
-      await widget.apiClient.recordCount(
+      final observation = await widget.apiClient.recordCount(
         organizationId: widget.organizationId,
         stocktakeId: widget.stocktake['id'] as String,
         itemId: itemId,
         quantity: quantity,
         unitCode: item['unit_code'] as String,
       );
-      if (mounted) setState(() => _saved.add(itemId));
+      if (mounted) {
+        setState(() {
+          _saved.add(itemId);
+          _observationIds[itemId] = observation['id'] as String;
+        });
+      }
     } on DioException catch (error) {
       if (mounted) setState(() => _error = _message(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _captureEvidence(Map<String, dynamic> item) async {
+    final itemId = item['item_id'] as String;
+    final observationId = _observationIds[itemId];
+    if (observationId == null) {
+      setState(() => _error = 'Save the physical count before attaching evidence.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final image = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+        maxWidth: 1600,
+      );
+      if (image == null) return;
+      final extension = image.name.toLowerCase().split('.').last;
+      final mediaType = switch (extension) {
+        'jpg' || 'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'webp' => 'image/webp',
+        _ => throw const FormatException(
+            'Choose a JPEG, PNG or WebP image.',
+          ),
+      };
+      final bytes = await image.readAsBytes();
+      await widget.apiClient.uploadCountEvidence(
+        organizationId: widget.organizationId,
+        stocktakeId: widget.stocktake['id'] as String,
+        observationId: observationId,
+        filename: image.name,
+        mediaType: mediaType,
+        bytes: bytes,
+      );
+      if (mounted) {
+        setState(() {
+          _evidenceNames[itemId] = [
+            ...(_evidenceNames[itemId] ?? []),
+            image.name,
+          ];
+        });
+      }
+    } on DioException catch (error) {
+      if (mounted) setState(() => _error = _message(error));
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -433,6 +495,22 @@ class _StocktakeCountPageState extends State<StocktakeCountPage> {
                                 ),
                               ],
                             ),
+                            if (saved) ...[
+                              const SizedBox(height: 8),
+                              OutlinedButton.icon(
+                                onPressed: _busy
+                                    ? null
+                                    : () => _captureEvidence(item),
+                                icon: const Icon(Icons.camera_alt_outlined),
+                                label: const Text('Add photo evidence'),
+                              ),
+                              ...(_evidenceNames[itemId] ?? []).map(
+                                (filename) => Text(
+                                  'Attached: $filename',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),

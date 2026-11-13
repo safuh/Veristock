@@ -1,10 +1,10 @@
 # Veristock One
 
-Veristock One is the inventory verification and stocktaking platform for Veristock Inventory Solutions Ltd. The target MVP includes a FastAPI backend and three browser workspaces: Veristock management, field operations and the client portal. The current implementation provides the initial management and client workspaces; the field workspace is still planned.
+Veristock One is the inventory verification and stocktaking platform for Veristock Inventory Solutions Ltd. The target MVP includes a FastAPI backend and three browser workspaces: Veristock management, field operations and the client portal. The current React application provides initial management and client workspaces; the responsive browser field workspace remains planned, while a separate Flutter Android field app supports online stocktake capture.
 
 **Architecture:** Modular monolith · FastAPI · Python · SQLAlchemy 2.x · Alembic · PostgreSQL · React + TypeScript
 
-**AI policy:** No AI integration, AI dependencies, agents, LLM providers or vector database are included in the MVP.
+**AI policy:** AI is optional and disabled by default. Core authentication, inventory, sales, stocktaking, approval, reconciliation, reporting and deterministic forecasting must operate without any model provider, API key or AI network call. AI is limited to advisory enhancements; AI failure must never block core operations or directly mutate business records. Provider-neutral narrative execution and tenant-scoped execution audit persistence are implemented. An optional OpenAI-compatible adapter can be enabled for compatible hosted gateways or self-hosted Ollama endpoints; no vendor SDK is required.
 
 ## Current implementation status
 
@@ -18,22 +18,27 @@ Implemented capabilities:
 - Tenant-scoped inventory catalogue creation, stock-on-hand reads and branch opening balances.
 - Append-only stock movement records for opening balances and posted sales.
 - Idempotent, atomic sales posting with unit validation and insufficient-stock protection.
-- Physical stocktake creation with frozen branch/item expected quantities, blind count scope, immutable count observations, complete-round submission and recount rounds.
+- Physical stocktake creation with frozen branch/item expected quantities, blind count scope, immutable count observations, optional JPEG/PNG/WebP photo evidence, complete-round submission and recount rounds.
 - React client workspace flows for item creation, opening balances, sales and stocktaking.
-- Flutter Android field workflows for open stocktake retrieval, barcode matching, count capture and round submission.
+- Flutter Android field workflows for open stocktake retrieval, barcode matching, count capture, optional photo evidence upload and round submission.
 - Installable PWA shell; service-worker caching is limited to static assets and does not cache authenticated API responses.
+- Tenant-scoped deterministic inventory summary reporting, including branch totals and traceable source metrics.
+- Tenant-scoped demand planning endpoint and client reporting table using posted sales velocity, current stock, days of cover, lead-time and safety-stock assumptions, and a configurable target coverage horizon. Branch/item replenishment policies are persisted through permission-protected APIs with actor provenance and applied automatically in branch-scoped forecasts; explicit request overrides take precedence. The client portal supports branch selection and inline policy management.
+- Initial AI contracts for vision assessments, demand forecasts, anomaly findings and report narratives, plus a provider-neutral narrative service with tenant-context separation, bounded inputs, timeouts and source-reference validation.
+- Tenant-scoped AI execution audit persistence and a permission-protected inventory narrative endpoint. Audit records retain actor, organization, provider/model provenance, latency, source references and safe failure codes without storing prompts or raw report payloads.
 - CI coverage for Python 3.11–3.13, React production builds, Flutter analysis/tests and Android debug builds.
 
 Important MVP boundaries still being completed:
 
 - Veristock staff cross-tenant stocktake assignment and evidence upload.
-- Reconciliation runs, discrepancy review/approval and controlled ledger corrections.
-- Richer reporting, export, replenishment forecasts and anomaly detection.
-- AI stocktaking assistance and natural-language reporting, implemented as isolated services after deterministic workflows.
+- Read-only stocktake reconciliation now compares the frozen expected snapshot with the latest submitted count, classifies shortages/surpluses/matches and displays post-count movement context. A tenant-scoped supervisor review queue now lists submitted stocktakes with branch, latest-round and shortage/surplus totals; recount requests now require a standardized reason code and explanation, and recount, rejection and approval actions are exposed through an audited decision history; the client portal provides a permission-gated supervisor queue with variance summaries, approval, reason-coded rejection and decision-history review. Supervisor rejection requires a reason and reopens the stocktake in a new immutable count round. Discrepancy resolution and controlled correction remain outstanding. Physical stocktake approval posts approved variances to the stock movement ledger.
+- Richer reporting, supplier master data, broader forecast evaluation and anomaly detection. Initial rolling-origin evaluation is available for a selected item/branch; portfolio-wide accuracy and seasonality remain outstanding. Persisted branch/item replenishment policies are applied automatically in branch forecasts.
+- Deterministic anomaly detection, vision inference and user-facing AI workflows remain outstanding. The first deterministic sales-velocity forecast, stockout-availability evidence and an initial rolling-origin forecast evaluation are implemented; advanced evaluation and seasonality remain outstanding.
 - Email delivery, password recovery, rate limiting, production release signing, deployment secrets and operational monitoring.
 - Offline Android capture and conflict-safe synchronization are not enabled; current mobile count capture requires connectivity.
 
 See [Product Architecture](docs/architecture/PRODUCT_ARCHITECTURE.md), [Domain Model](docs/architecture/DOMAIN_MODEL.md), and [MVP Acceptance Tracker](docs/MILESTONES.md).
+
 ## Quick start
 
 Requirements: Python 3.11+, [uv](https://docs.astral.sh/uv/), and Docker if you use the container workflow.
@@ -53,6 +58,10 @@ make run
 ```
 
 API documentation is available at http://127.0.0.1:8000/docs.
+
+### Optional AI configuration
+
+AI is not required to install, start or use Veristock. Leave `AI_PROVIDER` unset to keep all core features deterministic and AI-free. To enable advisory inventory narratives, configure `AI_PROVIDER=openai-compatible`, `AI_BASE_URL` and `AI_MODEL` in `.env` (plus `AI_API_KEY` when your endpoint requires it), then restart the API. For an Ollama-compatible endpoint, the base URL is commonly `http://localhost:11434/v1`; select a model already pulled by your Ollama instance. Provider configuration is server-side only and must never be exposed to client browsers.
 
 In a second terminal, run the browser application:
 

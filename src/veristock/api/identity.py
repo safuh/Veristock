@@ -38,6 +38,7 @@ class OrganizationContextResponse(BaseModel):
     kind: str
     legal_name: str
     timezone: str
+    can_manage_inventory: bool
 
 
 @router.get("/me", response_model=CurrentUserResponse)
@@ -69,11 +70,17 @@ async def current_user(
 @router.get("/context", response_model=OrganizationContextResponse)
 async def organization_context(
     organization: Annotated[Organization, Depends(get_current_organization)],
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> OrganizationContextResponse:
     """Return the active organization context after membership validation."""
+    can_manage_inventory = await AuthorizationRepository(session).has_permission(
+        user.id, organization.id, "inventory.manage"
+    )
     return OrganizationContextResponse(
         id=organization.id,
         kind=organization.kind,
         legal_name=organization.legal_name,
         timezone=organization.timezone,
+        can_manage_inventory=can_manage_inventory,
     )

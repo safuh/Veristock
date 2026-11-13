@@ -19,3 +19,39 @@
 .count-row input{width:100%}
 @media(max-width:760px){.operation-form{display:grid;grid-template-columns:1fr 1fr}.count-row{grid-template-columns:minmax(0,1fr) 100px}.count-row button{grid-column:2}.operation-form .primary{width:100%}}
 @media(max-width:480px){.operation-form{grid-template-columns:1fr}.count-row{grid-template-columns:1fr 100px}.count-row button{grid-column:1 / -1}}
+
+
+/* Forecast planning assumptions */
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.form-row label {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 12rem;
+  color: var(--muted, #64748b);
+  font-size: 0.875rem;
+}
+
+.form-row input {
+  width: 100%;
+  min-height: 2.5rem;
+}
+
+@media (max-width: 640px) {
+  .form-row > * {
+    flex: 1 1 100%;
+  }
+}
+
+
+/* Supervisor stocktake review */
+.review-queue{border-top:1px solid #edf0f3;padding-bottom:12px}.review-actions{display:flex;gap:6px;flex-wrap:wrap}.review-actions .secondary{padding:7px 9px;font-size:10px}.reject-form{display:grid;gap:9px;min-width:230px;max-width:380px;margin-top:12px;padding:12px;border:1px solid #f0d9d6;border-radius:8px;background:#fffafa}.reject-form label{display:grid;gap:5px;font-size:10px;font-weight:700;color:#536276}.reject-form select,.reject-form textarea{width:100%;border:1px solid #dce3e9;border-radius:6px;padding:8px;font:inherit;font-size:11px}.reject-form textarea{resize:vertical}.reject-form button{justify-self:start}.decision-history{display:grid;gap:8px;margin-top:12px;padding:12px;border-radius:8px;background:#f7f9fb;min-width:220px}.decision-history>div{border-bottom:1px solid #e7ecf0;padding-bottom:8px}.decision-history>div:last-child{border:0;padding-bottom:0}.decision-history strong,.decision-history small{display:block}.decision-history strong{font-size:10px;color:#34465a;text-transform:capitalize}.decision-history small{font-size:9px;color:#8995a3;margin-top:4px}.decision-history p{font-size:10px;color:#59697b;margin:5px 0 0;white-space:normal}
+@media(max-width:760px){.review-actions{min-width:210px}.reject-form{min-width:190px}}
+
+.count-evidence{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap}.evidence-upload{display:inline-flex;align-items:center;gap:8px;cursor:pointer}.evidence-upload input{max-width:220px;font-size:10px}

@@ -96,6 +96,7 @@ async def test_identity_endpoints_require_valid_user_and_tenant_membership(
         )
         assert context.status_code == 200
         assert context.json()["id"] == organization_id
+        assert context.json()["can_manage_inventory"] is False
 
         cross_tenant = client.get(
             "/api/identity/context",

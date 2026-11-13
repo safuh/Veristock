@@ -31,4 +31,4 @@ The app uses the existing JSON token endpoints. Access and refresh tokens are st
 
 ## Current scope
 
-The current slice provides login, refresh-token session restoration, organization selection and a working barcode-scanner screen. Stocktake assignment, count submission, encrypted offline task storage and synchronization are not yet implemented.
+The current slice provides login, refresh-token session restoration, organization selection, open-stocktake retrieval, blind count capture, barcode matching, count-round submission and optional camera photo evidence upload. Encrypted offline task storage, conflict-safe synchronization and production release signing are not yet implemented.

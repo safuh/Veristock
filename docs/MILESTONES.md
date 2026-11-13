@@ -163,7 +163,7 @@ Reference documents:
 
 ### M11 — Inventory and sales ledger
 
-**Status: in progress — catalogue creation, opening balances and atomic idempotent sales posting are implemented; stocktake and reconciliation remain open.**
+**Status: in progress — catalogue creation, opening balances, append-only stock movements, current-balance projections and atomic idempotent sales posting are implemented; full reconciliation and correction workflows remain open.**
 
 - [x] Tenant-owned inventory items with barcode/SKU identifiers and explicit base-unit codes.
 - [ ] Controlled unit-of-measure catalogue and item categories.
@@ -171,18 +171,19 @@ Reference documents:
 - [ ] Optional warehouse/bin locations.
 - [x] Validated manual opening-stock entry with actor provenance and idempotency.
 - [ ] Validated structured import with row-level error reporting.
-- [ ] Append-only stock movement ledger and current-balance projection.
+- [x] Append-only stock movement ledger and current-balance projection.
 - [x] Client portal/API sales entry with line items and posting validation.
 - [x] Atomic sale + stock-out movement posting with idempotency.
 - [ ] Reversal/correction workflow; no direct edits to posted sales or movements.
-- [x] Initial tenant-scoped inventory catalogue and stock-on-hand read APIs.\n- [ ] Tenant/branch-scoped inventory search, pagination and filtering beyond the initial read endpoints.
+- [x] Initial tenant-scoped inventory catalogue and stock-on-hand read APIs.
+- [ ] Tenant/branch-scoped inventory search, pagination and filtering beyond the initial read endpoints.
 - [ ] Permission matrix and cross-tenant tests for inventory and sales.
 
 **MVP boundary:** no purchase orders, goods-received notes, invoice ingestion, supplier integrations or POS integrations. The sales portal is the initial source of demand/stock-out history for reporting and forecasting.
 
 ### M12 — Physical stocktaking
 
-**Status: in progress — tenant-scoped branch snapshots, blind scope listing, immutable count observations, idempotent capture, complete-round submission and recount rounds are implemented for client-organization counters. Veristock cross-tenant staff assignment and evidence upload remain open.**
+**Status: in progress — tenant-scoped branch snapshots, blind scope listing, immutable count observations, idempotent capture, complete-round submission, recount rounds and separately authorized approval-to-ledger reconciliation are implemented for client-organization counters. Veristock cross-tenant staff assignment, production-grade shared evidence storage/scanning and broader supervisor separation-of-duties enforcement remain open. React and Android photo-evidence controls are implemented; full end-to-end device/browser acceptance remains open.**
 
 - [x] Stocktake creation and branch/item scope definition with frozen expected quantities.
 - [ ] Performer type: client employee or assigned Veristock employee (client-member counter access is implemented).
@@ -190,17 +191,23 @@ Reference documents:
 - [x] Client membership and permission authorization for client counters.
 - [x] Blind-count API behavior; expected quantities are withheld from blind count scope responses.
 - [x] Manual/barcode-identified item quantity capture API.
-- [ ] Image evidence upload with private storage and authorized retrieval.
+- [x] Tenant-scoped image evidence upload/retrieval for count observations, with generated private storage keys, upload-size/type checks, SHA-256 metadata and authorized retrieval.
+- [ ] Shared object-storage adapter, malware/content scanning, image re-encoding and retention lifecycle controls.
 - [ ] Vision-assisted barcode/OCR/catalogue matching with confidence and manual confirmation.
 - [ ] Batch, serial, expiry and condition capture where enabled by item policy.
 - [x] Idempotent count observations and immutable count rounds with completeness checks.
-- [x] Recount round creation; [ ] supervisor queue and richer audit events.
+- [x] Recount round creation and separately authorized approval of submitted counts; approved variances post idempotent `stocktake_adjustment` ledger movements while preserving movements recorded after each observation.
+- [x] API-enforced count/approval separation of duties.
+- [x] Tenant-scoped supervisor review queue with branch filtering, latest-round totals and shortage/surplus counts.
+- [x] Standardized recount reason codes and mandatory explanation, plus append-only recount-requested and approval decision history.
+- [x] Supervisor rejection with mandatory reason code and explanation; rejected submissions are reopened as a new immutable count round, with actor and decision retained in the audit history.
+- [x] Client portal supervisor review queue with variance summaries, permission-gated approve/reject controls, mandatory rejection explanation and decision-history display.
 
 ### M13 — Reconciliation and discrepancy intelligence
 
-- [ ] Reconciliation against frozen expected-stock snapshots and accepted count rounds.
+- [x] Read-only reconciliation breakdown against frozen expected-stock snapshots and the latest accepted count round, including post-count movement context.
 - [ ] Configurable matching grain and unit validation.
-- [ ] Shortage, surplus, missing, unrecognized and condition exceptions.
+- [x] Deterministic shortage, surplus and match classifications; missing-scope, unrecognized-item and condition exceptions remain open.
 - [ ] Quantity variance and verified-cost financial variance.
 - [ ] Exception resolution and recount handoff.
 - [ ] Reviewer approval and separation-of-duties enforcement.
@@ -210,26 +217,31 @@ Reference documents:
 
 ### M14 — Forecasting, reporting and business intelligence
 
-- [ ] SQL-backed daily/weekly sales, stock movement and stock-on-hand metrics.
+**Status: in progress — tenant-scoped inventory reporting, deterministic sales-velocity forecasts, stock-availability evidence and an initial rolling-origin forecast evaluation are implemented; advanced planning and evaluation remain open.**
+
+- [x] SQL-backed posted-sales and current-stock aggregates for the initial demand forecast.
 - [ ] Branch/item inventory valuation only where verified unit cost and currency exist.
 - [ ] Low-stock, fast/slow-moving and stockout-risk reports.
-- [ ] CPU-friendly baseline demand forecasts and reorder suggestions with uncertainty.
-- [ ] Replenishment calculations use lead time, safety stock and configured service levels.
+- [x] CPU-friendly trailing-average demand baseline and target-coverage replenishment suggestions.
+- [x] Initial rolling-origin backtesting for an explicitly selected item/branch, with MAE per day, WAPE and forecast-bias diagnostics.
+- [ ] Broader portfolio evaluation, uncertainty bounds, seasonality and stockout-censored demand validation.
+- [x] Replenishment calculations use saved or explicitly overridden lead-time and safety-stock days.
+- [ ] Configured service levels, order multiples and minimum order quantities.
 - [ ] Report period, filters, generation timestamp and source watermark are recorded.
 - [ ] PDF/spreadsheet exports from deterministic query results.
-- [ ] Optional LLM narrative grounded only in authorized, precomputed metrics.
+- [x] Optional LLM narrative grounded only in authorized, precomputed metrics.
 - [ ] Tenant-scoped reporting permissions and cross-tenant tests.
-- [ ] Reports remain available when AI providers are unavailable.
+- [x] Deterministic report and forecast APIs remain available when AI is unconfigured or unavailable; the React report panel treats AI status, audit history and narrative generation as optional.
 
 ### M14A — AI platform foundations
 
-- [ ] Separate `veristock.ai` package with provider-neutral interfaces.
-- [ ] Model/provider configuration and safe timeouts; no provider secrets in domain modules.
-- [ ] Structured outputs validated with Pydantic.
+- [x] Separate `veristock.ai` package with provider-neutral interfaces.
+- [x] Model/provider configuration and safe timeouts; no provider secrets in domain modules.
+- [x] Structured AI narrative contracts validated with Pydantic.
 - [ ] Model/version, confidence, latency and failure metadata recorded.
 - [ ] Evaluation fixtures for OCR/matching, forecasts, anomaly signals and report narratives.
 - [ ] Human approval for any proposed action that can affect stock or business decisions.
-- [ ] AI failure isolation: inventory, sales, counting and deterministic reporting continue without AI.
+- [x] Core inventory, sales, counting, approvals and deterministic reporting do not require AI; AI status/history failures are isolated from the React report panel.
 
 ### M15 — Browser workspaces
 
@@ -244,8 +256,16 @@ Reference documents:
 - [x] Flutter Android client foundation with secure token storage, session restoration, organization selection and camera barcode-scanning screen.
 - [ ] Complete Android runner configuration, field task APIs, count capture and release signing.
 - [x] Initial client portal sales posting and stocktaking count flows.
-- [ ] Client portal discrepancy, forecast and report flows.
-- [ ] Typed API integration and loading/error/empty states.
+- [ ] Verify end-to-end browser and Android photo-evidence upload/retrieval on supported devices and tenant roles.
+- [ ] Client portal discrepancy and advanced forecast flows.
+- [x] Client portal deterministic demand-forecast and inventory report view, including configurable lead-time and safety-stock assumptions.
+- [x] Persist branch/item lead-time and safety-stock policies with tenant-scoped read/write APIs and updater provenance.
+- [x] Apply saved policies automatically in branch-scoped forecasts, support explicit request overrides, and expose policy source per item.
+- [x] Add client portal branch selection and inline policy editing/saving; all-branch forecasts intentionally use shared overrides or zero-day defaults.
+- [x] Expose historical forecast error diagnostics through the tenant-scoped rolling-origin evaluation API.
+- [ ] Add client UI for forecast evaluation and improve stockout-censored demand validation.
+- [ ] Typed API integration and loading/error/empty states across all remaining workflows.
+- [x] Deterministic reports and forecasts load independently from optional AI status, audit-history and narrative endpoints.
 - [ ] Browser authentication and permission-aware navigation.
 - [ ] End-to-end tests for core management, field and client journeys.
 - [x] Installable React PWA shell with manifest and static-asset precaching; authenticated API responses are explicitly excluded from service-worker caching.
