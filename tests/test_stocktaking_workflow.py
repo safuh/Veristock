@@ -187,8 +187,8 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         assert invalid_evidence.status_code == 415
 
         png = bytes.fromhex(
-            "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
-            "0000000b49444154789c636000020000050001a5f645400000000049454e44ae426082"
+            "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de"
+            "0000000c49444154789c63f8cfc0000003010100c9fe92ef0000000049454e44ae426082"
         )
         uploaded_evidence = client.post(
             evidence_url,

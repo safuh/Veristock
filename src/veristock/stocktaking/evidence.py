@@ -1,5 +1,7 @@
 """Private local storage primitives for stocktake image evidence."""
 
+# ruff: noqa: I001
+
 import hashlib
 import pathlib
 import uuid
@@ -42,6 +44,7 @@ def evidence_path(root: pathlib.Path, storage_key: str) -> pathlib.Path:
 def persist_image(root: pathlib.Path, content: bytes, suffix: str) -> tuple[str, str]:
     """Persist bytes under a random name and return storage key and SHA-256 digest."""
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    root.chmod(0o700)
     storage_key = f"{uuid.uuid4().hex}{suffix}"
     destination = evidence_path(root, storage_key)
     destination.write_bytes(content)
