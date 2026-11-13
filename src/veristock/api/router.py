@@ -15,6 +15,7 @@ from .replenishment import router as replenishment_router
 from .reports import router as reports_router
 from .sales import router as sales_router
 from .stocktaking import router as stocktaking_router
+from .stocktake_evidence import router as stocktake_evidence_router
 from .workforce import router as workforce_router
 
 api_router = APIRouter()
@@ -25,6 +26,7 @@ api_router.include_router(reports_router)
 api_router.include_router(ai_audit_router)
 api_router.include_router(sales_router)
 api_router.include_router(stocktaking_router)
+api_router.include_router(stocktake_evidence_router)
 api_router.include_router(auth_router)
 api_router.include_router(identity_router)
 api_router.include_router(organizations_router)

@@ -2,6 +2,7 @@
 
 from enum import StrEnum
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -49,6 +50,8 @@ class Settings(BaseSettings):
     ai_model: str | None = None
     ai_api_key: SecretStr | None = None
     ai_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
+    stocktake_evidence_storage_dir: Path = Path(".data/stocktake-evidence")
+    stocktake_evidence_max_bytes: int = Field(default=8 * 1024 * 1024, ge=1024, le=32 * 1024 * 1024)
     cors_origins: list[str] = Field(default_factory=list)
     cors_allow_credentials: bool = False
     cors_allow_methods: list[str] = Field(

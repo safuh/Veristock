@@ -182,7 +182,7 @@ Reference documents:
 
 ### M12 — Physical stocktaking
 
-**Status: in progress — tenant-scoped branch snapshots, blind scope listing, immutable count observations, idempotent capture, complete-round submission, recount rounds and separately authorized approval-to-ledger reconciliation are implemented for client-organization counters. Veristock cross-tenant staff assignment, evidence upload and supervisor separation-of-duties enforcement remain open.**
+**Status: in progress — tenant-scoped branch snapshots, blind scope listing, immutable count observations, idempotent capture, complete-round submission, recount rounds and separately authorized approval-to-ledger reconciliation are implemented for client-organization counters. Veristock cross-tenant staff assignment, production-grade shared evidence storage/scanning and broader supervisor separation-of-duties enforcement remain open.**
 
 - [x] Stocktake creation and branch/item scope definition with frozen expected quantities.
 - [ ] Performer type: client employee or assigned Veristock employee (client-member counter access is implemented).
@@ -190,7 +190,7 @@ Reference documents:
 - [x] Client membership and permission authorization for client counters.
 - [x] Blind-count API behavior; expected quantities are withheld from blind count scope responses.
 - [x] Manual/barcode-identified item quantity capture API.
-- [ ] Image evidence upload with private storage and authorized retrieval.
+- [x] Tenant-scoped image evidence upload/retrieval for count observations, with generated private storage keys, upload-size/type checks, SHA-256 metadata and authorized retrieval.\n- [ ] Shared object-storage adapter, malware/content scanning, image re-encoding and retention lifecycle controls.
 - [ ] Vision-assisted barcode/OCR/catalogue matching with confidence and manual confirmation.
 - [ ] Batch, serial, expiry and condition capture where enabled by item policy.
 - [x] Idempotent count observations and immutable count rounds with completeness checks.

@@ -128,7 +128,7 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
     user_id, supervisor_id, org_id, branch_id, item_id = asyncio.run(seed(database_url))
     tokens = TokenService("s" * 32)
     token = tokens.create(user_id, timedelta(minutes=10), token_type="access")
-    settings = Settings(environment=Environment.TEST, database_url=database_url)
+    settings = Settings(\n        environment=Environment.TEST,\n        database_url=database_url,\n        stocktake_evidence_storage_dir=tmp_path / "private-evidence",\n    )
     headers = {
         "Authorization": f"Bearer {token}",
         "X-Organization-ID": org_id,
@@ -171,6 +171,44 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         )
         assert replay.status_code == 201
         assert replay.json()["id"] == counted.json()["id"]
+
+        evidence_url = (
+            f"/api/stocktakes/{stocktake_id}/observations/{counted.json()['id']}/evidence"
+        )
+        invalid_evidence = client.post(
+            evidence_url,
+            headers={**headers, "Content-Type": "text/plain"},
+            content=b"not an image",
+        )
+        assert invalid_evidence.status_code == 415
+
+        png = bytes.fromhex(
+            "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+            "0000000b49444154789c636000020000050001a5f645400000000049454e44ae426082"
+        )
+        uploaded_evidence = client.post(
+            evidence_url,
+            headers={**headers, "Content-Type": "image/png", "X-Filename": "../shelf.png"},
+            content=png,
+        )
+        assert uploaded_evidence.status_code == 201
+        evidence = uploaded_evidence.json()
+        assert evidence["original_filename"] == "shelf.png"
+        assert evidence["media_type"] == "image/png"
+        assert evidence["byte_size"] == len(png)
+        assert len(evidence["sha256_digest"]) == 64
+
+        listed_evidence = client.get(evidence_url, headers=headers)
+        assert listed_evidence.status_code == 200
+        assert [entry["id"] for entry in listed_evidence.json()] == [evidence["id"]]
+        downloaded_evidence = client.get(
+            f"/api/stocktakes/{stocktake_id}/evidence/{evidence['id']}/content",
+            headers=headers,
+        )
+        assert downloaded_evidence.status_code == 200
+        assert downloaded_evidence.content == png
+        assert downloaded_evidence.headers["x-content-type-options"] == "nosniff"
+        assert downloaded_evidence.headers["cache-control"] == "private, no-store"
 
         submitted = client.post(f"/api/stocktakes/{stocktake_id}/submit", headers=headers)
         assert submitted.status_code == 200

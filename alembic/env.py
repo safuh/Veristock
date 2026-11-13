@@ -29,6 +29,7 @@ from veristock.organizations.models import (
     OrganizationEnrollment,  # noqa: F401
 )
 from veristock.stocktaking import models as stocktaking_models  # noqa: F401
+from veristock.stocktaking import evidence_models as stocktake_evidence_models  # noqa: F401
 from veristock.workforce.models import EmployeeProfile  # noqa: F401
 
 config = context.config
