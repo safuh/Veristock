@@ -126,6 +126,7 @@ export function ReportsPanel({
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [aiError, setAiError] = useState("");
   const [notice, setNotice] = useState("");
   const [branchId, setBranchId] = useState("");
   const [policyDrafts, setPolicyDrafts] = useState<
@@ -136,16 +137,12 @@ export function ReportsPanel({
   const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
+    setAiError("");
     try {
-      const [snapshot, activity, aiStatus, demand, organizationContext] = await Promise.all([
+      // Core reporting is deterministic and never depends on an AI service.
+      const [snapshot, demand, organizationContext] = await Promise.all([
         apiRequest<OrganizationReport>(
           "/reports/inventory/summary", token, organizationId,
-        ),
-        apiRequest<AIExecution[]>(
-          "/reports/ai-executions?limit=10", token, organizationId,
-        ),
-        apiRequest<AIProviderStatus>(
-          "/reports/ai-provider/status", token, organizationId,
         ),
         apiRequest<DemandForecast>(
           `/reports/inventory/demand-forecast?lookback_days=30&target_days=14${branchId ? `&branch_id=${encodeURIComponent(branchId)}` : ""}`,
@@ -155,10 +152,33 @@ export function ReportsPanel({
         apiRequest<OrganizationContext>("/identity/context", token, organizationId),
       ]);
       setReport(snapshot);
-      setExecutions(activity);
-      setProviderStatus(aiStatus);
       setForecast(demand);
       setCanManageInventory(organizationContext.can_manage_inventory);
+
+      // AI configuration and audit history are optional enhancements. Their
+      // failure must not hide deterministic inventory reports or forecasts.
+      const [activityResult, statusResult] = await Promise.allSettled([
+        apiRequest<AIExecution[]>(
+          "/reports/ai-executions?limit=10", token, organizationId,
+        ),
+        apiRequest<AIProviderStatus>(
+          "/reports/ai-provider/status", token, organizationId,
+        ),
+      ]);
+      setExecutions(
+        activityResult.status === "fulfilled" ? activityResult.value : [],
+      );
+      setProviderStatus(
+        statusResult.status === "fulfilled" ? statusResult.value : null,
+      );
+      if (
+        activityResult.status === "rejected" ||
+        statusResult.status === "rejected"
+      ) {
+        setAiError(
+          "AI status or activity is unavailable. Core reports and forecasts remain available.",
+        );
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load reports");
     } finally {
@@ -206,7 +226,7 @@ export function ReportsPanel({
 
   const generateNarrative = async () => {
     setGenerating(true);
-    setError("");
+    setAiError("");
     setNotice("");
     try {
       const result = await apiRequest<NarrativeResponse>(
@@ -216,8 +236,11 @@ export function ReportsPanel({
       setNotice("Advisory narrative generated from the current inventory snapshot.");
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Narrative generation failed");
-      await refresh();
+      setAiError(
+        reason instanceof Error
+          ? reason.message
+          : "Narrative generation failed. Core reports remain available.",
+      );
     } finally {
       setGenerating(false);
     }
@@ -237,6 +260,7 @@ export function ReportsPanel({
       </div>
 
       {error && <div className="alert" role="alert">{error}</div>}
+      {aiError && <div className="alert" role="status">{aiError} AI is optional and does not affect core operations.</div>}
       {notice && <div className="success" role="status">{notice}</div>}
 
       {loading && !report ? <div className="loading">Loading reporting data…</div> : report && (
@@ -319,14 +343,15 @@ export function ReportsPanel({
       </>}
       <div className="panel-heading">
         <div><p className="eyebrow">AI-ASSISTED ANALYSIS</p><h3>Inventory narrative</h3>
-          <p className="muted">AI can explain authorized report metrics. It cannot change stock or post transactions.</p>
+          <p className="muted">Optional advisory only. Inventory totals, forecasts, sales and stocktaking work independently of AI.</p>
           {providerStatus && <p className="footnote" role="status">
             AI provider: {providerStatus.configured
               ? `configured · ${providerStatus.provider} / ${providerStatus.model}`
-              : "not configured"}
-          </p>}</div>
-        <button className="primary" disabled={generating || loading || !report} onClick={() => void generateNarrative()}>
-          {generating ? "Generating…" : "Generate narrative"}
+              : "not configured — core reporting is unaffected"}
+          </p>}
+          {!providerStatus && <p className="footnote">AI status unavailable. Deterministic reports continue normally.</p>}</div>
+        <button className="primary" disabled={generating || loading || !report || providerStatus?.configured !== true} onClick={() => void generateNarrative()}>
+          {generating ? "Generating…" : providerStatus?.configured === true ? "Generate narrative" : "AI unavailable"}
         </button>
       </div>
       {narrative && (
@@ -347,7 +372,7 @@ export function ReportsPanel({
 
       <div className="panel-heading">
         <div><p className="eyebrow">GOVERNANCE</p><h3>Recent AI activity</h3>
-          <p className="muted">Execution metadata for this organization only.</p></div>
+          <p className="muted">Optional execution metadata for this organization only.</p></div>
       </div>
       <div className="table-wrap">
         <table>

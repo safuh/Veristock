@@ -1,10 +1,10 @@
 # Veristock One
 
-Veristock One is the inventory verification and stocktaking platform for Veristock Inventory Solutions Ltd. The target MVP includes a FastAPI backend and three browser workspaces: Veristock management, field operations and the client portal. The current implementation provides the initial management and client workspaces; the field workspace is still planned.
+Veristock One is the inventory verification and stocktaking platform for Veristock Inventory Solutions Ltd. The target MVP includes a FastAPI backend and three browser workspaces: Veristock management, field operations and the client portal. The current React application provides initial management and client workspaces; the responsive browser field workspace remains planned, while a separate Flutter Android field app supports online stocktake capture.
 
 **Architecture:** Modular monolith · FastAPI · Python · SQLAlchemy 2.x · Alembic · PostgreSQL · React + TypeScript
 
-**AI policy:** AI contracts, provider-neutral narrative execution, tenant-scoped execution audit persistence and the first inventory narrative API are implemented. No hosted model provider is enabled by default. An optional OpenAI-compatible adapter can be enabled for compatible hosted gateways or self-hosted Ollama endpoints; no vendor SDK is required.
+**AI policy:** AI is optional and disabled by default. Core authentication, inventory, sales, stocktaking, approval, reconciliation, reporting and deterministic forecasting must operate without any model provider, API key or AI network call. AI is limited to advisory enhancements; AI failure must never block core operations or directly mutate business records. Provider-neutral narrative execution and tenant-scoped execution audit persistence are implemented. An optional OpenAI-compatible adapter can be enabled for compatible hosted gateways or self-hosted Ollama endpoints; no vendor SDK is required.
 
 ## Current implementation status
 
@@ -57,7 +57,11 @@ make check
 make run
 ```
 
-API documentation is available at http://127.0.0.1:8000/docs.\n\nTo enable optional AI narrative generation, install the HTTP adapter and configure `AI_PROVIDER`, `AI_BASE_URL`, and `AI_MODEL` in `.env` (plus `AI_API_KEY` when your endpoint requires it), then restart the API:\n\n```bash\nuv sync --extra dev\n```\n\nLeave `AI_PROVIDER` unset to keep AI disabled. For a local Ollama-compatible endpoint, the base URL is commonly `http://localhost:11434/v1`; select a model already pulled by your Ollama instance. Provider configuration is server-side only and should never be exposed to client browsers.
+API documentation is available at http://127.0.0.1:8000/docs.
+
+### Optional AI configuration
+
+AI is not required to install, start or use Veristock. Leave `AI_PROVIDER` unset to keep all core features deterministic and AI-free. To enable advisory inventory narratives, configure `AI_PROVIDER=openai-compatible`, `AI_BASE_URL` and `AI_MODEL` in `.env` (plus `AI_API_KEY` when your endpoint requires it), then restart the API. For an Ollama-compatible endpoint, the base URL is commonly `http://localhost:11434/v1`; select a model already pulled by your Ollama instance. Provider configuration is server-side only and must never be exposed to client browsers.
 
 In a second terminal, run the browser application:
 

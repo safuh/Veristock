@@ -175,7 +175,8 @@ Reference documents:
 - [x] Client portal/API sales entry with line items and posting validation.
 - [x] Atomic sale + stock-out movement posting with idempotency.
 - [ ] Reversal/correction workflow; no direct edits to posted sales or movements.
-- [x] Initial tenant-scoped inventory catalogue and stock-on-hand read APIs.\n- [ ] Tenant/branch-scoped inventory search, pagination and filtering beyond the initial read endpoints.
+- [x] Initial tenant-scoped inventory catalogue and stock-on-hand read APIs.
+- [ ] Tenant/branch-scoped inventory search, pagination and filtering beyond the initial read endpoints.
 - [ ] Permission matrix and cross-tenant tests for inventory and sales.
 
 **MVP boundary:** no purchase orders, goods-received notes, invoice ingestion, supplier integrations or POS integrations. The sales portal is the initial source of demand/stock-out history for reporting and forecasting.
@@ -190,7 +191,8 @@ Reference documents:
 - [x] Client membership and permission authorization for client counters.
 - [x] Blind-count API behavior; expected quantities are withheld from blind count scope responses.
 - [x] Manual/barcode-identified item quantity capture API.
-- [x] Tenant-scoped image evidence upload/retrieval for count observations, with generated private storage keys, upload-size/type checks, SHA-256 metadata and authorized retrieval.\n- [ ] Shared object-storage adapter, malware/content scanning, image re-encoding and retention lifecycle controls.
+- [x] Tenant-scoped image evidence upload/retrieval for count observations, with generated private storage keys, upload-size/type checks, SHA-256 metadata and authorized retrieval.
+- [ ] Shared object-storage adapter, malware/content scanning, image re-encoding and retention lifecycle controls.
 - [ ] Vision-assisted barcode/OCR/catalogue matching with confidence and manual confirmation.
 - [ ] Batch, serial, expiry and condition capture where enabled by item policy.
 - [x] Idempotent count observations and immutable count rounds with completeness checks.
@@ -227,19 +229,19 @@ Reference documents:
 - [ ] Configured service levels, order multiples and minimum order quantities.
 - [ ] Report period, filters, generation timestamp and source watermark are recorded.
 - [ ] PDF/spreadsheet exports from deterministic query results.
-- [ ] Optional LLM narrative grounded only in authorized, precomputed metrics.
+- [x] Optional LLM narrative grounded only in authorized, precomputed metrics.
 - [ ] Tenant-scoped reporting permissions and cross-tenant tests.
-- [ ] Reports remain available when AI providers are unavailable.
+- [x] Deterministic report and forecast APIs remain available when AI is unconfigured or unavailable; the React report panel treats AI status, audit history and narrative generation as optional.
 
 ### M14A — AI platform foundations
 
-- [ ] Separate `veristock.ai` package with provider-neutral interfaces.
-- [ ] Model/provider configuration and safe timeouts; no provider secrets in domain modules.
-- [ ] Structured outputs validated with Pydantic.
+- [x] Separate `veristock.ai` package with provider-neutral interfaces.
+- [x] Model/provider configuration and safe timeouts; no provider secrets in domain modules.
+- [x] Structured AI narrative contracts validated with Pydantic.
 - [ ] Model/version, confidence, latency and failure metadata recorded.
 - [ ] Evaluation fixtures for OCR/matching, forecasts, anomaly signals and report narratives.
 - [ ] Human approval for any proposed action that can affect stock or business decisions.
-- [ ] AI failure isolation: inventory, sales, counting and deterministic reporting continue without AI.
+- [x] Core inventory, sales, counting, approvals and deterministic reporting do not require AI; AI status/history failures are isolated from the React report panel.
 
 ### M15 — Browser workspaces
 
@@ -261,7 +263,8 @@ Reference documents:
 - [x] Add client portal branch selection and inline policy editing/saving; all-branch forecasts intentionally use shared overrides or zero-day defaults.
 - [x] Expose historical forecast error diagnostics through the tenant-scoped rolling-origin evaluation API.
 - [ ] Add client UI for forecast evaluation and improve stockout-censored demand validation.
-- [ ] Typed API integration and loading/error/empty states.
+- [ ] Typed API integration and loading/error/empty states across all remaining workflows.
+- [x] Deterministic reports and forecasts load independently from optional AI status, audit-history and narrative endpoints.
 - [ ] Browser authentication and permission-aware navigation.
 - [ ] End-to-end tests for core management, field and client journeys.
 - [x] Installable React PWA shell with manifest and static-asset precaching; authenticated API responses are explicitly excluded from service-worker caching.
