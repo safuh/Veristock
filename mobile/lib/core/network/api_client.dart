@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -84,7 +86,7 @@ class ApiClient {
         .cast<Map<String, dynamic>>();
   }
 
-  Future<void> recordCount({
+  Future<Map<String, dynamic>> recordCount({
     required String organizationId,
     required String stocktakeId,
     required String itemId,
@@ -93,7 +95,7 @@ class ApiClient {
   }) async {
     final token = await _requiredAccessToken();
     final operationId = DateTime.now().toUtc().microsecondsSinceEpoch;
-    await _dio.post<void>(
+    final response = await _dio.post<Map<String, dynamic>>(
       '/stocktakes/$stocktakeId/observations',
       data: {
         'item_id': itemId,
@@ -105,6 +107,30 @@ class ApiClient {
         'Authorization': 'Bearer $token',
         'X-Organization-ID': organizationId,
       }),
+    );
+    return response.data!;
+  }
+
+  Future<void> uploadCountEvidence({
+    required String organizationId,
+    required String stocktakeId,
+    required String observationId,
+    required String filename,
+    required String mediaType,
+    required Uint8List bytes,
+  }) async {
+    final token = await _requiredAccessToken();
+    await _dio.post<void>(
+      '/stocktakes/$stocktakeId/observations/$observationId/evidence',
+      queryParameters: {'filename': filename},
+      data: bytes,
+      options: Options(
+        contentType: mediaType,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'X-Organization-ID': organizationId,
+        },
+      ),
     );
   }
 
