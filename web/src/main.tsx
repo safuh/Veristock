@@ -340,6 +340,9 @@ type StocktakeRecord = {
 type StocktakeScopeItem = {
   item_id: string; sku: string; barcode: string; name: string; unit_code: string;
 };
+type StocktakeEvidenceRecord = {
+  id: string; original_filename: string | null; media_type: string; byte_size: number;
+};
 type StocktakeReviewItem = {
   stocktake_id: string;
   reference: string;
@@ -398,6 +401,8 @@ function ClientDashboard({ token, organization }: { token: string; organization:
   const [stocktakeScope, setStocktakeScope] = useState<StocktakeScopeItem[]>([]);
   const [countValues, setCountValues] = useState<Record<string, string>>({});
   const [recordedCounts, setRecordedCounts] = useState<Set<string>>(new Set());
+  const [observationIds, setObservationIds] = useState<Record<string, string>>({});
+  const [evidenceByItem, setEvidenceByItem] = useState<Record<string, StocktakeEvidenceRecord[]>>({});
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -512,6 +517,8 @@ function ClientDashboard({ token, organization }: { token: string; organization:
     setStocktakeScope(scope);
     setCountValues({});
     setRecordedCounts(new Set());
+    setObservationIds({});
+    setEvidenceByItem({});
     setStocktakeReference("");
   }, "Stocktake opened. Expected quantities are hidden from counters.");
 
@@ -520,15 +527,53 @@ function ClientDashboard({ token, organization }: { token: string; organization:
     if (quantity === undefined || quantity.trim() === "") {
       throw new Error("Enter a physical quantity before saving this count.");
     }
-    await request(`/stocktakes/${activeStocktake}/observations`, token, organization.id, {
-      method: "POST",
-      body: JSON.stringify({
-        item_id: item.item_id, counted_quantity: quantity, unit_code: item.unit_code,
-        idempotency_key: crypto.randomUUID(),
-      }),
-    });
+    const observation = await request<{ id: string }>(
+      `/stocktakes/${activeStocktake}/observations`, token, organization.id, {
+        method: "POST",
+        body: JSON.stringify({
+          item_id: item.item_id, counted_quantity: quantity, unit_code: item.unit_code,
+          idempotency_key: crypto.randomUUID(),
+        }),
+      },
+    );
+    setObservationIds((current) => ({ ...current, [item.item_id]: observation.id }));
     setRecordedCounts((current) => new Set(current).add(item.item_id));
   }, `Count recorded for ${item.name}.`);
+
+  const uploadCountEvidence = (
+    item: StocktakeScopeItem,
+    file: File,
+  ) => perform(async () => {
+    const observationId = observationIds[item.item_id];
+    if (!activeStocktake || !observationId) {
+      throw new Error("Save the physical count before attaching evidence.");
+    }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      throw new Error("Choose a JPEG, PNG or WebP image.");
+    }
+    const response = await fetch(
+      `${API}/stocktakes/${encodeURIComponent(activeStocktake)}/observations/${encodeURIComponent(observationId)}/evidence?filename=${encodeURIComponent(file.name)}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Organization-ID": organization.id,
+          "Content-Type": file.type,
+        },
+        body: file,
+        credentials: "include",
+      },
+    );
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as { detail?: string };
+      throw new Error(payload.detail ?? `Evidence upload failed (${response.status})`);
+    }
+    const evidence = await response.json() as StocktakeEvidenceRecord;
+    setEvidenceByItem((current) => ({
+      ...current,
+      [item.item_id]: [...(current[item.item_id] ?? []), evidence],
+    }));
+  }, `Evidence attached to the count for ${item.name}.`);
 
   const submitStocktake = () => perform(async () => {
     if (!activeStocktake) return;
@@ -690,6 +735,26 @@ function ClientDashboard({ token, organization }: { token: string; organization:
             value={countValues[item.item_id] ?? ""} onChange={(e) => setCountValues((current) => ({ ...current, [item.item_id]: e.target.value }))} />
           <button className="secondary" disabled={busy || recordedCounts.has(item.item_id) || countValues[item.item_id] === undefined || countValues[item.item_id].trim() === ""}
             onClick={() => void recordCount(item)}>{recordedCounts.has(item.item_id) ? "Count saved" : "Save count"}</button>
+          {(recordedCounts.has(item.item_id) || (evidenceByItem[item.item_id] ?? []).length > 0) && <div className="count-evidence">
+            {recordedCounts.has(item.item_id) && <label className="secondary evidence-upload">
+              Add photo evidence
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={busy}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  if (file) void uploadCountEvidence(item, file);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>}
+            {(evidenceByItem[item.item_id] ?? []).map((evidence) => (
+              <small className="muted" key={evidence.id}>
+                {evidence.original_filename ?? "Evidence image"} · {(evidence.byte_size / 1024).toFixed(1)} KB
+              </small>
+            ))}
+          </div>}
         </div>)}
       </div>}
       <div className="table-wrap"><table><thead><tr><th>REFERENCE</th><th>CREATED</th><th>ITEMS</th><th>STATUS</th></tr></thead>
