@@ -1,6 +1,5 @@
-"""Private local storage primitives for stocktake image evidence."""
-
 # ruff: noqa: I001
+"""Private local storage primitives for stocktake image evidence."""
 
 import hashlib
 import pathlib
