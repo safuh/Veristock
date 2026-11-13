@@ -732,7 +732,7 @@ function ClientDashboard({ token, organization }: { token: string; organization:
             {historyStocktakeId === entry.stocktake_id && <div className="decision-history">
               {(decisionHistory[entry.stocktake_id] ?? []).map((decision) => <div key={decision.id}>
                 <strong>{decision.action.replaceAll("_", " ")}</strong>
-                <small>{decision.reason_code ? statusLabel(decision.reason_code) : "No reason required"} · {new Date(decision.created_at).toLocaleString()}</small>
+                <small>{decision.reason_code ? decision.reason_code.replaceAll("_", " ") : "No reason required"} · {new Date(decision.created_at).toLocaleString()}</small>
                 {decision.reason && <p>{decision.reason}</p>}
               </div>)}
               {decisionHistory[entry.stocktake_id]?.length === 0 && <p className="muted">No supervisor decisions recorded yet.</p>}
