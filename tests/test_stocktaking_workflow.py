@@ -321,6 +321,16 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         )
         assert same_user_approval.status_code == 409
 
+        cannot_reject_own_count = client.post(
+            f"/api/stocktakes/{stocktake_id}/reject",
+            headers=headers,
+            json={
+                "reason_code": "variance_unexplained",
+                "reason": "This counter cannot independently reject their own count.",
+            },
+        )
+        assert cannot_reject_own_count.status_code == 409
+
         approved = client.post(
             f"/api/stocktakes/{stocktake_id}/approve", headers=supervisor_headers
         )
