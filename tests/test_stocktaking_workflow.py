@@ -188,6 +188,12 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
             headers=supervisor_headers,
         )
         assert missing_rejection_reason.status_code == 422
+        whitespace_rejection_reason = client.post(
+            f"/api/stocktakes/{stocktake_id}/reject",
+            headers=supervisor_headers,
+            json={"reason_code": "other", "reason": "          "},
+        )
+        assert whitespace_rejection_reason.status_code == 422
         rejected = client.post(
             f"/api/stocktakes/{stocktake_id}/reject",
             headers=supervisor_headers,
@@ -221,6 +227,12 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
             headers=headers,
         )
         assert missing_reason.status_code == 422
+        whitespace_recount_reason = client.post(
+            f"/api/stocktakes/{stocktake_id}/recount",
+            headers=headers,
+            json={"reason_code": "other", "reason": "          "},
+        )
+        assert whitespace_recount_reason.status_code == 422
 
         recount = client.post(
             f"/api/stocktakes/{stocktake_id}/recount",

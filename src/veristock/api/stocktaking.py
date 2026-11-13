@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -380,7 +380,10 @@ StocktakeRecountReasonCode = Literal[
 
 class StocktakeRecountRequest(BaseModel):
     reason_code: StocktakeRecountReasonCode
-    reason: str = Field(min_length=10, max_length=500)
+    reason: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=10, max_length=500),
+    ]
 
 
 class StocktakeRejectRequest(BaseModel):
@@ -391,7 +394,10 @@ class StocktakeRejectRequest(BaseModel):
         "scope_or_unit_error",
         "other",
     ]
-    reason: str = Field(min_length=10, max_length=500)
+    reason: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=10, max_length=500),
+    ]
 
 
 class StocktakeDecisionRead(BaseModel):

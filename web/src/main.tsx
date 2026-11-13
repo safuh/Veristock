@@ -546,7 +546,7 @@ function ClientDashboard({ token, organization }: { token: string; organization:
         `/stocktakes/${encodeURIComponent(stocktakeId)}/approve`,
         token,
         organization.id,
-        { method: "POST", body: JSON.stringify({}) },
+        { method: "POST" },
       );
       setDecisionHistory((current) => {
         const next = { ...current };
