@@ -1,8 +1,8 @@
 """Private local storage primitives for stocktake image evidence."""
 
-from hashlib import sha256
-from pathlib import Path
-from uuid import uuid4
+import hashlib
+import pathlib
+import uuid
 
 
 ALLOWED_IMAGE_TYPES = {
@@ -30,20 +30,20 @@ def inspect_image(content: bytes, declared_type: str) -> tuple[str, str]:
     return declared_type, suffix
 
 
-def evidence_path(root: Path, storage_key: str) -> Path:
+def evidence_path(root: pathlib.Path, storage_key: str) -> pathlib.Path:
     """Resolve a generated storage key without permitting path traversal."""
     candidate = (root / storage_key).resolve()
     resolved_root = root.resolve()
-    if candidate.parent != resolved_root or Path(storage_key).name != storage_key:
+    if candidate.parent != resolved_root or pathlib.Path(storage_key).name != storage_key:
         raise EvidenceValidationError("Invalid evidence storage key")
     return candidate
 
 
-def persist_image(root: Path, content: bytes, suffix: str) -> tuple[str, str]:
+def persist_image(root: pathlib.Path, content: bytes, suffix: str) -> tuple[str, str]:
     """Persist bytes under a random name and return storage key and SHA-256 digest."""
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
-    storage_key = f"{uuid4().hex}{suffix}"
+    storage_key = f"{uuid.uuid4().hex}{suffix}"
     destination = evidence_path(root, storage_key)
     destination.write_bytes(content)
     destination.chmod(0o600)
-    return storage_key, sha256(content).hexdigest()
+    return storage_key, hashlib.sha256(content).hexdigest()

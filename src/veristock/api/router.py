@@ -14,8 +14,8 @@ from .organizations import router as organizations_router
 from .replenishment import router as replenishment_router
 from .reports import router as reports_router
 from .sales import router as sales_router
-from .stocktaking import router as stocktaking_router
 from .stocktake_evidence import router as stocktake_evidence_router
+from .stocktaking import router as stocktaking_router
 from .workforce import router as workforce_router
 
 api_router = APIRouter()

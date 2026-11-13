@@ -128,7 +128,11 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
     user_id, supervisor_id, org_id, branch_id, item_id = asyncio.run(seed(database_url))
     tokens = TokenService("s" * 32)
     token = tokens.create(user_id, timedelta(minutes=10), token_type="access")
-    settings = Settings(\n        environment=Environment.TEST,\n        database_url=database_url,\n        stocktake_evidence_storage_dir=tmp_path / "private-evidence",\n    )
+    settings = Settings(
+        environment=Environment.TEST,
+        database_url=database_url,
+        stocktake_evidence_storage_dir=tmp_path / "private-evidence",
+    )
     headers = {
         "Authorization": f"Bearer {token}",
         "X-Organization-ID": org_id,
