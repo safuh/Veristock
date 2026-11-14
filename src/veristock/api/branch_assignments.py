@@ -1,5 +1,6 @@
 """Tenant-scoped staff-to-branch assignment administration."""
 
+from datetime import datetime
 from typing import Annotated
 from uuid import uuid4
 
@@ -32,7 +33,7 @@ class BranchMemberRead(BaseModel):
     membership_id: str
     user_id: str
     identifier: str
-    assigned_at: str
+    assigned_at: datetime
 
 
 @router.get("", response_model=list[BranchMemberRead])
@@ -70,7 +71,7 @@ async def list_branch_members(
             membership_id=membership.id,
             user_id=user.id,
             identifier=user.identifier,
-            assigned_at=assignment.created_at.isoformat(),
+            assigned_at=assignment.created_at,
         )
         for assignment, membership, user in rows
     ]
@@ -119,12 +120,13 @@ async def assign_branch_member(
     except IntegrityError as exc:
         await session.rollback()
         raise HTTPException(status_code=409, detail="Member is already assigned to this branch") from exc
+    await session.refresh(assignment)
     user = await session.get(User, membership.user_id)
     return BranchMemberRead(
         membership_id=membership.id,
         user_id=membership.user_id,
         identifier=user.identifier if user else "",
-        assigned_at=assignment.created_at.isoformat() if assignment.created_at else "",
+        assigned_at=assignment.created_at,
     )
 
 

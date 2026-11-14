@@ -5,6 +5,7 @@ Revises: 0019_stocktake_evidence
 """
 
 from collections.abc import Sequence
+from uuid import uuid4
 
 import sqlalchemy as sa
 from alembic import op
@@ -68,9 +69,13 @@ def upgrade() -> None:
             bind.execute(
                 sa.text(
                     "INSERT INTO role_permissions (id, role_id, permission_id) "
-                    "VALUES (lower(hex(randomblob(16))), :role_id, :permission_id)"
+                    "VALUES (:id, :role_id, :permission_id)"
                 ),
-                {"role_id": role_id, "permission_id": permission_id},
+                {
+                    "id": str(uuid4()),
+                    "role_id": role_id,
+                    "permission_id": permission_id,
+                },
             )
 
 

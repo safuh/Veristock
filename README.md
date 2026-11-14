@@ -14,6 +14,7 @@ Implemented capabilities:
 
 - Organization enrollment, platform-side review and client organization provisioning.
 - Tenant-scoped organizations, branches, contacts, memberships, roles and permission checks.
+- Explicit branch staff assignments with tenant-scoped membership validation, duplicate protection, assignment provenance and client-administrator management APIs.
 - JWT authentication, browser refresh-cookie flow, identity context and platform administration APIs.
 - Tenant-scoped inventory catalogue creation, stock-on-hand reads and branch opening balances.
 - Append-only stock movement records for opening balances and posted sales.
@@ -30,6 +31,7 @@ Implemented capabilities:
 
 Important MVP boundaries still being completed:
 
+- Enforce branch assignments consistently across every inventory, sales, stocktake, reporting and evidence operation; assignment records and management APIs are implemented, while branch-level authorization enforcement remains in progress.
 - Veristock staff cross-tenant stocktake assignment and evidence upload.
 - Read-only stocktake reconciliation now compares the frozen expected snapshot with the latest submitted count, classifies shortages/surpluses/matches and displays post-count movement context. A tenant-scoped supervisor review queue now lists submitted stocktakes with branch, latest-round and shortage/surplus totals; recount requests now require a standardized reason code and explanation, and recount, rejection and approval actions are exposed through an audited decision history; the client portal provides a permission-gated supervisor queue with variance summaries, approval, reason-coded rejection and decision-history review. Supervisor rejection requires a reason and reopens the stocktake in a new immutable count round. Discrepancy resolution and controlled correction remain outstanding. Physical stocktake approval posts approved variances to the stock movement ledger.
 - Richer reporting, supplier master data, broader forecast evaluation and anomaly detection. Initial rolling-origin evaluation is available for a selected item/branch; portfolio-wide accuracy and seasonality remain outstanding. Persisted branch/item replenishment policies are applied automatically in branch forecasts.
