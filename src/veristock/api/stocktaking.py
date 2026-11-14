@@ -12,8 +12,8 @@ from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from veristock.identity.authorization import Organization
 from veristock.api.branch_access import require_branch_assignment
+from veristock.identity.authorization import Organization
 from veristock.identity.authorization_dependencies import (
     get_current_user,
     get_db_session,

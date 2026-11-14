@@ -12,8 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import FileResponse
 
-from veristock.core.config import Settings
 from veristock.api.branch_access import require_branch_assignment
+from veristock.core.config import Settings
 from veristock.identity.authorization import Organization
 from veristock.identity.authorization_dependencies import (
     get_current_user,
