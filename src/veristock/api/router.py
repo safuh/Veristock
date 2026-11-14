@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from .ai_audit import router as ai_audit_router
 from .auth import router as auth_router
+from .branch_assignments import router as branch_assignments_router
 from .health import router as health_router
 from .identity import router as identity_router
 from .inventory import router as inventory_router
@@ -33,5 +34,5 @@ api_router.include_router(organizations_router)
 api_router.include_router(workforce_router)
 api_router.include_router(invitations_router)
 api_router.include_router(memberships_router)
-
+api_router.include_router(branch_assignments_router)
 api_router.include_router(organization_enrollments_router)
