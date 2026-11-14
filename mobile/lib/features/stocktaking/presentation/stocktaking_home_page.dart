@@ -245,6 +245,7 @@ class _StocktakeCountPageState extends State<StocktakeCountPage> {
   final Map<String, TextEditingController> _quantities = {};
   final Set<String> _saved = {};
   final Map<String, String> _observationIds = {};
+  final Map<String, String> _idempotencyKeys = {};
   final Map<String, List<String>> _evidenceNames = {};
   final ImagePicker _imagePicker = ImagePicker();
   String? _matchedItemId;
@@ -265,16 +266,53 @@ class _StocktakeCountPageState extends State<StocktakeCountPage> {
 
   Future<void> _loadScope() async {
     try {
+      final stocktakeId = widget.stocktake['id'] as String;
       final scope = await widget.apiClient.stocktakeScope(
         widget.organizationId,
-        widget.stocktake['id'] as String,
+        stocktakeId,
       );
+      final observations = await widget.apiClient.myStocktakeObservations(
+        widget.organizationId,
+        stocktakeId,
+      );
+      final byItem = {
+        for (final observation in observations)
+          observation['item_id'] as String: observation,
+      };
+      final restoredEvidence = <String, List<String>>{};
       for (final item in scope) {
-        _quantities[item['item_id'] as String] = TextEditingController();
+        final itemId = item['item_id'] as String;
+        final observation = byItem[itemId];
+        _quantities[itemId] = TextEditingController(
+          text: observation == null
+              ? ''
+              : observation['counted_quantity'].toString(),
+        );
+        if (observation != null) {
+          _saved.add(itemId);
+          final observationId = observation['id'] as String;
+          _observationIds[itemId] = observationId;
+          final evidence = await widget.apiClient.listCountEvidence(
+            organizationId: widget.organizationId,
+            stocktakeId: stocktakeId,
+            observationId: observationId,
+          );
+          restoredEvidence[itemId] = evidence
+              .map((record) =>
+                  record['original_filename'] as String? ?? 'Evidence image')
+              .toList();
+        }
       }
-      if (mounted) setState(() => _scope = scope);
+      if (mounted) {
+        setState(() {
+          _scope = scope;
+          _evidenceNames.addAll(restoredEvidence);
+        });
+      }
     } on DioException catch (error) {
       if (mounted) setState(() => _error = _message(error));
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -334,6 +372,10 @@ class _StocktakeCountPageState extends State<StocktakeCountPage> {
         itemId: itemId,
         quantity: quantity,
         unitCode: item['unit_code'] as String,
+        idempotencyKey: _idempotencyKeys.putIfAbsent(
+          itemId,
+          () => 'mobile-${widget.stocktake['id']}-$itemId-${DateTime.now().toUtc().microsecondsSinceEpoch}',
+        ),
       );
       if (mounted) {
         setState(() {

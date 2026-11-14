@@ -86,22 +86,53 @@ class ApiClient {
         .cast<Map<String, dynamic>>();
   }
 
+  Future<List<Map<String, dynamic>>> myStocktakeObservations(
+    String organizationId,
+    String stocktakeId,
+  ) async {
+    final token = await _requiredAccessToken();
+    final response = await _dio.get<List<dynamic>>(
+      '/stocktakes/$stocktakeId/my-observations',
+      options: Options(headers: {
+        'Authorization': 'Bearer $token',
+        'X-Organization-ID': organizationId,
+      }),
+    );
+    return (response.data ?? const []).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> listCountEvidence({
+    required String organizationId,
+    required String stocktakeId,
+    required String observationId,
+  }) async {
+    final token = await _requiredAccessToken();
+    final response = await _dio.get<List<dynamic>>(
+      '/stocktakes/$stocktakeId/observations/$observationId/evidence',
+      options: Options(headers: {
+        'Authorization': 'Bearer $token',
+        'X-Organization-ID': organizationId,
+      }),
+    );
+    return (response.data ?? const []).cast<Map<String, dynamic>>();
+  }
+
   Future<Map<String, dynamic>> recordCount({
     required String organizationId,
     required String stocktakeId,
     required String itemId,
     required String quantity,
     required String unitCode,
+    required String idempotencyKey,
   }) async {
     final token = await _requiredAccessToken();
-    final operationId = DateTime.now().toUtc().microsecondsSinceEpoch;
     final response = await _dio.post<Map<String, dynamic>>(
       '/stocktakes/$stocktakeId/observations',
       data: {
         'item_id': itemId,
         'counted_quantity': quantity,
         'unit_code': unitCode,
-        'idempotency_key': 'mobile-$operationId',
+        'idempotency_key': idempotencyKey,
       },
       options: Options(headers: {
         'Authorization': 'Bearer $token',

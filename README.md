@@ -20,7 +20,7 @@ Implemented capabilities:
 - Idempotent, atomic sales posting with unit validation and insufficient-stock protection.
 - Physical stocktake creation with frozen branch/item expected quantities, blind count scope, immutable count observations, optional JPEG/PNG/WebP photo evidence, complete-round submission and recount rounds.
 - React client workspace flows for item creation, opening balances, sales and stocktaking.
-- Flutter Android field workflows for open stocktake retrieval, barcode matching, count capture, optional photo evidence upload and round submission.
+- Flutter Android field workflows for open stocktake retrieval, barcode matching, count capture, optional photo evidence upload and round submission. The field app restores the signed-in counter's own saved observations and attached-evidence metadata after reopening a stocktake; it does not expose other counters' in-progress blind counts.
 - Installable PWA shell; service-worker caching is limited to static assets and does not cache authenticated API responses.
 - Tenant-scoped deterministic inventory summary reporting, including branch totals and traceable source metrics.
 - Tenant-scoped demand planning endpoint and client reporting table using posted sales velocity, current stock, days of cover, lead-time and safety-stock assumptions, and a configurable target coverage horizon. Branch/item replenishment policies are persisted through permission-protected APIs with actor provenance and applied automatically in branch-scoped forecasts; explicit request overrides take precedence. The client portal supports branch selection and inline policy management.

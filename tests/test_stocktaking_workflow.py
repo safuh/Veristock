@@ -176,6 +176,31 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         assert replay.status_code == 201
         assert replay.json()["id"] == counted.json()["id"]
 
+        own_observations = client.get(
+            f"/api/stocktakes/{stocktake_id}/my-observations",
+            headers=headers,
+        )
+        assert own_observations.status_code == 200
+        assert len(own_observations.json()) == 1
+        assert own_observations.json()[0]["id"] == counted.json()["id"]
+        assert own_observations.json()[0]["counted_quantity"] == "12.0000"
+
+        other_counter_view = client.get(
+            f"/api/stocktakes/{stocktake_id}/my-observations",
+            headers={
+                "Authorization": (
+                    "Bearer "
+                    + tokens.create(
+                        supervisor_id,
+                        timedelta(minutes=10),
+                        token_type="access",
+                    )
+                ),
+                "X-Organization-ID": org_id,
+            },
+        )
+        assert other_counter_view.status_code == 403
+
         evidence_url = (
             f"/api/stocktakes/{stocktake_id}/observations/{counted.json()['id']}/evidence"
         )

@@ -195,7 +195,7 @@ Reference documents:
 - [ ] Shared object-storage adapter, malware/content scanning, image re-encoding and retention lifecycle controls.
 - [ ] Vision-assisted barcode/OCR/catalogue matching with confidence and manual confirmation.
 - [ ] Batch, serial, expiry and condition capture where enabled by item policy.
-- [x] Idempotent count observations and immutable count rounds with completeness checks.
+- [x] Idempotent count observations and immutable count rounds with completeness checks.\n- [x] Counter-only retrieval of the current user's active-round observations, allowing Android count sessions to resume without revealing another counter's blind-count values.
 - [x] Recount round creation and separately authorized approval of submitted counts; approved variances post idempotent `stocktake_adjustment` ledger movements while preserving movements recorded after each observation.
 - [x] API-enforced count/approval separation of duties.
 - [x] Tenant-scoped supervisor review queue with branch filtering, latest-round totals and shortage/surplus counts.

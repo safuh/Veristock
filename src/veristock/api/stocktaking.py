@@ -207,6 +207,52 @@ async def list_stocktakes(
     return results
 
 
+@router.get(
+    "/{stocktake_id}/my-observations",
+    response_model=list[CountObservationRead],
+)
+async def list_my_stocktake_observations(
+    stocktake_id: str,
+    organization: StocktakeCounter,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> list[StocktakeObservation]:
+    """Return only the authenticated counter's observations in the active round.
+
+    This lets field devices resume safely after app restarts without exposing
+    another counter's in-progress blind-count values to supervisors or peers.
+    """
+    stocktake = await session.scalar(
+        select(Stocktake).where(
+            Stocktake.id == stocktake_id,
+            Stocktake.organization_id == organization.id,
+            Stocktake.status == "open",
+        )
+    )
+    if stocktake is None:
+        raise HTTPException(status_code=404, detail="Open stocktake not found")
+    round_record = await session.scalar(
+        select(StocktakeRound).where(
+            StocktakeRound.stocktake_id == stocktake.id,
+            StocktakeRound.organization_id == organization.id,
+            StocktakeRound.status == "open",
+        ).order_by(StocktakeRound.round_number.desc())
+    )
+    if round_record is None:
+        return []
+    observations = await session.scalars(
+        select(StocktakeObservation)
+        .where(
+            StocktakeObservation.organization_id == organization.id,
+            StocktakeObservation.stocktake_id == stocktake.id,
+            StocktakeObservation.round_id == round_record.id,
+            StocktakeObservation.counted_by_user_id == user.id,
+        )
+        .order_by(StocktakeObservation.counted_at, StocktakeObservation.id)
+    )
+    return list(observations)
+
+
 @router.get("/{stocktake_id}/scope", response_model=list[dict[str, str]])
 async def list_stocktake_scope(
     stocktake_id: str,
