@@ -14,10 +14,58 @@ class ApiClient {
             receiveTimeout: const Duration(seconds: 20),
             headers: const {'Accept': 'application/json'},
           ),
-        );
+        ),
+        _refreshDio = Dio(
+          BaseOptions(
+            baseUrl: AppConfig.apiBaseUrl,
+            connectTimeout: const Duration(seconds: 15),
+            receiveTimeout: const Duration(seconds: 20),
+            headers: const {'Accept': 'application/json'},
+          ),
+        ) {
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          final isAuthenticationRoute = options.path.endsWith('/auth/login') ||
+              options.path.endsWith('/auth/refresh') ||
+              options.path.endsWith('/auth/logout');
+          if (!isAuthenticationRoute) {
+            final token = await _secureStorage.read(key: 'access_token');
+            if (token != null) {
+              options.headers['Authorization'] = 'Bearer $token';
+            }
+          }
+          handler.next(options);
+        },
+        onError: (error, handler) async {
+          final options = error.requestOptions;
+          final isAuthenticationRoute = options.path.endsWith('/auth/login') ||
+              options.path.endsWith('/auth/refresh') ||
+              options.path.endsWith('/auth/logout');
+          if (error.response?.statusCode == 401 &&
+              !isAuthenticationRoute &&
+              options.extra['authRetry'] != true) {
+            try {
+              final token = await _refreshAccessToken();
+              options.headers['Authorization'] = 'Bearer $token';
+              options.extra['authRetry'] = true;
+              final response = await _dio.fetch<dynamic>(options);
+              handler.resolve(response);
+              return;
+            } catch (_) {
+              // Preserve the original API error if refresh or the retry fails.
+            }
+          }
+          handler.next(error);
+        },
+      ),
+    );
+  }
 
   final Dio _dio;
+  final Dio _refreshDio;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  Future<String>? _refreshing;
 
   Future<Map<String, dynamic>> signIn({
     required String identifier,
@@ -33,16 +81,44 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> restoreSession() async {
+    await _refreshAccessToken();
+    return currentIdentity();
+  }
+
+  Future<String> _refreshAccessToken() async {
+    final pending = _refreshing ??= _performRefresh();
+    try {
+      return await pending;
+    } finally {
+      if (identical(_refreshing, pending)) {
+        _refreshing = null;
+      }
+    }
+  }
+
+  Future<String> _performRefresh() async {
     final refreshToken = await _secureStorage.read(key: 'refresh_token');
     if (refreshToken == null) {
       throw StateError('No saved session');
     }
-    final response = await _dio.post<Map<String, dynamic>>(
-      '/auth/refresh',
-      data: {'refresh_token': refreshToken},
-    );
-    await _saveTokens(response.data!);
-    return currentIdentity();
+    try {
+      final response = await _refreshDio.post<Map<String, dynamic>>(
+        '/auth/refresh',
+        data: {'refresh_token': refreshToken},
+      );
+      final data = response.data;
+      if (data == null || data['access_token'] is! String) {
+        throw const FormatException('Refresh response did not contain an access token');
+      }
+      await _saveTokens(data);
+      return data['access_token'] as String;
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 401 ||
+          error.response?.statusCode == 403) {
+        await _secureStorage.deleteAll();
+      }
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> currentIdentity() async {
