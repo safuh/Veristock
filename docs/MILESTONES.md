@@ -141,6 +141,9 @@ Reference documents:
 
 ### M9 — Client organizations and workforce
 
+- [x] Tenant-scoped branch staff assignment records and client-administrator assignment APIs with audit provenance.
+- [ ] Branch assignment management UI in the client portal.
+
 **Status: in progress — business enrollment, platform-side client administration, tenant profile/branch/contact APIs, employee profiles and invitations are implemented; lifecycle verification and workforce workflows remain open.**
 
 - [x] Client organization profile, branches and contacts.
@@ -182,6 +185,9 @@ Reference documents:
 **MVP boundary:** no purchase orders, goods-received notes, invoice ingestion, supplier integrations or POS integrations. The sales portal is the initial source of demand/stock-out history for reporting and forecasting.
 
 ### M12 — Physical stocktaking
+
+- [x] Enforce explicit branch assignment for field count scope, observation restore/write/replay, round submission and evidence upload; branch managers retain cross-branch access.
+- [ ] Extend branch authorization to inventory, sales and reporting operations.
 
 **Status: in progress — tenant-scoped branch snapshots, blind scope listing, immutable count observations, idempotent capture, complete-round submission, recount rounds and separately authorized approval-to-ledger reconciliation are implemented for client-organization counters. Veristock cross-tenant staff assignment, production-grade shared evidence storage/scanning and broader supervisor separation-of-duties enforcement remain open. React and Android photo-evidence controls are implemented; full end-to-end device/browser acceptance remains open.**
 
