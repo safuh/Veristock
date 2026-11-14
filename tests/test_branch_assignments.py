@@ -1,5 +1,7 @@
 """Branch assignment administration API tests."""
 
+# ruff: noqa: E501
+
 from datetime import timedelta
 from uuid import uuid4
 

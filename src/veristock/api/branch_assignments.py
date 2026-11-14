@@ -119,7 +119,10 @@ async def assign_branch_member(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(status_code=409, detail="Member is already assigned to this branch") from exc
+        raise HTTPException(
+            status_code=409,
+            detail="Member is already assigned to this branch",
+        ) from exc
     await session.refresh(assignment)
     user = await session.get(User, membership.user_id)
     return BranchMemberRead(
