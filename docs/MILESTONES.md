@@ -262,8 +262,9 @@ Reference documents:
 - [x] Client portal organization context, branch list, inventory summary and stock-balance view.
 - [ ] Complete management workspace flows.
 - [ ] Field workspace responsive count flows.
-- [x] Flutter Android client foundation with secure token storage, session restoration, organization selection and camera barcode-scanning screen.
-- [ ] Complete Android runner configuration, field task APIs, count capture and release signing.
+- [x] Flutter Android client with secure token storage, session restoration, organization selection, assigned open-stocktake retrieval, blind count capture, barcode matching, count-round submission and photo evidence upload.
+- [x] Automatic access-token refresh on 401 with coalesced concurrent refresh attempts and secure-session clearing for invalid refresh credentials.
+- [ ] Encrypted offline task storage, conflict-safe synchronization, Android release signing and physical-device acceptance.
 - [x] Initial client portal sales posting and stocktaking count flows.
 - [ ] Verify end-to-end browser and Android photo-evidence upload/retrieval on supported devices and tenant roles.
 - [ ] Client portal discrepancy and advanced forecast flows.
