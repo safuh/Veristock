@@ -94,6 +94,15 @@ async def upload_stocktake_evidence(
     if stocktake is None:
         raise HTTPException(status_code=404, detail="Open stocktake not found")
     await require_branch_assignment(session, user, organization, stocktake.branch_id)
+    stocktake = await session.scalar(
+        select(Stocktake).where(
+            Stocktake.id == stocktake_id,
+            Stocktake.organization_id == organization.id,
+        )
+    )
+    if stocktake is None:
+        raise HTTPException(status_code=404, detail="Stocktake not found")
+    await require_branch_assignment(session, user, organization, stocktake.branch_id)
     observation = await session.scalar(
         select(StocktakeObservation).where(
             StocktakeObservation.id == observation_id,
@@ -173,6 +182,7 @@ async def list_stocktake_evidence(
     stocktake_id: str,
     observation_id: str,
     organization: EvidenceReader,
+    user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> list[StocktakeEvidence]:
     observation = await session.scalar(
@@ -202,6 +212,7 @@ async def get_stocktake_evidence_content(
     evidence_id: str,
     request: Request,
     organization: EvidenceReader,
+    user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> Response:
     record = await session.scalar(
@@ -213,6 +224,15 @@ async def get_stocktake_evidence_content(
     )
     if record is None:
         raise HTTPException(status_code=404, detail="Stocktake evidence not found")
+    stocktake = await session.scalar(
+        select(Stocktake).where(
+            Stocktake.id == stocktake_id,
+            Stocktake.organization_id == organization.id,
+        )
+    )
+    if stocktake is None:
+        raise HTTPException(status_code=404, detail="Stocktake not found")
+    await require_branch_assignment(session, user, organization, stocktake.branch_id)
     try:
         path = evidence_path(_settings(request).stocktake_evidence_storage_dir, record.storage_key)
     except EvidenceValidationError as exc:
