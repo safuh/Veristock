@@ -36,8 +36,8 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         user_id, supervisor_id, unassigned_user_id, org_id, branch_id, item_id = (
             str(uuid4()) for _ in range(6)
         )
-        membership_id, supervisor_membership_id, role_id, approver_role_id = (
-            str(uuid4()) for _ in range(4)
+        membership_id, supervisor_membership_id, unassigned_membership_id, role_id, approver_role_id = (
+            str(uuid4()) for _ in range(5)
         )
         try:
             async with engine.begin() as connection:
@@ -82,7 +82,7 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
                             status="active",
                         ),
                         OrganizationMembership(
-                            id=str(uuid4()),
+                            id=unassigned_membership_id,
                             organization_id=org_id,
                             user_id=unassigned_user_id,
                             status="active",
@@ -92,13 +92,7 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
                             role_id=approver_role_id,
                         ),
                         MembershipRole(
-                            membership_id=(
-                                await session.scalar(
-                                    select(OrganizationMembership.id).where(
-                                        OrganizationMembership.user_id == unassigned_user_id
-                                    )
-                                )
-                            ),
+                            membership_id=unassigned_membership_id,
                             role_id=role_id,
                         ),
                         Branch(
