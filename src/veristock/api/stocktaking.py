@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from veristock.identity.authorization import Organization
+from veristock.api.branch_access import require_branch_assignment
 from veristock.identity.authorization_dependencies import (
     get_current_user,
     get_db_session,
@@ -231,6 +232,7 @@ async def list_my_stocktake_observations(
     )
     if stocktake is None:
         raise HTTPException(status_code=404, detail="Open stocktake not found")
+    await require_branch_assignment(session, user, organization, stocktake.branch_id)
     round_record = await session.scalar(
         select(StocktakeRound).where(
             StocktakeRound.stocktake_id == stocktake.id,
@@ -257,6 +259,7 @@ async def list_my_stocktake_observations(
 async def list_stocktake_scope(
     stocktake_id: str,
     organization: StocktakeReader,
+    user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> list[dict[str, str]]:
     stocktake = await session.scalar(
@@ -267,6 +270,7 @@ async def list_stocktake_scope(
     )
     if stocktake is None:
         raise HTTPException(status_code=404, detail="Stocktake not found")
+    await require_branch_assignment(session, user, organization, stocktake.branch_id)
     rows = (
         await session.execute(
             select(StocktakeScopeItem, InventoryItem)
@@ -308,6 +312,17 @@ async def record_count_observation(
         )
     )
     if duplicate is not None:
+        duplicate_stocktake = await session.scalar(
+            select(Stocktake).where(
+                Stocktake.id == duplicate.stocktake_id,
+                Stocktake.organization_id == organization.id,
+            )
+        )
+        if duplicate_stocktake is None:
+            raise HTTPException(status_code=404, detail="Stocktake not found")
+        await require_branch_assignment(
+            session, user, organization, duplicate_stocktake.branch_id
+        )
         if (
             duplicate.stocktake_id != stocktake_id
             or duplicate.item_id != payload.item_id
@@ -326,6 +341,7 @@ async def record_count_observation(
     )
     if stocktake is None:
         raise HTTPException(status_code=404, detail="Open stocktake not found")
+    await require_branch_assignment(session, user, organization, stocktake.branch_id)
     round_record = await session.scalar(
         select(StocktakeRound).where(
             StocktakeRound.stocktake_id == stocktake.id,
@@ -371,6 +387,7 @@ async def record_count_observation(
 async def submit_count_round(
     stocktake_id: str,
     organization: StocktakeSubmitter,
+    user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> StocktakeRound:
     stocktake = await session.scalar(
@@ -382,6 +399,7 @@ async def submit_count_round(
     )
     if stocktake is None:
         raise HTTPException(status_code=404, detail="Open stocktake not found")
+    await require_branch_assignment(session, user, organization, stocktake.branch_id)
     round_record = await session.scalar(
         select(StocktakeRound).where(
             StocktakeRound.stocktake_id == stocktake.id,
