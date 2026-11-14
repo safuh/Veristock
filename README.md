@@ -136,3 +136,5 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api
 ```
 
 The default URL is for the Android emulator. Use the development machine's LAN IP for a physical device. The Android client provides authentication, organization selection, open-stocktake retrieval, barcode-to-item matching, online count capture and count-round submission. Offline queueing and conflict-safe sync are not yet enabled.
+
+Client administrators can use the browser Team & access area to assign active organization members to branches and remove those assignments without deactivating their organization accounts. Field stocktaking endpoints enforce active branch assignments. Member invitation and assignment management remain permission-controlled.

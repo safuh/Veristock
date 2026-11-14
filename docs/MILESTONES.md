@@ -141,8 +141,11 @@ Reference documents:
 
 ### M9 — Client organizations and workforce
 
+- [x] Client administrator permission to invite tenant members and manage branch assignments.
+- [x] Client portal Team & access page to assign active members to branches and remove assignments without revoking organization membership.
+
 - [x] Tenant-scoped branch staff assignment records and client-administrator assignment APIs with audit provenance.
-- [ ] Branch assignment management UI in the client portal.
+- [x] Branch assignment management UI in the client portal.
 
 **Status: in progress — business enrollment, platform-side client administration, tenant profile/branch/contact APIs, employee profiles and invitations are implemented; lifecycle verification and workforce workflows remain open.**
 
