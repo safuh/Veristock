@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import FileResponse
 
 from veristock.core.config import Settings
+from veristock.api.branch_access import require_branch_assignment
 from veristock.identity.authorization import Organization
 from veristock.identity.authorization_dependencies import (
     get_current_user,
@@ -92,6 +93,7 @@ async def upload_stocktake_evidence(
     )
     if stocktake is None:
         raise HTTPException(status_code=404, detail="Open stocktake not found")
+    await require_branch_assignment(session, user, organization, stocktake.branch_id)
     observation = await session.scalar(
         select(StocktakeObservation).where(
             StocktakeObservation.id == observation_id,
