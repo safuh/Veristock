@@ -397,6 +397,11 @@ function ClientDashboard({ token, organization }: { token: string; organization:
   const [teamError, setTeamError] = useState("");
   const [teamNotice, setTeamNotice] = useState("");
   const [teamLoading, setTeamLoading] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("field_counter");
+  const [createdInvitation, setCreatedInvitation] = useState<{
+    email: string; role_code: string; expires_at: string; invitation_token: string;
+  } | null>(null);
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [balances, setBalances] = useState<StockBalance[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -542,6 +547,25 @@ function ClientDashboard({ token, organization }: { token: string; organization:
       await refreshTeam();
     } catch (reason) {
       setTeamError(reason instanceof Error ? reason.message : "Unable to remove branch assignment.");
+    }
+  };
+
+  const createTeamInvitation = async () => {
+    setTeamError("");
+    setTeamNotice("");
+    setCreatedInvitation(null);
+    try {
+      const invitation = await request<{
+        email: string; role_code: string; expires_at: string; invitation_token: string;
+      }>("/invitations", token, organization.id, {
+        method: "POST",
+        body: JSON.stringify({ email: inviteEmail, role_code: inviteRole }),
+      });
+      setCreatedInvitation(invitation);
+      setInviteEmail("");
+      setTeamNotice("Invitation created. Deliver the token securely; it is shown only once.");
+    } catch (reason) {
+      setTeamError(reason instanceof Error ? reason.message : "Unable to create invitation.");
     }
   };
 
@@ -993,6 +1017,32 @@ function ClientDashboard({ token, organization }: { token: string; organization:
       <div className="team-access-body">
         {teamError && <div className="alert">{teamError}</div>}
         {teamNotice && <div className="success">{teamNotice}</div>}
+        
+        <div className="team-invite">
+          <div><p className="eyebrow">ADD A TEAM MEMBER</p><h3>Invite to this organization</h3>
+            <p className="muted">Invitations expire after 72 hours. No email delivery provider is configured yet, so securely share the one-time token with the invitee.</p></div>
+          <div className="team-assignment-form invite-form">
+            <label>Email address<input type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="staff@company.com" /></label>
+            <label>Access role<select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)}>
+              <option value="field_counter">Field counter</option>
+              <option value="client_readonly">Read-only</option>
+              <option value="client_reviewer">Stocktake reviewer</option>
+              <option value="client_manager">Client manager</option>
+            </select></label>
+            <button className="primary" disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail.trim())}
+              onClick={() => void createTeamInvitation()}>Create invitation</button>
+          </div>
+          {createdInvitation && <div className="invitation-result">
+            <strong>One-time invitation token</strong>
+            <code>{createdInvitation.invitation_token}</code>
+            <small>{createdInvitation.email} · {createdInvitation.role_code} · Expires {new Date(createdInvitation.expires_at).toLocaleString()}</small>
+            <button className="secondary" onClick={() => {
+              void navigator.clipboard.writeText(createdInvitation.invitation_token)
+                .then(() => setTeamNotice("Invitation token copied."))
+                .catch(() => setTeamError("Clipboard access was unavailable; select and copy the token manually."));
+            }}>Copy token</button>
+          </div>}
+        </div>
         <div className="team-assignment-form">
           <label>Branch
             <select value={teamBranch} onChange={(event) => setTeamBranch(event.target.value)}>
