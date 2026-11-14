@@ -23,7 +23,7 @@ from veristock.identity import (
     User,
 )
 from veristock.inventory.models import InventoryItem, StockBalance, StockMovement
-from veristock.organizations.models import Branch
+from veristock.organizations.models import Branch, BranchMembership
 from veristock.stocktaking.models import StocktakeObservation
 
 
@@ -85,6 +85,13 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
                             organization_id=org_id,
                             code="MAIN",
                             name="Main",
+                        ),
+                        BranchMembership(
+                            id=str(uuid4()),
+                            organization_id=org_id,
+                            branch_id=branch_id,
+                            membership_id=membership_id,
+                            assigned_by_user_id=supervisor_id,
                         ),
                         InventoryItem(
                             id=item_id,
