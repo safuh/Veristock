@@ -30,11 +30,11 @@ from veristock.stocktaking.models import StocktakeObservation
 def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
     import asyncio
 
-    async def seed(database_url: str) -> tuple[str, str, str, str, str]:
+    async def seed(database_url: str) -> tuple[str, str, str, str, str, str]:
         engine = create_async_engine(database_url)
         factory = async_sessionmaker(engine, expire_on_commit=False)
-        user_id, supervisor_id, org_id, branch_id, item_id = (
-            str(uuid4()) for _ in range(5)
+        user_id, supervisor_id, unassigned_user_id, org_id, branch_id, item_id = (
+            str(uuid4()) for _ in range(6)
         )
         membership_id, supervisor_membership_id, role_id, approver_role_id = (
             str(uuid4()) for _ in range(4)
@@ -49,6 +49,11 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
                         User(
                             id=supervisor_id,
                             identifier="supervisor@example.com",
+                            password_hash="x",
+                        ),
+                        User(
+                            id=unassigned_user_id,
+                            identifier="unassigned@example.com",
                             password_hash="x",
                         ),
                         Organization(id=org_id, kind="client", legal_name="Count Tenant"),
@@ -76,9 +81,25 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
                             user_id=supervisor_id,
                             status="active",
                         ),
+                        OrganizationMembership(
+                            id=str(uuid4()),
+                            organization_id=org_id,
+                            user_id=unassigned_user_id,
+                            status="active",
+                        ),
                         MembershipRole(
                             membership_id=supervisor_membership_id,
                             role_id=approver_role_id,
+                        ),
+                        MembershipRole(
+                            membership_id=(
+                                await session.scalar(
+                                    select(OrganizationMembership.id).where(
+                                        OrganizationMembership.user_id == unassigned_user_id
+                                    )
+                                )
+                            ),
+                            role_id=role_id,
                         ),
                         Branch(
                             id=branch_id,
@@ -129,10 +150,10 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
                 await session.commit()
         finally:
             await engine.dispose()
-        return user_id, supervisor_id, org_id, branch_id, item_id
+        return user_id, supervisor_id, unassigned_user_id, org_id, branch_id, item_id
 
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'stocktaking.db'}"
-    user_id, supervisor_id, org_id, branch_id, item_id = asyncio.run(seed(database_url))
+    user_id, supervisor_id, unassigned_user_id, org_id, branch_id, item_id = asyncio.run(seed(database_url))
     tokens = TokenService("s" * 32)
     token = tokens.create(user_id, timedelta(minutes=10), token_type="access")
     settings = Settings(
@@ -163,12 +184,34 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         incomplete = client.post(f"/api/stocktakes/{stocktake_id}/submit", headers=headers)
         assert incomplete.status_code == 409
 
+        unassigned_headers = {
+            "Authorization": (
+                "Bearer "
+                + tokens.create(
+                    unassigned_user_id,
+                    timedelta(minutes=10),
+                    token_type="access",
+                )
+            ),
+            "X-Organization-ID": org_id,
+        }
+        denied_scope = client.get(
+            f"/api/stocktakes/{stocktake_id}/scope", headers=unassigned_headers
+        )
+        assert denied_scope.status_code == 403
+
         count_payload = {
             "item_id": item_id,
             "counted_quantity": "12",
             "unit_code": "EA",
             "idempotency_key": "count-device-0001",
         }
+        denied_count = client.post(
+            f"/api/stocktakes/{stocktake_id}/observations",
+            headers=unassigned_headers,
+            json=count_payload,
+        )
+        assert denied_count.status_code == 403
         counted = client.post(
             f"/api/stocktakes/{stocktake_id}/observations",
             headers=headers,
