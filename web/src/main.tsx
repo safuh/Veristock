@@ -199,6 +199,19 @@ function Workspace({ token, user, organization, onSelectOrganization, onSignOut 
   onSelectOrganization: (id: string) => void; onSignOut: () => void;
 }) {
   const isPlatform = organization.kind === "platform";
+  const [activeNav, setActiveNav] = useState("Overview");
+  const navigate = (label: string) => {
+    setActiveNav(label);
+    const targets: Record<string, string> = {
+      Overview: "client-overview", Branches: "client-branches",
+      Inventory: "client-inventory", Sales: "client-sales",
+      Stocktaking: "client-stocktaking", Discrepancies: "client-discrepancies",
+      Forecasts: "client-reports", Reports: "client-reports",
+      "Team & access": "team-access",
+    };
+    const target = targets[label];
+    if (target) document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand-lockup"><div className="brand-mark">V</div><div><strong>veristock</strong><small>ONE PLATFORM</small></div></div>
@@ -207,9 +220,14 @@ function Workspace({ token, user, organization, onSelectOrganization, onSignOut 
         {(isPlatform
           ? [["Overview", "⌂"], ["Client applications", "▤"], ["Organizations", "▦"], ["Operations", "◷"], ["Team & access", "♙"]]
           : [["Overview", "⌂"], ["Branches", "▦"], ["Inventory", "▤"], ["Sales", "↗"], ["Stocktaking", "◷"], ["Discrepancies", "⌁"], ["Forecasts", "⌁"], ["Reports", "▧"], ["Team & access", "♙"]]
-        ).map(([label, icon], index) => <div className={index === 0 ? "nav-item active" : "nav-item"} key={label}>
-          <span>{icon}</span>{label}{index === 0 && <i />}
-        </div>)}
+        ).map(([label, icon]) => <button
+          className={activeNav === label ? "nav-item active" : "nav-item"}
+          key={label}
+          type="button"
+          onClick={() => navigate(label)}
+        >
+          <span>{icon}</span>{label}{activeNav === label && <i />}
+        </button>)}
       </nav>
       <div className="sidebar-bottom"><div className="secure-indicator"><span /> Secure tenant session</div>
         <div className="user-mini"><div className="avatar">{user.identifier.slice(0, 1).toUpperCase()}</div>
@@ -368,6 +386,17 @@ type StocktakeDecision = {
 
 function ClientDashboard({ token, organization }: { token: string; organization: Organization }) {
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [teamBranch, setTeamBranch] = useState("");
+  const [teamMembers, setTeamMembers] = useState<Array<{
+    id: string; user_id: string; identifier: string; status: string; role_codes: string[];
+  }>>([]);
+  const [branchAssignments, setBranchAssignments] = useState<Array<{
+    membership_id: string; user_id: string; identifier: string; assigned_at: string;
+  }>>([]);
+  const [teamMemberToAssign, setTeamMemberToAssign] = useState("");
+  const [teamError, setTeamError] = useState("");
+  const [teamNotice, setTeamNotice] = useState("");
+  const [teamLoading, setTeamLoading] = useState(false);
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [balances, setBalances] = useState<StockBalance[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -452,6 +481,69 @@ function ClientDashboard({ token, organization }: { token: string; organization:
   }, [organization.id, token]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  const refreshTeam = useCallback(async () => {
+    if (!teamBranch) return;
+    setTeamLoading(true);
+    setTeamError("");
+    try {
+      const [members, assignments] = await Promise.all([
+        request<Array<{
+          id: string; user_id: string; identifier: string; status: string; role_codes: string[];
+        }>>("/memberships", token, organization.id),
+        request<Array<{
+          membership_id: string; user_id: string; identifier: string; assigned_at: string;
+        }>>(`/branches/${encodeURIComponent(teamBranch)}/members`, token, organization.id),
+      ]);
+      setTeamMembers(members.filter((member) => member.status === "active"));
+      setBranchAssignments(assignments);
+      setTeamMemberToAssign((current) =>
+        current && members.some((member) => member.id === current && member.status === "active")
+          ? current
+          : members.find((member) => member.status === "active" &&
+              !assignments.some((assignment) => assignment.membership_id === member.id))?.id ?? "",
+      );
+    } catch (reason) {
+      setTeamError(reason instanceof Error
+        ? reason.message
+        : "Unable to load team access. Check your assignment-management permissions.");
+    } finally {
+      setTeamLoading(false);
+    }
+  }, [organization.id, teamBranch, token]);
+
+  useEffect(() => { void refreshTeam(); }, [refreshTeam]);
+
+  const assignTeamMember = async () => {
+    if (!teamBranch || !teamMemberToAssign) return;
+    setTeamError("");
+    setTeamNotice("");
+    try {
+      await request(`/branches/${encodeURIComponent(teamBranch)}/members`, token, organization.id, {
+        method: "POST", body: JSON.stringify({ membership_id: teamMemberToAssign }),
+      });
+      setTeamNotice("Staff member assigned to this branch.");
+      await refreshTeam();
+    } catch (reason) {
+      setTeamError(reason instanceof Error ? reason.message : "Unable to assign staff member.");
+    }
+  };
+
+  const removeTeamMember = async (membershipId: string) => {
+    if (!teamBranch) return;
+    setTeamError("");
+    setTeamNotice("");
+    try {
+      await request(
+        `/branches/${encodeURIComponent(teamBranch)}/members/${encodeURIComponent(membershipId)}`,
+        token, organization.id, { method: "DELETE" },
+      );
+      setTeamNotice("Branch assignment removed. Organization membership remains active.");
+      await refreshTeam();
+    } catch (reason) {
+      setTeamError(reason instanceof Error ? reason.message : "Unable to remove branch assignment.");
+    }
+  };
 
   // Restore an open count after a browser reload. The API returns only this
   // counter's observations, preserving blind-count separation from peers.
@@ -727,16 +819,16 @@ function ClientDashboard({ token, organization }: { token: string; organization:
     {error && <div className="alert">{error}</div>}{notice && <div className="success">{notice}</div>}
     <div className="client-banner"><div><p className="eyebrow">YOUR ORGANIZATION</p><h2>{name}</h2>
       <p>{organization.legal_name} <span>·</span> {organization.timezone}</p></div><div className="banner-icon">▦</div></div>
-    <div className="stat-grid client-stats">
+    <div className="stat-grid client-stats" id="client-overview">
       <Stat label="Active branches" value={loading ? "—" : String(summary?.branch_count ?? branches.length)} hint="Registered locations" icon="⌖" />
       <Stat label="Inventory items" value={loading ? "—" : String(summary?.item_count ?? 0)} hint="Active catalogue items" icon="▤" />
       <Stat label="Stocked item types" value={loading ? "—" : String(summary?.stocked_item_count ?? 0)} hint="Items with balances" icon="▦" />
       <Stat label="Units on hand" value={loading ? "—" : Number(summary?.total_units_on_hand ?? 0).toLocaleString()} hint="Across all branches" icon="✓" />
     </div>
 
-    <ReportsPanel token={token} organizationId={organization.id} />
+    <div id="client-reports"><ReportsPanel token={token} organizationId={organization.id} /></div>
 
-    <section className="panel">
+    <section className="panel" id="client-inventory">
       <div className="panel-heading"><div><p className="eyebrow">CATALOGUE</p><h2>Inventory items</h2>
         <p className="muted">Create and maintain the items your organization counts and sells.</p></div></div>
       <div className="operation-form">
@@ -764,7 +856,7 @@ function ClientDashboard({ token, organization }: { token: string; organization:
       </div>
     </section>
 
-    <section className="panel">
+    <section className="panel" id="client-sales">
       <div className="panel-heading"><div><p className="eyebrow">SALES LEDGER</p><h2>Record a sale</h2>
         <p className="muted">Posting a sale atomically creates stock-out movements.</p></div></div>
       <div className="operation-form">
@@ -783,7 +875,7 @@ function ClientDashboard({ token, organization }: { token: string; organization:
           {!sales.length && <tr><td colSpan={4} className="muted">No sales posted yet.</td></tr>}</tbody></table></div>
     </section>
 
-    <section className="panel">
+    <section className="panel" id="client-stocktaking">
       <div className="panel-heading"><div><p className="eyebrow">PHYSICAL VERIFICATION</p><h2>Stocktaking</h2>
         <p className="muted">Create a blind count from a frozen expected-stock snapshot.</p></div></div>
       <div className="operation-form">
@@ -829,7 +921,7 @@ function ClientDashboard({ token, organization }: { token: string; organization:
           <td>{new Date(record.created_at).toLocaleDateString()}</td><td>{record.item_count}</td>
           <td><span className={`status ${record.status}`}>{record.status}</span></td></tr>)}
           {!stocktakes.length && <tr><td colSpan={4} className="muted">No stocktakes created yet.</td></tr>}</tbody></table></div>
-      {reviewAccess && <div className="review-queue">
+      {reviewAccess && <div className="review-queue" id="client-discrepancies">
         <div className="panel-heading"><div><p className="eyebrow">SUPERVISOR WORKFLOW</p><h3>Submitted counts awaiting review</h3>
           <p className="muted">Review the latest submitted round. Approval posts variances to the stock ledger; rejection opens a new count round.</p></div>
           <span className="count-pill">{reviewQueue.length} pending</span></div>
@@ -884,12 +976,53 @@ function ClientDashboard({ token, organization }: { token: string; organization:
         <div className="table-wrap"><table><thead><tr><th>ITEM</th><th>SKU</th><th>BRANCH</th><th>ON HAND</th><th>UNIT</th></tr></thead>
           <tbody>{balances.map((row) => <tr key={row.item_id + row.branch_id}><td><strong>{row.item_name}</strong></td><td>{row.sku ?? "—"}</td><td>{row.branch_name} <small>{row.branch_code}</small></td><td><strong>{Number(row.quantity_on_hand).toLocaleString()}</strong></td><td>{row.unit_code}</td></tr>)}</tbody></table></div>}
     </section>
-    <section className="panel">
+    <section className="panel" id="client-branches">
       <div className="panel-heading"><div><p className="eyebrow">LOCATIONS</p><h2>Your branches</h2></div><span className="count-pill">{branches.length} locations</span></div>
       {branches.length === 0 ? <div className="empty-state">No branches registered yet.</div> :
         <div className="branch-grid">{branches.map((branch) => <div className="branch-card" key={branch.id}><div className="branch-icon">⌖</div>
           <div><strong>{branch.name}</strong><small>{branch.code} · {[branch.town, branch.county].filter(Boolean).join(", ")}</small></div>
           <span className={`status ${branch.status}`}>{branch.status}</span></div>)}</div>}
+    </section>
+
+    <section className="panel" id="team-access">
+      <div className="panel-heading">
+        <div><p className="eyebrow">WORKFORCE CONTROL</p><h2>Team & branch access</h2>
+          <p className="muted">Assign active organization members to the locations where they are permitted to count stock.</p></div>
+        <button className="secondary" onClick={() => void refreshTeam()} disabled={teamLoading}>↻ Refresh</button>
+      </div>
+      <div className="team-access-body">
+        {teamError && <div className="alert">{teamError}</div>}
+        {teamNotice && <div className="success">{teamNotice}</div>}
+        <div className="team-assignment-form">
+          <label>Branch
+            <select value={teamBranch} onChange={(event) => setTeamBranch(event.target.value)}>
+              {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name} ({branch.code})</option>)}
+            </select>
+          </label>
+          <label>Active organization member
+            <select value={teamMemberToAssign} onChange={(event) => setTeamMemberToAssign(event.target.value)}>
+              <option value="">Select a member</option>
+              {teamMembers.filter((member) => !branchAssignments.some((assignment) => assignment.membership_id === member.id))
+                .map((member) => <option key={member.id} value={member.id}>{member.identifier} · {member.role_codes.join(", ") || "No role"}</option>)}
+            </select>
+          </label>
+          <button className="primary" disabled={teamLoading || !teamBranch || !teamMemberToAssign}
+            onClick={() => void assignTeamMember()}>Assign to branch</button>
+        </div>
+        <div className="panel-heading team-list-heading">
+          <div><h3>Assigned staff</h3><p className="muted">Removing an assignment does not suspend or remove the user's organization account.</p></div>
+          <span className="count-pill">{branchAssignments.length} assigned</span>
+        </div>
+        {teamLoading ? <div className="loading">Loading branch assignments…</div> :
+          !teamError && branchAssignments.length === 0 ? <div className="empty-state">No staff are assigned to this branch yet.</div> :
+          <div className="table-wrap"><table><thead><tr><th>MEMBER</th><th>ASSIGNED</th><th>ACTION</th></tr></thead>
+            <tbody>{branchAssignments.map((assignment) => <tr key={assignment.membership_id}>
+              <td><strong>{assignment.identifier}</strong><small>{teamMembers.find((member) => member.id === assignment.membership_id)?.role_codes.join(", ") || "Organization member"}</small></td>
+              <td>{new Date(assignment.assigned_at).toLocaleString()}</td>
+              <td><button className="reject" onClick={() => void removeTeamMember(assignment.membership_id)}>Remove assignment</button></td>
+            </tr>)}</tbody>
+          </table></div>}
+      </div>
     </section>
     <p className="footnote">Your data is isolated to {name}. All stock changes are recorded through the organization-scoped ledger.</p>
   </div>;
