@@ -1046,7 +1046,7 @@ function ClientDashboard({ token, organization }: { token: string; organization:
         <div className="team-assignment-form">
           <label>Branch
             <select value={teamBranch} onChange={(event) => setTeamBranch(event.target.value)}>
-              {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name} ({branch.code})</option>)}
+              {branches.filter((branch) => branch.status === "active").map((branch) => <option key={branch.id} value={branch.id}>{branch.name} ({branch.code})</option>)}
             </select>
           </label>
           <label>Active organization member
