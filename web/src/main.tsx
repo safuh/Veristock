@@ -453,6 +453,67 @@ function ClientDashboard({ token, organization }: { token: string; organization:
 
   useEffect(() => { void refresh(); }, [refresh]);
 
+  // Restore an open count after a browser reload. The API returns only this
+  // counter's observations, preserving blind-count separation from peers.
+  useEffect(() => {
+    if (activeStocktake) return;
+    const openStocktake = stocktakes.find((record) => record.status === "open");
+    if (!openStocktake) return;
+    let cancelled = false;
+    const restore = async () => {
+      try {
+        const [scope, observations] = await Promise.all([
+          request<StocktakeScopeItem[]>(
+            `/stocktakes/${encodeURIComponent(openStocktake.id)}/scope`,
+            token,
+            organization.id,
+          ),
+          request<Array<{
+            id: string;
+            item_id: string;
+            counted_quantity: string;
+          }>>(
+            `/stocktakes/${encodeURIComponent(openStocktake.id)}/my-observations`,
+            token,
+            organization.id,
+          ),
+        ]);
+        const evidenceEntries = await Promise.all(
+          observations.map(async (observation) => {
+            const evidence = await request<StocktakeEvidenceRecord[]>(
+              `/stocktakes/${encodeURIComponent(openStocktake.id)}/observations/${encodeURIComponent(observation.id)}/evidence`,
+              token,
+              organization.id,
+            );
+            return [observation.item_id, evidence] as const;
+          }),
+        );
+        if (cancelled) return;
+        setActiveStocktake(openStocktake.id);
+        setStocktakeScope(scope);
+        setCountValues(Object.fromEntries(
+          observations.map((observation) => [
+            observation.item_id,
+            observation.counted_quantity,
+          ]),
+        ));
+        setRecordedCounts(new Set(observations.map((observation) => observation.item_id)));
+        setObservationIds(Object.fromEntries(
+          observations.map((observation) => [observation.item_id, observation.id]),
+        ));
+        setEvidenceByItem(Object.fromEntries(evidenceEntries));
+      } catch (reason) {
+        if (!cancelled) {
+          setError(reason instanceof Error
+            ? `Unable to restore the open count: ${reason.message}`
+            : "Unable to restore the open count.");
+        }
+      }
+    };
+    void restore();
+    return () => { cancelled = true; };
+  }, [activeStocktake, organization.id, stocktakes, token]);
+
   const perform = async (action: () => Promise<void>, success: string) => {
     setBusy(true);
     setError("");
@@ -577,9 +638,15 @@ function ClientDashboard({ token, organization }: { token: string; organization:
 
   const submitStocktake = () => perform(async () => {
     if (!activeStocktake) return;
-    await request(`/stocktakes/${activeStocktake}/submit`, token, organization.id, {
+    const submittedStocktakeId = activeStocktake;
+    await request(`/stocktakes/${submittedStocktakeId}/submit`, token, organization.id, {
       method: "POST", body: JSON.stringify({}),
     });
+    setStocktakes((current) => current.map((record) =>
+      record.id === submittedStocktakeId
+        ? { ...record, status: "submitted" }
+        : record,
+    ));
     setActiveStocktake(null);
     setStocktakeScope([]);
   }, "Count round submitted for review.");

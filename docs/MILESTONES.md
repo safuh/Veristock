@@ -201,7 +201,7 @@ Reference documents:
 - [x] Tenant-scoped supervisor review queue with branch filtering, latest-round totals and shortage/surplus counts.
 - [x] Standardized recount reason codes and mandatory explanation, plus append-only recount-requested and approval decision history.
 - [x] Supervisor rejection with mandatory reason code and explanation; rejected submissions are reopened as a new immutable count round, with actor and decision retained in the audit history.
-- [x] Client portal supervisor review queue with variance summaries, permission-gated approve/reject controls, mandatory rejection explanation and decision-history display.
+- [x] Client portal supervisor review queue with variance summaries, permission-gated approve/reject controls, mandatory rejection explanation and decision-history display.\n- [x] Web and Android count sessions can restore the current counter's active-round observations and evidence metadata after reopening; the restore API never exposes another counter's in-progress blind-count values.
 
 ### M13 — Reconciliation and discrepancy intelligence
 
