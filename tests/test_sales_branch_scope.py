@@ -77,6 +77,8 @@ async def test_sales_history_is_filtered_to_assigned_branches(monkeypatch):
         organization=SimpleNamespace(id="org-1"),
         user=SimpleNamespace(id="field-user"),
         session=session,
+        limit=100,
+        offset=0,
     )
 
     assert result == []
@@ -171,6 +173,8 @@ async def test_stock_movement_history_is_filtered_to_assigned_branches(monkeypat
         organization=SimpleNamespace(id="org-1"),
         user=SimpleNamespace(id="field-user"),
         session=session,
+        limit=100,
+        offset=0,
     )
 
     assert result == []
