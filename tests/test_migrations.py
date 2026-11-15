@@ -109,3 +109,11 @@ async def test_alembic_upgrade_and_downgrade() -> None:
 
     subprocess.run([*command, "downgrade", "base"], check=True, env=env)
     subprocess.run([*command, "upgrade", "head"], check=True, env=env)
+
+
+def test_stock_movement_reversal_migration_is_present():
+    from pathlib import Path
+
+    migration = Path("alembic/versions/0023_stock_movement_reversal.py").read_text()
+    assert "reversal_of_movement_id" in migration
+    assert "uq_stock_movements_single_reversal" in migration
