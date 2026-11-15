@@ -20,7 +20,8 @@ change the authoritative stock ledger or balances.
 - Inventory summary and stock-balance reads: branch-scoped for field counters.
 - Stocktaking scope, own-observation restore, count writes/retries, submission,
   and evidence upload/retrieval: branch-scoped.
-- Sales posting, opening-balance writes, and sales history: branch-scoped.
+- Sales posting, opening-balance writes, sales history, manual stock adjustments,
+  and stock movement history: branch-scoped.
 - Replenishment policy listing and updates: branch-scoped.
 - Inventory report summary, demand forecast and forecast evaluation: sales and
   stock aggregates are restricted to assigned branches. Explicit inaccessible
@@ -33,7 +34,8 @@ change the authoritative stock ledger or balances.
 
 `tests/test_inventory_branch_scope.py` covers assigned versus unassigned
 branch balances, explicit cross-branch lookup denial, and summary aggregation.
-`tests/test_sales_branch_scope.py` covers sale and opening-balance idempotency
-checks before replay lookup, plus assigned-branch sales history. Reporting tests
+`tests/test_sales_branch_scope.py` covers sale, opening-balance and manual-adjustment
+authorization before replay lookup, plus assigned-branch sales and stock-ledger
+history. Reporting tests
 assert that summary and forecast SQL aggregates include the assigned-branch
 filters. These tests still require CI execution on the latest branch head.
