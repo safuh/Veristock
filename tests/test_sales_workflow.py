@@ -134,6 +134,50 @@ async def test_opening_balance_and_sale_posting_are_atomic_and_idempotent(tmp_pa
         rejected = client.post("/api/sales", headers=headers, json=insufficient)
         assert rejected.status_code == 409
 
+        adjustment = client.post(
+            "/api/inventory/adjustments",
+            headers=headers,
+            json={
+                "branch_id": branch_id,
+                "item_id": item_id,
+                "quantity_delta": "2",
+                "unit_code": "EA",
+                "reason": "Correct a verified receiving discrepancy",
+                "idempotency_key": "adjustment-register-001",
+            },
+        )
+        assert adjustment.status_code == 201
+        assert Decimal(adjustment.json()["quantity_on_hand"]) == Decimal("9.0000")
+
+        reversal_payload = {
+            "reason": "Reverse the adjustment entered against the wrong count",
+            "idempotency_key": "adjustment-reversal-001",
+        }
+        reversal = client.post(
+            f"/api/inventory/movements/{adjustment.json()['movement_id']}/reversal",
+            headers=headers,
+            json=reversal_payload,
+        )
+        assert reversal.status_code == 201
+        assert Decimal(reversal.json()["quantity_delta"]) == Decimal("-2.0000")
+        assert reversal.json()["source_type"] == "reversal"
+        assert reversal.json()["source_id"] == adjustment.json()["movement_id"]
+
+        reversal_replay = client.post(
+            f"/api/inventory/movements/{adjustment.json()['movement_id']}/reversal",
+            headers=headers,
+            json=reversal_payload,
+        )
+        assert reversal_replay.status_code == 201
+        assert reversal_replay.json()["movement_id"] == reversal.json()["movement_id"]
+
+        duplicate_reversal = client.post(
+            f"/api/inventory/movements/{adjustment.json()['movement_id']}/reversal",
+            headers=headers,
+            json={**reversal_payload, "idempotency_key": "adjustment-reversal-002"},
+        )
+        assert duplicate_reversal.status_code == 409
+
         balances = client.get("/api/inventory/balances", headers=headers)
         assert balances.status_code == 200
         assert Decimal(balances.json()[0]["quantity_on_hand"]) == Decimal("7.0000")
