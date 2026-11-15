@@ -158,6 +158,7 @@ class StockMovementRead(BaseModel):
     unit_code: str
     source_type: str
     source_id: str | None
+    reversal_of_movement_id: str | None
     reason: str | None
     actor_user_id: str
     occurred_at: datetime
@@ -347,6 +348,7 @@ async def list_stock_movements(
             unit_code=movement.unit_code,
             source_type=movement.source_type,
             source_id=movement.source_id,
+            reversal_of_movement_id=movement.reversal_of_movement_id,
             reason=movement.reason,
             actor_user_id=movement.actor_user_id,
             occurred_at=movement.occurred_at,
@@ -530,6 +532,7 @@ async def reverse_manual_stock_adjustment(
             unit_code=existing.unit_code,
             source_type=existing.source_type,
             source_id=existing.source_id,
+            reversal_of_movement_id=existing.reversal_of_movement_id,
             reason=existing.reason,
             actor_user_id=existing.actor_user_id,
             occurred_at=existing.occurred_at,
@@ -594,6 +597,7 @@ async def reverse_manual_stock_adjustment(
         unit_code=reversal.unit_code,
         source_type=reversal.source_type,
         source_id=reversal.source_id,
+        reversal_of_movement_id=reversal.reversal_of_movement_id,
         reason=reversal.reason,
         actor_user_id=reversal.actor_user_id,
         occurred_at=reversal.occurred_at,
