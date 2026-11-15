@@ -18,6 +18,8 @@ Implemented capabilities:
 - JWT authentication, browser refresh-cookie flow, identity context and platform administration APIs.
 - Tenant-scoped inventory catalogue creation, stock-on-hand reads and branch opening balances.
 - Append-only stock movement records for opening balances and posted sales.
+- Reasoned manual stock adjustments through `POST /api/inventory/adjustments`, with actor provenance, idempotency, unit validation, non-negative balance enforcement and atomic ledger/projection updates.
+- Branch-scoped stock movement history through `GET /api/inventory/movements`, including source, reason and actor metadata.
 - Idempotent, atomic sales posting with unit validation and insufficient-stock protection.
 - Physical stocktake creation with frozen branch/item expected quantities, blind count scope, immutable count observations, optional JPEG/PNG/WebP photo evidence, complete-round submission and recount rounds.
 - React client workspace flows for item creation, opening balances, sales and stocktaking, including restoration of the latest open blind count and the current user's saved observations/evidence after a browser reload.
