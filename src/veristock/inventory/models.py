@@ -89,6 +89,10 @@ class StockMovement(Base):
         UniqueConstraint(
             "organization_id", "idempotency_key", name="uq_stock_movements_idempotency"
         ),
+        UniqueConstraint(
+            "organization_id", "reversal_of_movement_id",
+            name="uq_stock_movements_single_reversal",
+        ),
         Index("ix_stock_movements_org_branch_time", "organization_id", "branch_id", "occurred_at"),
         Index("ix_stock_movements_org_item_time", "organization_id", "item_id", "occurred_at"),
     )
@@ -108,6 +112,7 @@ class StockMovement(Base):
     source_type: Mapped[str] = mapped_column(String(32), nullable=False)
     source_id: Mapped[str | None] = mapped_column(String(36))
     reason: Mapped[str | None] = mapped_column(String(500))
+    reversal_of_movement_id: Mapped[str | None] = mapped_column(String(36))
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     actor_user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
