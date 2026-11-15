@@ -95,7 +95,12 @@ async def test_alembic_upgrade_and_downgrade() -> None:
             "source_references",
             "failure_code",
         } <= ai_audit_columns
-        assert {"source_type", "idempotency_key", "actor_user_id", "reason"} <= stock_movement_columns
+        assert {
+            "source_type",
+            "idempotency_key",
+            "actor_user_id",
+            "reason",
+        } <= stock_movement_columns
         assert permission_count > 0
         assert role_count == 10
         assert client_admin_invite_grant == 1
