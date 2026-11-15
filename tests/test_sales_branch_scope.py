@@ -208,3 +208,47 @@ def test_stock_adjustment_requires_non_whitespace_reason():
             reason="          ",
             idempotency_key="adjustment-key-123",
         )
+
+
+@pytest.mark.asyncio
+async def test_adjustment_reversal_checks_branch_assignment_before_mutation(monkeypatch):
+    async def denied(session, user, organization, branch_id):
+        raise HTTPException(status_code=403, detail="Branch assignment required")
+
+    monkeypatch.setattr(sales, "require_branch_assignment", denied)
+    session = FakeSession()
+    original = SimpleNamespace(
+        id="movement-1",
+        organization_id="org-1",
+        branch_id="branch-2",
+        source_type="manual_adjustment",
+        quantity_delta=-2,
+    )
+
+    async def get_original(statement):
+        session.scalar_calls += 1
+        return original
+
+    session.scalar = get_original
+    with pytest.raises(HTTPException) as error:
+        await sales.reverse_manual_stock_adjustment(
+            movement_id="movement-1",
+            payload=sales.StockMovementReversalCreate(
+                reason="Correct an incorrectly recorded adjustment",
+                idempotency_key="reverse-key-123",
+            ),
+            organization=SimpleNamespace(id="org-1"),
+            user=SimpleNamespace(id="counter-user"),
+            session=session,
+        )
+
+    assert error.value.status_code == 403
+    assert session.scalar_calls == 1
+
+
+def test_adjustment_reversal_requires_a_meaningful_reason():
+    with pytest.raises(ValueError):
+        sales.StockMovementReversalCreate(
+            reason="       ",
+            idempotency_key="reverse-key-123",
+        )
