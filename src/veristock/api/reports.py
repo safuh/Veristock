@@ -816,8 +816,8 @@ class ForecastEvaluationRead(BaseModel):
 async def evaluate_inventory_forecast(
     organization: InventoryReporter,
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    item_id: str,
     user: Annotated[User | None, Depends(get_current_user)] = None,
-    item_id: str = "",
     branch_id: str | None = None,
     lookback_days: int = Query(default=30, ge=7, le=180),
     horizon_days: int = Query(default=7, ge=1, le=30),
