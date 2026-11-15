@@ -176,6 +176,8 @@ Reference documents:
 - [x] Branch-scoped opening balances.
 - [ ] Optional warehouse/bin locations.
 - [x] Validated manual opening-stock entry with actor provenance and idempotency.
+- [x] Reasoned manual stock adjustments with actor provenance, signed quantity validation, idempotency and atomic ledger/balance updates.
+- [x] Branch-scoped read access to append-only stock movement history, including adjustment reasons and actor provenance.
 - [ ] Validated structured import with row-level error reporting.
 - [x] Append-only stock movement ledger and current-balance projection.
 - [x] Client portal/API sales entry with line items and posting validation.
