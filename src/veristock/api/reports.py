@@ -110,7 +110,7 @@ def get_ai_service(request: Request) -> AIService:
 async def inventory_report(
     organization: InventoryReporter,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    user: User | None = Depends(get_current_user),
+    user: Annotated[User | None, Depends(get_current_user)],
 ) -> InventoryReportRead:
     """Return an auditable stock snapshot for the selected tenant only."""
     allowed_branch_ids = (
