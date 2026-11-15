@@ -163,6 +163,19 @@ class StockMovementRead(BaseModel):
     occurred_at: datetime
 
 
+class StockMovementReversalCreate(BaseModel):
+    reason: str = Field(min_length=10, max_length=500)
+    idempotency_key: str = Field(min_length=8, max_length=128)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 10:
+            raise ValueError("Reason must contain at least 10 non-whitespace characters")
+        return normalized
+
+
 @router.post("/inventory/items", response_model=InventoryItemCreateRead, status_code=201)
 async def create_inventory_item(
     payload: InventoryItemCreate,
@@ -456,6 +469,133 @@ async def record_stock_adjustment(
         quantity_on_hand=balance.quantity_on_hand,
         unit_code=item.base_unit_code,
         reason=payload.reason,
+    )
+
+
+@router.post(
+    "/inventory/movements/{movement_id}/reversal",
+    response_model=StockMovementRead,
+    status_code=201,
+)
+async def reverse_manual_stock_adjustment(
+    movement_id: str,
+    payload: StockMovementReversalCreate,
+    organization: InventoryManager,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> StockMovementRead:
+    """Append the exact opposite of a manual adjustment without mutating history."""
+    original = await session.scalar(
+        select(StockMovement).where(
+            StockMovement.id == movement_id,
+            StockMovement.organization_id == organization.id,
+        )
+    )
+    if original is None:
+        raise HTTPException(status_code=404, detail="Stock movement not found")
+    await require_branch_assignment(session, user, organization, original.branch_id)
+    if original.source_type != "manual_adjustment":
+        raise HTTPException(
+            status_code=409,
+            detail="Only manual stock adjustments can be reversed through this endpoint",
+        )
+
+    existing = await session.scalar(
+        select(StockMovement).where(
+            StockMovement.organization_id == organization.id,
+            StockMovement.idempotency_key == payload.idempotency_key,
+        )
+    )
+    if existing is not None:
+        if (
+            existing.source_type != "reversal"
+            or existing.reversal_of_movement_id != original.id
+            or existing.reason != payload.reason
+        ):
+            raise HTTPException(status_code=409, detail="Idempotency key was used for another operation")
+        balance = await session.scalar(
+            select(StockBalance).where(
+                StockBalance.organization_id == organization.id,
+                StockBalance.branch_id == original.branch_id,
+                StockBalance.item_id == original.item_id,
+            )
+        )
+        if balance is None:
+            raise HTTPException(status_code=409, detail="Original stock balance is unavailable")
+        return StockMovementRead(
+            movement_id=existing.id,
+            branch_id=existing.branch_id,
+            item_id=existing.item_id,
+            quantity_delta=existing.quantity_delta,
+            unit_code=existing.unit_code,
+            source_type=existing.source_type,
+            source_id=existing.source_id,
+            reason=existing.reason,
+            actor_user_id=existing.actor_user_id,
+            occurred_at=existing.occurred_at,
+        )
+
+    prior_reversal = await session.scalar(
+        select(StockMovement.id).where(
+            StockMovement.organization_id == organization.id,
+            StockMovement.reversal_of_movement_id == original.id,
+        )
+    )
+    if prior_reversal is not None:
+        raise HTTPException(status_code=409, detail="This stock adjustment has already been reversed")
+
+    balance = await session.scalar(
+        select(StockBalance)
+        .where(
+            StockBalance.organization_id == organization.id,
+            StockBalance.branch_id == original.branch_id,
+            StockBalance.item_id == original.item_id,
+        )
+        .with_for_update()
+    )
+    if balance is None:
+        raise HTTPException(status_code=409, detail="Original stock balance is unavailable")
+
+    reversal_delta = -original.quantity_delta
+    resulting_quantity = balance.quantity_on_hand + reversal_delta
+    if resulting_quantity < 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Reversal would make stock negative; resolve downstream stock movements first",
+        )
+
+    reversal = StockMovement(
+        id=str(uuid4()),
+        organization_id=organization.id,
+        branch_id=original.branch_id,
+        item_id=original.item_id,
+        quantity_delta=reversal_delta,
+        unit_code=original.unit_code,
+        source_type="reversal",
+        reversal_of_movement_id=original.id,
+        reason=payload.reason,
+        idempotency_key=payload.idempotency_key,
+        actor_user_id=user.id,
+    )
+    balance.quantity_on_hand = resulting_quantity
+    session.add(reversal)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="Stock adjustment was already reversed or conflicts with another request") from exc
+    await session.refresh(reversal)
+    return StockMovementRead(
+        movement_id=reversal.id,
+        branch_id=reversal.branch_id,
+        item_id=reversal.item_id,
+        quantity_delta=reversal.quantity_delta,
+        unit_code=reversal.unit_code,
+        source_type=reversal.source_type,
+        source_id=reversal.source_id,
+        reason=reversal.reason,
+        actor_user_id=reversal.actor_user_id,
+        occurred_at=reversal.occurred_at,
     )
 
 
