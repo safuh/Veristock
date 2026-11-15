@@ -6,7 +6,11 @@ import pytest
 from fastapi import HTTPException
 
 from veristock.api import sales
-from veristock.api.sales import SaleCreate, SaleLineCreate
+from veristock.api.sales import (
+    OpeningBalanceCreate,
+    SaleCreate,
+    SaleLineCreate,
+)
 
 
 class FakeScalarRows:
@@ -98,3 +102,30 @@ async def test_sales_history_hides_explicit_unassigned_branch(monkeypatch):
 
     assert error.value.status_code == 404
     assert session.scalars_calls == 0
+
+
+
+@pytest.mark.asyncio
+async def test_opening_balance_checks_assignment_before_idempotency_lookup(monkeypatch):
+    async def denied(session, user, organization, branch_id):
+        raise HTTPException(status_code=403, detail="Branch assignment required")
+
+    monkeypatch.setattr(sales, "require_branch_assignment", denied)
+    session = FakeSession()
+    payload = OpeningBalanceCreate(
+        branch_id="branch-2",
+        item_id="item-1",
+        quantity="10",
+        idempotency_key="opening-key-123",
+    )
+
+    with pytest.raises(HTTPException) as error:
+        await sales.record_opening_balance(
+            payload=payload,
+            organization=SimpleNamespace(id="org-1"),
+            user=SimpleNamespace(id="field-user"),
+            session=session,
+        )
+
+    assert error.value.status_code == 403
+    assert session.scalar_calls == 0
