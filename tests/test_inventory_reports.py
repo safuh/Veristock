@@ -521,3 +521,37 @@ async def test_field_demand_forecast_filters_sales_and_stock_to_assigned_branche
     sql = str(session.statement)
     assert "sales.branch_id IN" in sql
     assert "stock_balances.branch_id IN" in sql
+
+
+
+@pytest.mark.asyncio
+async def test_field_forecast_evaluation_uses_only_assigned_branch_sales(monkeypatch):
+    from veristock.api import reports
+
+    class EvaluationSession:
+        statement = None
+
+        async def scalar(self, statement):
+            return "item-1"
+
+        async def execute(self, statement):
+            self.statement = statement
+            return FakeResult(rows=[])
+
+    async def assigned_branches(session, user, organization):
+        return {"branch-1"}
+
+    monkeypatch.setattr(reports, "accessible_branch_ids", assigned_branches)
+    session = EvaluationSession()
+    result = await reports.evaluate_inventory_forecast(
+        organization=SimpleNamespace(id="org-1"),
+        session=session,
+        item_id="item-1",
+        user=SimpleNamespace(id="field-user"),
+        lookback_days=7,
+        horizon_days=1,
+        folds=1,
+    )
+
+    assert result.item_id == "item-1"
+    assert "sales.branch_id IN" in str(session.statement)
