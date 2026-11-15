@@ -248,7 +248,11 @@ async def inventory_report(
         ),
         InventoryReportMetric(
             key="inventory.active_branches",
-            label="Active branches",
+            label=(
+                "Active assigned branches"
+                if allowed_branch_ids is not None
+                else "Active branches"
+            ),
             value=Decimal(active_branch_count),
             unit="branches",
             source_reference="inventory:summary:active-branches",
@@ -262,14 +266,22 @@ async def inventory_report(
         ),
         InventoryReportMetric(
             key="inventory.zero_stock_items",
-            label="Active items with no stock in any branch",
+            label=(
+                "Active items with no stock in assigned branches"
+                if allowed_branch_ids is not None
+                else "Active items with no stock in any branch"
+            ),
             value=Decimal(zero_stock_item_count),
             unit="items",
             source_reference="inventory:summary:zero-stock-items",
         ),
         InventoryReportMetric(
             key="inventory.total_units",
-            label="Total units on hand across branches",
+            label=(
+                "Total units on hand across assigned branches"
+                if allowed_branch_ids is not None
+                else "Total units on hand across branches"
+            ),
             value=total_units,
             unit="base units",
             source_reference="inventory:summary:total-units",
