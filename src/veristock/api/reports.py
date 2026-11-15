@@ -26,6 +26,7 @@ from veristock.ai.service import (
     AIService,
     AIServiceUnavailable,
 )
+from veristock.api.branch_access import accessible_branch_ids
 from veristock.identity.authorization import Organization
 from veristock.identity.authorization_dependencies import (
     get_current_user,
@@ -109,8 +110,14 @@ def get_ai_service(request: Request) -> AIService:
 async def inventory_report(
     organization: InventoryReporter,
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    user: Annotated[User | None, Depends(get_current_user)] = None,
 ) -> InventoryReportRead:
     """Return an auditable stock snapshot for the selected tenant only."""
+    allowed_branch_ids = (
+        await accessible_branch_ids(session, user, organization)
+        if user is not None
+        else None
+    )
     active_item_count = int(
         await session.scalar(
             select(func.count(InventoryItem.id)).where(
@@ -120,14 +127,16 @@ async def inventory_report(
         )
         or 0
     )
-    active_branch_count = int(
-        await session.scalar(
-            select(func.count(Branch.id)).where(
-                Branch.organization_id == organization.id,
-                Branch.status == "active",
-            )
+    branch_count_statement = select(func.count(Branch.id)).where(
+        Branch.organization_id == organization.id,
+        Branch.status == "active",
+    )
+    if allowed_branch_ids is not None:
+        branch_count_statement = branch_count_statement.where(
+            Branch.id.in_(allowed_branch_ids)
         )
-        or 0
+    active_branch_count = int(
+        await session.scalar(branch_count_statement) or 0
     )
 
     stocked_item_count, total_units = (
@@ -145,6 +154,11 @@ async def inventory_report(
             .where(
                 StockBalance.organization_id == organization.id,
                 StockBalance.quantity_on_hand > 0,
+                *(
+                    [StockBalance.branch_id.in_(allowed_branch_ids)]
+                    if allowed_branch_ids is not None
+                    else []
+                ),
             )
         )
     ).one()
@@ -196,6 +210,11 @@ async def inventory_report(
             .where(
                 Branch.organization_id == organization.id,
                 Branch.status == "active",
+                *(
+                    [Branch.id.in_(allowed_branch_ids)]
+                    if allowed_branch_ids is not None
+                    else []
+                ),
             )
             .group_by(Branch.id, Branch.code, Branch.name)
             .order_by(Branch.code)
@@ -282,7 +301,7 @@ async def generate_inventory_narrative(
     ai_service: Annotated[AIService, Depends(get_ai_service)],
 ) -> InventoryNarrativeRead:
     """Generate an advisory narrative from this tenant's authorized snapshot."""
-    report = await inventory_report(organization, session)
+    report = await inventory_report(organization, session, user)
     narrative_request = ReportNarrativeRequest(
         period_start=report.as_of.date(),
         period_end=report.as_of.date(),
@@ -447,6 +466,7 @@ class DemandForecastRead(BaseModel):
 async def inventory_demand_forecast(
     organization: InventoryReporter,
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    user: Annotated[User | None, Depends(get_current_user)] = None,
     branch_id: str | None = None,
     lookback_days: int = Query(default=30, ge=7, le=365),
     target_days: int = Query(default=14, ge=1, le=180),
@@ -462,7 +482,14 @@ async def inventory_demand_forecast(
     explicit shared overrides are accepted, otherwise zero-day defaults apply.
     This endpoint never creates or posts replenishment transactions.
     """
+    allowed_branch_ids = (
+        await accessible_branch_ids(session, user, organization)
+        if user is not None
+        else None
+    )
     if branch_id is not None:
+        if allowed_branch_ids is not None and branch_id not in allowed_branch_ids:
+            raise HTTPException(status_code=404, detail="Active branch not found")
         branch = await session.scalar(
             select(Branch.id).where(
                 Branch.id == branch_id,
@@ -507,6 +534,11 @@ async def inventory_demand_forecast(
     if branch_id is not None:
         sales_statement = sales_statement.where(Sale.branch_id == branch_id)
         stock_statement = stock_statement.where(StockBalance.branch_id == branch_id)
+    elif allowed_branch_ids is not None:
+        sales_statement = sales_statement.where(Sale.branch_id.in_(allowed_branch_ids))
+        stock_statement = stock_statement.where(
+            StockBalance.branch_id.in_(allowed_branch_ids)
+        )
 
     sales_totals = sales_statement.subquery()
     stock_totals = stock_statement.subquery()
@@ -784,7 +816,8 @@ class ForecastEvaluationRead(BaseModel):
 async def evaluate_inventory_forecast(
     organization: InventoryReporter,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    item_id: str,
+    user: Annotated[User | None, Depends(get_current_user)] = None,
+    item_id: str = "",
     branch_id: str | None = None,
     lookback_days: int = Query(default=30, ge=7, le=180),
     horizon_days: int = Query(default=7, ge=1, le=30),
@@ -801,7 +834,14 @@ async def evaluate_inventory_forecast(
     if item is None:
         raise HTTPException(status_code=404, detail="Active item not found")
 
+    allowed_branch_ids = (
+        await accessible_branch_ids(session, user, organization)
+        if user is not None
+        else None
+    )
     if branch_id is not None:
+        if allowed_branch_ids is not None and branch_id not in allowed_branch_ids:
+            raise HTTPException(status_code=404, detail="Active branch not found")
         branch = await session.scalar(
             select(Branch.id).where(
                 Branch.id == branch_id,
@@ -840,6 +880,8 @@ async def evaluate_inventory_forecast(
     )
     if branch_id is not None:
         statement = statement.where(Sale.branch_id == branch_id)
+    elif allowed_branch_ids is not None:
+        statement = statement.where(Sale.branch_id.in_(allowed_branch_ids))
 
     rows = (await session.execute(statement)).all()
     sales_by_day = {
