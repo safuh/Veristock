@@ -42,6 +42,7 @@ class FakeSession:
                 ),
             )
         )
+        self.statements = []
         self.added = []
         self.commit_count = 0
 
@@ -49,6 +50,7 @@ class FakeSession:
         return next(self.scalar_values)
 
     async def execute(self, statement):
+        self.statements.append(statement)
         return next(self.execute_results)
 
     def add(self, record):
@@ -451,3 +453,53 @@ async def test_all_branch_forecast_does_not_claim_pooled_availability():
     assert item.stock_availability_status == "branch_required"
     assert item.stock_availability_fraction is None
     assert item.stock_availability_coverage_fraction is None
+
+
+
+@pytest.mark.asyncio
+async def test_field_inventory_report_is_limited_to_assigned_branches(monkeypatch):
+    from veristock.api import reports
+
+    async def assigned_branches(session, user, organization):
+        return {"branch-1"}
+
+    monkeypatch.setattr(reports, "accessible_branch_ids", assigned_branches)
+    session = FakeSession()
+    result = await inventory_report(
+        organization=SimpleNamespace(id="org-1"),
+        session=session,
+        user=SimpleNamespace(id="field-user"),
+    )
+
+    assert result.active_branch_count == 2  # Fake scalar response
+    assert "stock_balances.branch_id IN" in str(session.statements[0])
+    assert "branches.id IN" in str(session.statements[1])
+
+
+@pytest.mark.asyncio
+async def test_field_demand_forecast_filters_sales_and_stock_to_assigned_branches(
+    monkeypatch,
+):
+    from veristock.api import reports
+
+    async def assigned_branches(session, user, organization):
+        return {"branch-1"}
+
+    monkeypatch.setattr(reports, "accessible_branch_ids", assigned_branches)
+    session = FakeForecastSession()
+    result = await reports.inventory_demand_forecast(
+        organization=SimpleNamespace(id="org-1"),
+        session=session,
+        user=SimpleNamespace(id="field-user"),
+        lookback_days=30,
+        target_days=14,
+        lead_time_days=5,
+        safety_stock_days=2,
+        limit=200,
+        offset=0,
+    )
+
+    assert result.branch_id is None
+    sql = str(session.statement)
+    assert "sales.branch_id IN" in sql
+    assert "stock_balances.branch_id IN" in sql
