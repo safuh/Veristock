@@ -13,6 +13,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from veristock.api.branch_access import (
+    accessible_branch_ids,
+    require_branch_assignment,
+)
 from veristock.identity.authorization import Organization
 from veristock.identity.authorization_dependencies import (
     get_current_user,
@@ -20,7 +24,6 @@ from veristock.identity.authorization_dependencies import (
     require_permission,
 )
 from veristock.identity.models import User
-from veristock.api.branch_access import accessible_branch_ids, require_branch_assignment
 from veristock.inventory.models import (
     InventoryItem,
     Sale,
