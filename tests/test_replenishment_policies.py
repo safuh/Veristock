@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
+from veristock.api import replenishment
 from veristock.api.replenishment import (
     ReplenishmentPolicyWrite,
     upsert_replenishment_policy,
@@ -46,7 +47,11 @@ class FakeSession:
 
 
 @pytest.mark.asyncio
-async def test_upsert_creates_tenant_scoped_policy_with_actor_provenance():
+async def test_upsert_creates_tenant_scoped_policy_with_actor_provenance(monkeypatch):
+    async def assigned(session, user, organization, branch_id):
+        return None
+
+    monkeypatch.setattr(replenishment, "require_branch_assignment", assigned)
     session = FakeSession()
     result = await upsert_replenishment_policy(
         branch_id="branch-1",
@@ -68,7 +73,11 @@ async def test_upsert_creates_tenant_scoped_policy_with_actor_provenance():
 
 
 @pytest.mark.asyncio
-async def test_upsert_updates_existing_policy_without_creating_duplicate():
+async def test_upsert_updates_existing_policy_without_creating_duplicate(monkeypatch):
+    async def assigned(session, user, organization, branch_id):
+        return None
+
+    monkeypatch.setattr(replenishment, "require_branch_assignment", assigned)
     policy = SimpleNamespace(
         organization_id="org-1",
         branch_id="branch-1",
@@ -96,7 +105,11 @@ async def test_upsert_updates_existing_policy_without_creating_duplicate():
 
 
 @pytest.mark.asyncio
-async def test_upsert_rejects_branch_or_item_outside_active_tenant():
+async def test_upsert_rejects_branch_or_item_outside_active_tenant(monkeypatch):
+    async def assigned(session, user, organization, branch_id):
+        return None
+
+    monkeypatch.setattr(replenishment, "require_branch_assignment", assigned)
     session = FakeSession(scope_exists=False)
 
     with pytest.raises(HTTPException) as error:
@@ -118,3 +131,27 @@ def test_policy_inputs_reject_values_outside_supported_range():
         ReplenishmentPolicyWrite(lead_time_days=181)
     with pytest.raises(ValueError):
         ReplenishmentPolicyWrite(safety_stock_days=-1)
+
+
+
+@pytest.mark.asyncio
+async def test_upsert_rejects_unassigned_field_user_before_resource_lookup(monkeypatch):
+    async def denied(session, user, organization, branch_id):
+        raise HTTPException(status_code=403, detail="Branch assignment required")
+
+    monkeypatch.setattr(replenishment, "require_branch_assignment", denied)
+    session = FakeSession()
+
+    with pytest.raises(HTTPException) as error:
+        await upsert_replenishment_policy(
+            branch_id="branch-2",
+            item_id="item-1",
+            payload=ReplenishmentPolicyWrite(),
+            organization=SimpleNamespace(id="org-1"),
+            user=SimpleNamespace(id="field-user"),
+            session=session,
+        )
+
+    assert error.value.status_code == 403
+    assert session.commits == 0
+    assert session.added == []
