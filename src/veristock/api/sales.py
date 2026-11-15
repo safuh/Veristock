@@ -20,6 +20,7 @@ from veristock.identity.authorization_dependencies import (
     require_permission,
 )
 from veristock.identity.models import User
+from veristock.api.branch_access import accessible_branch_ids, require_branch_assignment
 from veristock.inventory.models import (
     InventoryItem,
     Sale,
@@ -142,6 +143,7 @@ async def record_opening_balance(
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> OpeningBalanceRead:
+    await require_branch_assignment(session, user, organization, payload.branch_id)
     existing = await session.scalar(
         select(StockMovement).where(
             StockMovement.organization_id == organization.id,
@@ -243,6 +245,7 @@ async def post_sale(
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> Sale:
+    await require_branch_assignment(session, user, organization, payload.branch_id)
     prior = await session.scalar(
         select(Sale)
         .options(selectinload(Sale.lines))
@@ -356,14 +359,20 @@ async def post_sale(
 @router.get("/sales", response_model=list[SaleRead])
 async def list_sales(
     organization: SalesRecorder,
+    user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     branch_id: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[Sale]:
     statement = select(Sale).where(Sale.organization_id == organization.id)
+    allowed_branch_ids = await accessible_branch_ids(session, user, organization)
     if branch_id is not None:
+        if allowed_branch_ids is not None and branch_id not in allowed_branch_ids:
+            raise HTTPException(status_code=404, detail="Branch not found")
         statement = statement.where(Sale.branch_id == branch_id)
+    elif allowed_branch_ids is not None:
+        statement = statement.where(Sale.branch_id.in_(allowed_branch_ids))
     sales = list(
         (
             await session.scalars(
