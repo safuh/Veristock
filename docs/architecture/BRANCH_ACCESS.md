@@ -39,3 +39,12 @@ authorization before replay lookup, plus assigned-branch sales and stock-ledger
 history. Reporting tests
 assert that summary and forecast SQL aggregates include the assigned-branch
 filters. These tests still require CI execution on the latest branch head.
+
+
+## Manual adjustment reversals
+
+- Reversals are available only for manual adjustment movements; sale correction remains a separate workflow.
+- The caller must retain access to the original movement's branch and hold `inventory.manage`.
+- Reversal appends the exact opposite quantity as a new ledger movement with a mandatory reason and actor provenance.
+- The original movement is never updated or deleted. A tenant-scoped unique constraint allows at most one reversal per original movement.
+- A reversal is rejected if its compensating quantity would make the current balance negative.
