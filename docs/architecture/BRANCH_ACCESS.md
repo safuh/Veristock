@@ -20,8 +20,10 @@ change the authoritative stock ledger or balances.
 - Inventory summary and stock-balance reads: branch-scoped for field counters.
 - Stocktaking scope, own-observation restore, count writes/retries, submission,
   and evidence upload/retrieval: branch-scoped.
-- Sales posting/listing, replenishment policy management, and broader reporting:
-  further enforcement work remains.
+- Sales posting, opening-balance writes, and sales history: branch-scoped.
+- Replenishment policy listing and updates: branch-scoped.
+- Broader reporting and other branch-sensitive workflows: further enforcement
+  work remains.
 - Catalogue item metadata remains organization-wide because it is shared across
   branches; quantities and branch stock position are restricted.
 
@@ -29,3 +31,5 @@ change the authoritative stock ledger or balances.
 
 `tests/test_inventory_branch_scope.py` covers assigned versus unassigned
 branch balances, explicit cross-branch lookup denial, and summary aggregation.
+Sales and replenishment branch-scope integration coverage should be added before
+this enforcement area is considered fully verified.
