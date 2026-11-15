@@ -183,7 +183,8 @@ Reference documents:
 - [x] Append-only stock movement ledger and current-balance projection.
 - [x] Client portal/API sales entry with line items and posting validation.
 - [x] Atomic sale + stock-out movement posting with idempotency.
-- [ ] Reversal/correction workflow; no direct edits to posted sales or movements.
+- [x] Manual adjustment reversal by appending a reasoned, actor-attributed compensating movement; database-enforced single reversal and non-negative balance guard.
+- [ ] Posted sale reversal/correction workflow; no direct edits to posted sales or movements.
 - [x] Initial tenant-scoped inventory catalogue and stock-on-hand read APIs.
 - [ ] Tenant/branch-scoped inventory search, pagination and filtering beyond the initial read endpoints.
 - [ ] Permission matrix and cross-tenant tests for inventory and sales.
