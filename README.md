@@ -140,3 +140,6 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api
 The default URL is for the Android emulator. Use the development machine's LAN IP for a physical device. The Android client provides authentication, organization selection, open-stocktake retrieval, barcode-to-item matching, online count capture and count-round submission. Offline queueing and conflict-safe sync are not yet enabled.
 
 Client administrators can use the browser Team & access area to invite organization members, assign active members to branches and remove those assignments without deactivating their organization accounts. Invitations are single-use, expire after 72 hours and return a one-time token for secure manual delivery until an email provider is integrated. Field stocktaking endpoints enforce active branch assignments. Member invitation and assignment management remain permission-controlled.
+
+
+Manual stock adjustments can be reversed through `POST /api/inventory/movements/{movement_id}/reversal`. The endpoint appends an exact compensating ledger event, requires a reason and `inventory.manage`, prevents duplicate reversals at the database level, and refuses a reversal that would make stock negative. Posted sale reversals remain a separate workflow.
