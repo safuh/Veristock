@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import distinct, func, select
+from sqlalchemy import distinct, func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from veristock.api.branch_access import accessible_branch_ids
@@ -62,12 +62,12 @@ async def inventory_summary(
     """Return inventory totals limited to the user's authorized branch scope."""
     branch_ids = await accessible_branch_ids(session, user, organization)
     branch_filter = (
-        Branch.id.in_(branch_ids) if branch_ids is not None else True
+        Branch.id.in_(branch_ids) if branch_ids is not None else true()
     )
     balance_filter = (
         StockBalance.branch_id.in_(branch_ids)
         if branch_ids is not None
-        else True
+        else true()
     )
     item_count = await session.scalar(
         select(func.count(InventoryItem.id)).where(
