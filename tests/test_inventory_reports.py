@@ -107,7 +107,13 @@ async def test_inventory_report_returns_deterministic_tenant_snapshot():
 
 
 @pytest.mark.asyncio
-async def test_inventory_narrative_persists_tenant_scoped_success_audit():
+async def test_inventory_narrative_persists_tenant_scoped_success_audit(monkeypatch):
+    from veristock.api import reports
+
+    async def tenant_wide_for_test(session, user, organization):
+        return None
+
+    monkeypatch.setattr(reports, "accessible_branch_ids", tenant_wide_for_test)
     session = FakeSession()
     result = await generate_inventory_narrative(
         request=fake_request(),
@@ -131,7 +137,13 @@ async def test_inventory_narrative_persists_tenant_scoped_success_audit():
 
 
 @pytest.mark.asyncio
-async def test_unconfigured_ai_provider_is_audited_and_returns_503():
+async def test_unconfigured_ai_provider_is_audited_and_returns_503(monkeypatch):
+    from veristock.api import reports
+
+    async def tenant_wide_for_test(session, user, organization):
+        return None
+
+    monkeypatch.setattr(reports, "accessible_branch_ids", tenant_wide_for_test)
     session = FakeSession()
 
     with pytest.raises(HTTPException) as error:
