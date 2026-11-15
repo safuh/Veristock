@@ -92,6 +92,7 @@ async def test_inventory_report_returns_deterministic_tenant_snapshot():
     report = await inventory_report(
         organization=SimpleNamespace(id="org-1"),
         session=FakeSession(),
+        user=None,
     )
 
     assert report.organization_id == "org-1"
@@ -211,6 +212,7 @@ async def test_demand_forecast_uses_tenant_scoped_sales_and_stock_totals():
     result = await inventory_demand_forecast(
         organization=SimpleNamespace(id="org-1"),
         session=session,
+        user=None,
         lookback_days=30,
         target_days=14,
         lead_time_days=5,
@@ -323,6 +325,7 @@ async def test_branch_forecast_uses_saved_item_policy_and_tenant_scope():
     result = await inventory_demand_forecast(
         organization=SimpleNamespace(id="org-1"),
         session=session,
+        user=None,
         branch_id="branch-1",
         lookback_days=30,
         target_days=14,
@@ -368,6 +371,7 @@ async def test_branch_forecast_request_override_takes_precedence_over_saved_poli
     result = await inventory_demand_forecast(
         organization=SimpleNamespace(id="org-1"),
         session=session,
+        user=None,
         branch_id="branch-1",
         lead_time_days=1,
         safety_stock_days=1,
@@ -416,6 +420,7 @@ async def test_branch_forecast_exposes_opening_balance_anchored_availability():
     result = await inventory_demand_forecast(
         organization=SimpleNamespace(id="org-1"),
         session=session,
+        user=None,
         branch_id="branch-1",
         lookback_days=7,
         target_days=14,
@@ -441,6 +446,7 @@ async def test_all_branch_forecast_does_not_claim_pooled_availability():
     result = await inventory_demand_forecast(
         organization=SimpleNamespace(id="org-1"),
         session=FakeForecastSession(),
+        user=None,
         lookback_days=30,
         target_days=14,
         lead_time_days=None,
