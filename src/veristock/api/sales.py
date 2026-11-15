@@ -572,6 +572,7 @@ async def reverse_manual_stock_adjustment(
         quantity_delta=reversal_delta,
         unit_code=original.unit_code,
         source_type="reversal",
+        source_id=original.id,
         reversal_of_movement_id=original.id,
         reason=payload.reason,
         idempotency_key=payload.idempotency_key,
