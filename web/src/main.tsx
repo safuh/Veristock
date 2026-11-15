@@ -351,6 +351,18 @@ type SaleRecord = {
   id: string; branch_id: string; reference: string | null; status: string;
   posted_at: string; lines: { item_id: string; quantity: string; unit_code: string }[];
 };
+type StockMovementRecord = {
+  movement_id: string;
+  branch_id: string;
+  item_id: string;
+  quantity_delta: string;
+  unit_code: string;
+  source_type: string;
+  source_id: string | null;
+  reason: string | null;
+  actor_user_id: string;
+  occurred_at: string;
+};
 type StocktakeRecord = {
   id: string; branch_id: string; reference: string; blind_count: boolean;
   status: string; created_at: string; item_count: number;
@@ -404,6 +416,7 @@ function ClientDashboard({ token, organization }: { token: string; organization:
   } | null>(null);
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [balances, setBalances] = useState<StockBalance[]>([]);
+  const [movements, setMovements] = useState<StockMovementRecord[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [stocktakes, setStocktakes] = useState<StocktakeRecord[]>([]);
@@ -425,6 +438,10 @@ function ClientDashboard({ token, organization }: { token: string; organization:
   const [openingBranch, setOpeningBranch] = useState("");
   const [openingItem, setOpeningItem] = useState("");
   const [openingQuantity, setOpeningQuantity] = useState("0");
+  const [adjustmentBranch, setAdjustmentBranch] = useState("");
+  const [adjustmentItem, setAdjustmentItem] = useState("");
+  const [adjustmentDelta, setAdjustmentDelta] = useState("");
+  const [adjustmentReason, setAdjustmentReason] = useState("");
   const [saleBranch, setSaleBranch] = useState("");
   const [saleItem, setSaleItem] = useState("");
   const [saleQuantity, setSaleQuantity] = useState("1");
@@ -443,7 +460,7 @@ function ClientDashboard({ token, organization }: { token: string; organization:
     setLoading(true);
     setError("");
     try {
-      const [branchRows, inventorySummary, stockRows, itemRows, saleRows, stocktakeRows] =
+      const [branchRows, inventorySummary, stockRows, itemRows, saleRows, stocktakeRows, movementRows] =
         await Promise.all([
           request<Branch[]>("/branches", token, organization.id),
           request<InventorySummary>("/inventory/summary", token, organization.id),
@@ -451,10 +468,12 @@ function ClientDashboard({ token, organization }: { token: string; organization:
           request<InventoryItem[]>("/inventory/items", token, organization.id),
           request<SaleRecord[]>("/sales", token, organization.id),
           request<StocktakeRecord[]>("/stocktakes", token, organization.id),
+          request<StockMovementRecord[]>("/inventory/movements?limit=100", token, organization.id),
         ]);
       setBranches(branchRows);
       setSummary(inventorySummary);
       setBalances(stockRows);
+      setMovements(movementRows);
       setItems(itemRows);
       setSales(saleRows);
       setStocktakes(stocktakeRows);
@@ -474,9 +493,11 @@ function ClientDashboard({ token, organization }: { token: string; organization:
         }
       }
       setOpeningBranch((current) => current || branchRows[0]?.id || "");
+      setAdjustmentBranch((current) => current || branchRows[0]?.id || "");
       setSaleBranch((current) => current || branchRows[0]?.id || "");
       setStocktakeBranch((current) => current || branchRows[0]?.id || "");
       setOpeningItem((current) => current || itemRows[0]?.id || "");
+      setAdjustmentItem((current) => current || itemRows[0]?.id || "");
       setSaleItem((current) => current || itemRows[0]?.id || "");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load organization data");
@@ -665,6 +686,31 @@ function ClientDashboard({ token, organization }: { token: string; organization:
       }),
     });
   }, "Opening stock recorded in the movement ledger.");
+
+  const recordAdjustment = () => perform(async () => {
+    const delta = Number(adjustmentDelta);
+    if (!Number.isFinite(delta) || delta === 0) {
+      throw new Error("Enter a non-zero adjustment quantity.");
+    }
+    if (adjustmentReason.trim().length < 10) {
+      throw new Error("Explain the reason using at least 10 characters.");
+    }
+    const item = items.find((candidate) => candidate.id === adjustmentItem);
+    if (!item) throw new Error("Select an active inventory item.");
+    await request("/inventory/adjustments", token, organization.id, {
+      method: "POST",
+      body: JSON.stringify({
+        branch_id: adjustmentBranch,
+        item_id: adjustmentItem,
+        quantity_delta: adjustmentDelta,
+        unit_code: item.base_unit_code,
+        reason: adjustmentReason.trim(),
+        idempotency_key: crypto.randomUUID(),
+      }),
+    });
+    setAdjustmentDelta("");
+    setAdjustmentReason("");
+  }, "Stock adjusted. The ledger and on-hand balance have been updated.");
 
   const postSale = () => perform(async () => {
     await request("/sales", token, organization.id, {
@@ -878,6 +924,37 @@ function ClientDashboard({ token, organization }: { token: string; organization:
         <label>Quantity<input type="number" min="0.0001" step="0.0001" value={openingQuantity} onChange={(e) => setOpeningQuantity(e.target.value)} /></label>
         <button className="primary" disabled={busy || !openingBranch || !openingItem} onClick={() => void recordOpening()}>Record opening stock</button>
       </div>
+    </section>
+
+    <section className="panel" id="client-adjustments">
+      <div className="panel-heading"><div><p className="eyebrow">CONTROLLED CORRECTION</p><h2>Adjust stock</h2>
+        <p className="muted">Record a verified gain or loss. Every adjustment requires a reason and creates an auditable ledger entry.</p></div></div>
+      <div className="operation-form">
+        <label>Branch<select value={adjustmentBranch} onChange={(e) => setAdjustmentBranch(e.target.value)}>
+          {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
+        <label>Item<select value={adjustmentItem} onChange={(e) => setAdjustmentItem(e.target.value)}>
+          {items.filter((item) => item.status === "active").map((item) => <option key={item.id} value={item.id}>{item.name} ({item.base_unit_code})</option>)}</select></label>
+        <label>Quantity change<input type="number" step="0.0001" value={adjustmentDelta} onChange={(e) => setAdjustmentDelta(e.target.value)} placeholder="e.g. 5 or -2" /></label>
+        <label>Reason<textarea value={adjustmentReason} onChange={(e) => setAdjustmentReason(e.target.value)} minLength={10} maxLength={500} placeholder="Explain the verified discrepancy or correction (at least 10 characters)." /></label>
+        <button className="primary" disabled={busy || !adjustmentBranch || !adjustmentItem || !adjustmentDelta || adjustmentReason.trim().length < 10} onClick={() => void recordAdjustment()}>Record adjustment</button>
+      </div>
+      <p className="muted">Negative changes cannot reduce stock below zero. Corrections cannot be edited or deleted; use a new, reasoned adjustment to correct a mistake.</p>
+    </section>
+
+    <section className="panel" id="client-stock-ledger">
+      <div className="panel-heading"><div><p className="eyebrow">AUDIT TRAIL</p><h2>Recent stock movements</h2>
+        <p className="muted">Latest 100 ledger entries visible within your branch access.</p></div></div>
+      <div className="table-wrap"><table><thead><tr><th>DATE</th><th>BRANCH</th><th>ITEM</th><th>CHANGE</th><th>SOURCE</th><th>REASON</th><th>ACTOR</th></tr></thead>
+        <tbody>{movements.map((movement) => <tr key={movement.movement_id}>
+          <td>{new Date(movement.occurred_at).toLocaleString()}</td>
+          <td>{branches.find((branch) => branch.id === movement.branch_id)?.name ?? movement.branch_id}</td>
+          <td>{items.find((item) => item.id === movement.item_id)?.name ?? movement.item_id}</td>
+          <td>{Number(movement.quantity_delta).toLocaleString()} {movement.unit_code}</td>
+          <td>{movement.source_type.replaceAll("_", " ")}</td>
+          <td>{movement.reason ?? "—"}</td>
+          <td>{movement.actor_user_id}</td>
+        </tr>)}
+          {!movements.length && <tr><td colSpan={7} className="muted">No stock movements recorded yet.</td></tr>}</tbody></table></div>
     </section>
 
     <section className="panel" id="client-sales">
