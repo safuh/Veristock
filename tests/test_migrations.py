@@ -100,6 +100,7 @@ async def test_alembic_upgrade_and_downgrade() -> None:
             "idempotency_key",
             "actor_user_id",
             "reason",
+            "reversal_of_movement_id",
         } <= stock_movement_columns
         assert permission_count > 0
         assert role_count == 10
