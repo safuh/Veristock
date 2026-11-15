@@ -64,3 +64,28 @@ def test_cors_policy_is_explicit() -> None:
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "https://example.com"
+
+
+def test_optional_compatible_ai_provider_is_composed_from_settings() -> None:
+    settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        ai_provider="openai-compatible",
+        ai_base_url="http://localhost:11434/v1",
+        ai_model="local-model",
+    )
+
+    app = create_app(settings)
+
+    assert app.state.ai_service.is_configured is True
+    assert app.state.ai_service.provider_name == "openai-compatible"
+    assert app.state.ai_service.model_name == "local-model"
+
+
+def test_ai_provider_requires_base_url_and_model() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="AI_BASE_URL and AI_MODEL"):
+        Settings(
+            database_url="sqlite+aiosqlite:///:memory:",
+            ai_provider="openai-compatible",
+        )

@@ -6,7 +6,7 @@ This is the Flutter client for Veristock field operations. The React PWA remains
 
 - Field employee authentication and organization selection.
 - Camera and barcode scanning.
-- Assigned stocktaking tasks and count capture (next implementation slice).
+- Assigned stocktaking tasks, blind count capture, evidence upload and round submission.
 - Controlled offline capture and synchronization (not enabled yet).
 
 The mobile application is a client of the shared FastAPI API. It does not calculate authoritative inventory balances or bypass backend authorization.
@@ -27,8 +27,8 @@ The default API URL targets a backend running on the host machine when using the
 
 ## Authentication
 
-The app uses the existing JSON token endpoints. Access and refresh tokens are stored using platform secure storage. Do not persist tokens in shared preferences, logs or local databases.
+The app uses the existing JSON token endpoints. Access and refresh tokens are stored using platform secure storage. Protected requests refresh an expired access token once and coalesce concurrent refresh attempts. Invalid refresh credentials clear the saved session; transient network failures preserve it. Do not persist tokens in shared preferences, logs or local databases.
 
 ## Current scope
 
-The current slice provides login, refresh-token session restoration, organization selection and a working barcode-scanner screen. Stocktake assignment, count submission, encrypted offline task storage and synchronization are not yet implemented.
+The current slice provides login, refresh-token session restoration and automatic access-token refresh, organization selection, open-stocktake retrieval, blind count capture, barcode matching, count-round submission and optional camera photo evidence upload. Encrypted offline task storage, conflict-safe synchronization and production release signing are not yet implemented.

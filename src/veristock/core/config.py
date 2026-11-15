@@ -2,6 +2,7 @@
 
 from enum import StrEnum
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -44,6 +45,13 @@ class Settings(BaseSettings):
     database_pool_pre_ping: bool = True
     log_level: str = "INFO"
     log_json: bool = False
+    ai_provider: str | None = None
+    ai_base_url: str | None = None
+    ai_model: str | None = None
+    ai_api_key: SecretStr | None = None
+    ai_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
+    stocktake_evidence_storage_dir: Path = Path(".data/stocktake-evidence")
+    stocktake_evidence_max_bytes: int = Field(default=8 * 1024 * 1024, ge=1024, le=32 * 1024 * 1024)
     cors_origins: list[str] = Field(default_factory=list)
     cors_allow_credentials: bool = False
     cors_allow_methods: list[str] = Field(
@@ -62,6 +70,13 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_profile(self) -> "Settings":
+        if self.ai_provider is not None:
+            if self.ai_provider != "openai-compatible":
+                raise ValueError("AI_PROVIDER must be openai-compatible when configured")
+            if not self.ai_base_url or not self.ai_model:
+                raise ValueError(
+                    "AI_BASE_URL and AI_MODEL are required when AI_PROVIDER is configured"
+                )
         if self.environment is Environment.PRODUCTION:
             if self.debug:
                 raise ValueError("debug must be false in production")

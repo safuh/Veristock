@@ -38,6 +38,20 @@ async def test_alembic_upgrade_and_downgrade() -> None:
             refresh_token_columns = {row[0] for row in result}
             result = await connection.execute(
                 text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'ai_execution_records'"
+                )
+            )
+            ai_audit_columns = {row[0] for row in result}
+            result = await connection.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'stock_movements'"
+                )
+            )
+            stock_movement_columns = {row[0] for row in result}
+            result = await connection.execute(
+                text(
                     "SELECT table_name FROM information_schema.tables "
                     "WHERE table_schema = 'public'"
                 )
@@ -67,7 +81,27 @@ async def test_alembic_upgrade_and_downgrade() -> None:
             "organization_contacts",
             "employee_profiles",
             "organization_invitations",
+            "ai_execution_records",
         } <= table_names
+        assert {
+            "organization_id",
+            "user_id",
+            "operation",
+            "status",
+            "provider",
+            "model",
+            "latency_ms",
+            "request_id",
+            "source_references",
+            "failure_code",
+        } <= ai_audit_columns
+        assert {
+            "source_type",
+            "idempotency_key",
+            "actor_user_id",
+            "reason",
+            "reversal_of_movement_id",
+        } <= stock_movement_columns
         assert permission_count > 0
         assert role_count == 10
         assert client_admin_invite_grant == 1
@@ -76,3 +110,11 @@ async def test_alembic_upgrade_and_downgrade() -> None:
 
     subprocess.run([*command, "downgrade", "base"], check=True, env=env)
     subprocess.run([*command, "upgrade", "head"], check=True, env=env)
+
+
+def test_stock_movement_reversal_migration_is_present():
+    from pathlib import Path
+
+    migration = Path("alembic/versions/0023_stock_movement_reversal.py").read_text()
+    assert "reversal_of_movement_id" in migration
+    assert "uq_stock_movements_single_reversal" in migration

@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""Tenant-owned branch and contact persistence models."""
+"""Tenant-owned branch, contact and workforce assignment persistence models."""
 
 from datetime import datetime
 from uuid import uuid4
@@ -42,6 +42,23 @@ class Branch(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
+class BranchMembership(Base):
+    """Explicit assignment of an active organization membership to a branch."""
+
+    __tablename__ = "branch_memberships"
+    __table_args__ = (
+        UniqueConstraint("branch_id", "membership_id", name="uq_branch_membership"),
+        Index("ix_branch_memberships_org_membership", "organization_id", "membership_id"),
+        Index("ix_branch_memberships_org_branch", "organization_id", "branch_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    branch_id: Mapped[str] = mapped_column(String(36), ForeignKey("branches.id", ondelete="CASCADE"), nullable=False)
+    membership_id: Mapped[str] = mapped_column(String(36), ForeignKey("organization_memberships.id", ondelete="CASCADE"), nullable=False)
+    assigned_by_user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class OrganizationContact(Base):
     """A named business contact belonging to a single tenant."""
 
@@ -70,22 +87,11 @@ class OrganizationEnrollment(Base):
             "status IN ('pending', 'approved', 'rejected')",
             name="ck_organization_enrollments_status",
         ),
-        Index(
-            "ix_org_enrollments_status_created",
-            "status",
-            "created_at",
-        ),
-        Index(
-            "ix_org_enrollments_requester_status",
-            "requester_user_id",
-            "status",
-        ),
+        Index("ix_org_enrollments_status_created", "status", "created_at"),
+        Index("ix_org_enrollments_requester_status", "requester_user_id", "status"),
     )
-
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    requester_user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
-    )
+    requester_user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     legal_name: Mapped[str] = mapped_column(String(240), nullable=False)
     trading_name: Mapped[str | None] = mapped_column(String(240))
     business_registration_number: Mapped[str | None] = mapped_column(String(100))
@@ -96,13 +102,7 @@ class OrganizationEnrollment(Base):
     business_description: Mapped[str | None] = mapped_column(String(1000))
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     review_note: Mapped[str | None] = mapped_column(String(1000))
-    organization_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("organizations.id", ondelete="RESTRICT")
-    )
-    reviewed_by_user_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="RESTRICT")
-    )
+    organization_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="RESTRICT"))
+    reviewed_by_user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"))
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
