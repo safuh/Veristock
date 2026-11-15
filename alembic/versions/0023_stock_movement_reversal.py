@@ -17,20 +17,18 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Add a unique reference from a compensating movement to its original."""
-    op.add_column(
-        "stock_movements",
-        sa.Column("reversal_of_movement_id", sa.String(length=36), nullable=True),
-    )
-    op.create_unique_constraint(
-        "uq_stock_movements_single_reversal",
-        "stock_movements",
-        ["organization_id", "reversal_of_movement_id"],
-    )
+    with op.batch_alter_table("stock_movements") as batch_op:
+        batch_op.add_column(
+            sa.Column("reversal_of_movement_id", sa.String(length=36), nullable=True)
+        )
+        batch_op.create_unique_constraint(
+            "uq_stock_movements_single_reversal",
+            ["organization_id", "reversal_of_movement_id"],
+        )
 
 
 def downgrade() -> None:
     """Remove reversal linkage and its uniqueness guarantee."""
-    op.drop_constraint(
-        "uq_stock_movements_single_reversal", "stock_movements", type_="unique"
-    )
-    op.drop_column("stock_movements", "reversal_of_movement_id")
+    with op.batch_alter_table("stock_movements") as batch_op:
+        batch_op.drop_constraint("uq_stock_movements_single_reversal", type_="unique")
+        batch_op.drop_column("reversal_of_movement_id")
