@@ -359,6 +359,7 @@ type StockMovementRecord = {
   unit_code: string;
   source_type: string;
   source_id: string | null;
+  reversal_of_movement_id: string | null;
   reason: string | null;
   actor_user_id: string;
   occurred_at: string;
@@ -442,6 +443,8 @@ function ClientDashboard({ token, organization }: { token: string; organization:
   const [adjustmentItem, setAdjustmentItem] = useState("");
   const [adjustmentDelta, setAdjustmentDelta] = useState("");
   const [adjustmentReason, setAdjustmentReason] = useState("");
+  const [reversalTargetId, setReversalTargetId] = useState<string | null>(null);
+  const [reversalReason, setReversalReason] = useState("");
   const [saleBranch, setSaleBranch] = useState("");
   const [saleItem, setSaleItem] = useState("");
   const [saleQuantity, setSaleQuantity] = useState("1");
@@ -712,6 +715,26 @@ function ClientDashboard({ token, organization }: { token: string; organization:
     setAdjustmentReason("");
   }, "Stock adjusted. The ledger and on-hand balance have been updated.");
 
+  const reverseAdjustment = (movement: StockMovementRecord) => perform(async () => {
+    if (reversalReason.trim().length < 10) {
+      throw new Error("Explain the reversal using at least 10 characters.");
+    }
+    await request(
+      `/inventory/movements/${movement.movement_id}/reversal`,
+      token,
+      organization.id,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          reason: reversalReason.trim(),
+          idempotency_key: crypto.randomUUID(),
+        }),
+      },
+    );
+    setReversalTargetId(null);
+    setReversalReason("");
+  }, "Adjustment reversed with a compensating ledger entry.");
+
   const postSale = () => perform(async () => {
     await request("/sales", token, organization.id, {
       method: "POST",
@@ -944,16 +967,30 @@ function ClientDashboard({ token, organization }: { token: string; organization:
     <section className="panel" id="client-stock-ledger">
       <div className="panel-heading"><div><p className="eyebrow">AUDIT TRAIL</p><h2>Recent stock movements</h2>
         <p className="muted">Latest 100 ledger entries visible within your branch access.</p></div></div>
-      <div className="table-wrap"><table><thead><tr><th>DATE</th><th>BRANCH</th><th>ITEM</th><th>CHANGE</th><th>SOURCE</th><th>REASON</th><th>ACTOR</th></tr></thead>
-        <tbody>{movements.map((movement) => <tr key={movement.movement_id}>
-          <td>{new Date(movement.occurred_at).toLocaleString()}</td>
-          <td>{branches.find((branch) => branch.id === movement.branch_id)?.name ?? movement.branch_id}</td>
-          <td>{items.find((item) => item.id === movement.item_id)?.name ?? movement.item_id}</td>
-          <td>{Number(movement.quantity_delta).toLocaleString()} {movement.unit_code}</td>
-          <td>{movement.source_type.replaceAll("_", " ")}</td>
-          <td>{movement.reason ?? "—"}</td>
-          <td>{movement.actor_user_id}</td>
-        </tr>)}
+      <div className="table-wrap"><table><thead><tr><th>DATE</th><th>BRANCH</th><th>ITEM</th><th>CHANGE</th><th>SOURCE</th><th>REASON</th><th>ACTOR / ACTION</th></tr></thead>
+        <tbody>{movements.map((movement) => {
+          const hasBeenReversed = movements.some((entry) => entry.reversal_of_movement_id === movement.movement_id);
+          return <tr key={movement.movement_id}>
+            <td>{new Date(movement.occurred_at).toLocaleString()}</td>
+            <td>{branches.find((branch) => branch.id === movement.branch_id)?.name ?? movement.branch_id}</td>
+            <td>{items.find((item) => item.id === movement.item_id)?.name ?? movement.item_id}</td>
+            <td>{Number(movement.quantity_delta).toLocaleString()} {movement.unit_code}</td>
+            <td>{movement.source_type.replaceAll("_", " ")}</td>
+            <td>{movement.reason ?? "—"}</td>
+            <td>{movement.actor_user_id}
+              {movement.source_type === "manual_adjustment" && !hasBeenReversed && <button className="secondary" disabled={busy}
+                onClick={() => { setReversalTargetId(movement.movement_id); setReversalReason(""); }}>Reverse</button>}
+              {hasBeenReversed && <small className="muted">Reversed</small>}
+              {reversalTargetId === movement.movement_id && <div className="reject-form">
+                <label>Reversal reason<textarea rows={2} minLength={10} maxLength={500} value={reversalReason}
+                  onChange={(event) => setReversalReason(event.target.value)} placeholder="Explain why this adjustment is being reversed." /></label>
+                <button className="reject" disabled={busy || reversalReason.trim().length < 10}
+                  onClick={() => void reverseAdjustment(movement)}>Confirm reversal</button>
+                <button className="secondary" disabled={busy} onClick={() => setReversalTargetId(null)}>Cancel</button>
+              </div>}
+            </td>
+          </tr>;
+        })}
           {!movements.length && <tr><td colSpan={7} className="muted">No stock movements recorded yet.</td></tr>}</tbody></table></div>
     </section>
 
