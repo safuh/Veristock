@@ -190,7 +190,8 @@ Reference documents:
 ### M12 — Physical stocktaking
 
 - [x] Enforce explicit branch assignment for field count scope, observation restore/write/replay, round submission and evidence upload; branch managers retain cross-branch access.
-- [ ] Extend branch authorization to inventory, sales and reporting operations.
+- [x] Extend branch authorization to inventory balance/summary reads, sales posting/history, opening-balance replay, replenishment policies, inventory reporting, demand forecasts and forecast evaluation.
+- [ ] Verify branch authorization with full CI and add end-to-end browser/Android role acceptance.
 
 **Status: in progress — tenant-scoped branch snapshots, blind scope listing, immutable count observations, idempotent capture, complete-round submission, recount rounds and separately authorized approval-to-ledger reconciliation are implemented for client-organization counters. Veristock cross-tenant staff assignment, production-grade shared evidence storage/scanning and broader supervisor separation-of-duties enforcement remain open. React and Android photo-evidence controls are implemented; full end-to-end device/browser acceptance remains open.**
 
@@ -239,7 +240,8 @@ Reference documents:
 - [ ] Report period, filters, generation timestamp and source watermark are recorded.
 - [ ] PDF/spreadsheet exports from deterministic query results.
 - [x] Optional LLM narrative grounded only in authorized, precomputed metrics.
-- [ ] Tenant-scoped reporting permissions and cross-tenant tests.
+- [x] Restrict field-counter inventory summaries, demand forecasts and forecast evaluation to assigned branches.
+- [ ] Complete broader tenant-scoped reporting permission and cross-tenant test coverage.
 - [x] Deterministic report and forecast APIs remain available when AI is unconfigured or unavailable; the React report panel treats AI status, audit history and narrative generation as optional.
 
 ### M14A — AI platform foundations
