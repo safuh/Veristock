@@ -16,6 +16,7 @@ from veristock.identity.authorization_dependencies import (
     require_permission,
 )
 from veristock.identity.models import User
+from veristock.api.branch_access import accessible_branch_ids, require_branch_assignment
 from veristock.inventory.models import InventoryItem
 from veristock.inventory.policies import ReplenishmentPolicy
 from veristock.organizations.models import Branch
@@ -55,6 +56,7 @@ class ReplenishmentPolicyRead(BaseModel):
 @router.get("", response_model=list[ReplenishmentPolicyRead])
 async def list_replenishment_policies(
     organization: PolicyReader,
+    user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     branch_id: str | None = None,
     limit: int = Query(default=200, ge=1, le=500),
@@ -64,8 +66,13 @@ async def list_replenishment_policies(
     statement = select(ReplenishmentPolicy).where(
         ReplenishmentPolicy.organization_id == organization.id
     )
+    allowed_branch_ids = await accessible_branch_ids(session, user, organization)
     if branch_id is not None:
+        if allowed_branch_ids is not None and branch_id not in allowed_branch_ids:
+            raise HTTPException(status_code=404, detail="Branch not found")
         statement = statement.where(ReplenishmentPolicy.branch_id == branch_id)
+    elif allowed_branch_ids is not None:
+        statement = statement.where(ReplenishmentPolicy.branch_id.in_(allowed_branch_ids))
     result = await session.scalars(
         statement.order_by(
             ReplenishmentPolicy.branch_id,
@@ -91,6 +98,7 @@ async def upsert_replenishment_policy(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> ReplenishmentPolicy:
     """Create or replace one policy after validating both resources' tenant."""
+    await require_branch_assignment(session, user, organization, branch_id)
     scope = await session.execute(
         select(Branch.id, InventoryItem.id)
         .join(
