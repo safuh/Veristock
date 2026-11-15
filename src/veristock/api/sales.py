@@ -117,6 +117,38 @@ class OpeningBalanceRead(BaseModel):
     unit_code: str
 
 
+class StockAdjustmentCreate(BaseModel):
+    branch_id: str
+    item_id: str
+    quantity_delta: Decimal = Field(max_digits=18, decimal_places=4)
+    unit_code: str = Field(min_length=1, max_length=24)
+    reason: str = Field(min_length=10, max_length=500)
+    idempotency_key: str = Field(min_length=8, max_length=128)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 10:
+            raise ValueError("Reason must contain at least 10 non-whitespace characters")
+        return normalized
+
+    @field_validator("unit_code")
+    @classmethod
+    def normalize_unit_code(cls, value: str) -> str:
+        return value.strip().upper()
+
+
+class StockAdjustmentRead(BaseModel):
+    movement_id: str
+    branch_id: str
+    item_id: str
+    quantity_delta: Decimal
+    quantity_on_hand: Decimal
+    unit_code: str
+    reason: str
+
+
 @router.post("/inventory/items", response_model=InventoryItemCreateRead, status_code=201)
 async def create_inventory_item(
     payload: InventoryItemCreate,
@@ -238,6 +270,123 @@ async def record_opening_balance(
         item_id=item.id,
         quantity_on_hand=balance.quantity_on_hand,
         unit_code=item.base_unit_code,
+    )
+
+
+@router.post("/inventory/adjustments", response_model=StockAdjustmentRead, status_code=201)
+async def record_stock_adjustment(
+    payload: StockAdjustmentCreate,
+    organization: InventoryManager,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> StockAdjustmentRead:
+    """Apply a reasoned, idempotent correction through the append-only ledger."""
+    await require_branch_assignment(session, user, organization, payload.branch_id)
+    if payload.quantity_delta == 0:
+        raise HTTPException(status_code=422, detail="Adjustment quantity must not be zero")
+
+    existing = await session.scalar(
+        select(StockMovement).where(
+            StockMovement.organization_id == organization.id,
+            StockMovement.idempotency_key == payload.idempotency_key,
+        )
+    )
+    if existing is not None:
+        if (
+            existing.source_type != "manual_adjustment"
+            or existing.branch_id != payload.branch_id
+            or existing.item_id != payload.item_id
+            or existing.quantity_delta != payload.quantity_delta
+            or existing.unit_code != payload.unit_code
+            or existing.reason != payload.reason
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Idempotency key was used for another operation",
+            )
+        balance = await session.scalar(
+            select(StockBalance).where(
+                StockBalance.organization_id == organization.id,
+                StockBalance.branch_id == payload.branch_id,
+                StockBalance.item_id == payload.item_id,
+            )
+        )
+        if balance is None:
+            raise HTTPException(status_code=409, detail="Original stock balance is unavailable")
+        return StockAdjustmentRead(
+            movement_id=existing.id,
+            branch_id=existing.branch_id,
+            item_id=existing.item_id,
+            quantity_delta=existing.quantity_delta,
+            quantity_on_hand=balance.quantity_on_hand,
+            unit_code=existing.unit_code,
+            reason=existing.reason or "",
+        )
+
+    branch = await session.scalar(
+        select(Branch).where(
+            Branch.id == payload.branch_id,
+            Branch.organization_id == organization.id,
+            Branch.status == "active",
+        )
+    )
+    item = await session.scalar(
+        select(InventoryItem).where(
+            InventoryItem.id == payload.item_id,
+            InventoryItem.organization_id == organization.id,
+            InventoryItem.status == "active",
+        )
+    )
+    if branch is None or item is None:
+        raise HTTPException(status_code=404, detail="Active branch or inventory item not found")
+    if payload.unit_code != item.base_unit_code.upper():
+        raise HTTPException(status_code=422, detail="Unit does not match the item's base unit")
+
+    balance = await session.scalar(
+        select(StockBalance)
+        .where(
+            StockBalance.organization_id == organization.id,
+            StockBalance.branch_id == branch.id,
+            StockBalance.item_id == item.id,
+        )
+        .with_for_update()
+    )
+    if balance is None:
+        raise HTTPException(
+            status_code=409,
+            detail="An opening balance must be recorded before adjusting this item",
+        )
+    adjusted_quantity = balance.quantity_on_hand + payload.quantity_delta
+    if adjusted_quantity < 0:
+        raise HTTPException(status_code=409, detail="Adjustment would make stock negative")
+
+    movement = StockMovement(
+        id=str(uuid4()),
+        organization_id=organization.id,
+        branch_id=branch.id,
+        item_id=item.id,
+        quantity_delta=payload.quantity_delta,
+        unit_code=item.base_unit_code,
+        source_type="manual_adjustment",
+        idempotency_key=payload.idempotency_key,
+        actor_user_id=user.id,
+        reason=payload.reason,
+    )
+    balance.quantity_on_hand = adjusted_quantity
+    session.add(movement)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="Stock adjustment conflicts with another request") from exc
+    return StockAdjustmentRead(
+        movement_id=movement.id,
+        branch_id=branch.id,
+        item_id=item.id,
+        quantity_delta=movement.quantity_delta,
+        quantity_on_hand=balance.quantity_on_hand,
+        unit_code=item.base_unit_code,
+        reason=payload.reason,
     )
 
 
