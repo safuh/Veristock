@@ -36,6 +36,7 @@ from veristock.organizations.models import Branch
 router = APIRouter(tags=["sales"])
 SalesRecorder = Annotated[Organization, Depends(require_permission("sales.record"))]
 InventoryManager = Annotated[Organization, Depends(require_permission("inventory.manage"))]
+InventoryReader = Annotated[Organization, Depends(require_permission("inventory.read"))]
 
 
 class SaleLineCreate(BaseModel):
@@ -147,6 +148,19 @@ class StockAdjustmentRead(BaseModel):
     quantity_on_hand: Decimal
     unit_code: str
     reason: str
+
+
+class StockMovementRead(BaseModel):
+    movement_id: str
+    branch_id: str
+    item_id: str
+    quantity_delta: Decimal
+    unit_code: str
+    source_type: str
+    source_id: str | None
+    reason: str | None
+    actor_user_id: str
+    occurred_at: datetime
 
 
 @router.post("/inventory/items", response_model=InventoryItemCreateRead, status_code=201)
@@ -271,6 +285,61 @@ async def record_opening_balance(
         quantity_on_hand=balance.quantity_on_hand,
         unit_code=item.base_unit_code,
     )
+
+
+@router.get("/inventory/movements", response_model=list[StockMovementRead])
+async def list_stock_movements(
+    organization: InventoryReader,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    branch_id: str | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[StockMovementRead]:
+    """Read the append-only stock ledger within the caller's branch scope."""
+    allowed_branch_ids = await accessible_branch_ids(session, user, organization)
+    if (
+        branch_id is not None
+        and allowed_branch_ids is not None
+        and branch_id not in allowed_branch_ids
+    ):
+        raise HTTPException(status_code=404, detail="Branch not found")
+
+    statement = select(StockMovement).where(
+        StockMovement.organization_id == organization.id
+    )
+    if branch_id is not None:
+        statement = statement.where(StockMovement.branch_id == branch_id)
+    elif allowed_branch_ids is not None:
+        statement = statement.where(StockMovement.branch_id.in_(allowed_branch_ids))
+
+    movements = list(
+        (
+            await session.scalars(
+                statement.order_by(
+                    StockMovement.occurred_at.desc(),
+                    StockMovement.id.desc(),
+                )
+                .limit(limit)
+                .offset(offset)
+            )
+        ).all()
+    )
+    return [
+        StockMovementRead(
+            movement_id=movement.id,
+            branch_id=movement.branch_id,
+            item_id=movement.item_id,
+            quantity_delta=movement.quantity_delta,
+            unit_code=movement.unit_code,
+            source_type=movement.source_type,
+            source_id=movement.source_id,
+            reason=movement.reason,
+            actor_user_id=movement.actor_user_id,
+            occurred_at=movement.occurred_at,
+        )
+        for movement in movements
+    ]
 
 
 @router.post("/inventory/adjustments", response_model=StockAdjustmentRead, status_code=201)
