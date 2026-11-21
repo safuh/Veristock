@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from .auth import router as auth_router
+from .batches import router as batches_router
 from .branch_assignments import router as branch_assignments_router
 from .health import router as health_router
 from .identity import router as identity_router
@@ -22,6 +23,7 @@ from .workforce import router as workforce_router
 api_router = APIRouter()
 api_router.include_router(health_router)
 api_router.include_router(inventory_router)
+api_router.include_router(batches_router)
 api_router.include_router(replenishment_router)
 api_router.include_router(reports_router)
 api_router.include_router(sales_router)

@@ -1,14 +1,14 @@
 # ruff: noqa: E501
 """Tenant-scoped sale posting and stock ledger operations."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -24,7 +24,10 @@ from veristock.identity.authorization_dependencies import (
     require_permission,
 )
 from veristock.identity.models import User
+from veristock.inventory.batches import allocate_fefo
 from veristock.inventory.models import (
+    BatchStockBalance,
+    InventoryBatch,
     InventoryItem,
     Sale,
     SaleLine,
@@ -154,6 +157,7 @@ class StockMovementRead(BaseModel):
     movement_id: str
     branch_id: str
     item_id: str
+    batch_id: str | None
     quantity_delta: Decimal
     unit_code: str
     source_type: str
@@ -351,6 +355,7 @@ async def list_stock_movements(
             movement_id=movement.id,
             branch_id=movement.branch_id,
             item_id=movement.item_id,
+            batch_id=movement.batch_id,
             quantity_delta=movement.quantity_delta,
             unit_code=movement.unit_code,
             source_type=movement.source_type,
@@ -540,6 +545,7 @@ async def reverse_manual_stock_adjustment(
             movement_id=existing.id,
             branch_id=existing.branch_id,
             item_id=existing.item_id,
+            batch_id=existing.batch_id,
             quantity_delta=existing.quantity_delta,
             unit_code=existing.unit_code,
             source_type=existing.source_type,
@@ -586,6 +592,7 @@ async def reverse_manual_stock_adjustment(
         organization_id=organization.id,
         branch_id=original.branch_id,
         item_id=original.item_id,
+        batch_id=original.batch_id,
         quantity_delta=reversal_delta,
         unit_code=original.unit_code,
         source_type="reversal",
@@ -611,6 +618,7 @@ async def reverse_manual_stock_adjustment(
         movement_id=reversal.id,
         branch_id=reversal.branch_id,
         item_id=reversal.item_id,
+        batch_id=reversal.batch_id,
         quantity_delta=reversal.quantity_delta,
         unit_code=reversal.unit_code,
         source_type=reversal.source_type,
@@ -714,6 +722,53 @@ async def post_sale(
     )
     session.add(sale)
     for index, (line, item, balance) in enumerate(prepared):
+        batch_total = Decimal(
+            await session.scalar(
+                select(func.coalesce(func.sum(BatchStockBalance.quantity_on_hand), 0)).where(
+                    BatchStockBalance.organization_id == organization.id,
+                    BatchStockBalance.branch_id == branch.id,
+                    BatchStockBalance.item_id == item.id,
+                )
+            )
+            or 0
+        )
+        eligible_batch_total = Decimal(
+            await session.scalar(
+                select(func.coalesce(func.sum(BatchStockBalance.quantity_on_hand), 0))
+                .join(InventoryBatch, InventoryBatch.id == BatchStockBalance.batch_id)
+                .where(
+                    BatchStockBalance.organization_id == organization.id,
+                    BatchStockBalance.branch_id == branch.id,
+                    BatchStockBalance.item_id == item.id,
+                    BatchStockBalance.quantity_on_hand > 0,
+                    InventoryBatch.status == "active",
+                    (InventoryBatch.expiry_date.is_(None))
+                    | (InventoryBatch.expiry_date >= date.today()),
+                )
+            )
+            or 0
+        )
+        batch_quantity = min(line.quantity, eligible_batch_total)
+        allocations = []
+        if batch_quantity > 0:
+            try:
+                allocations = await allocate_fefo(
+                    session,
+                    organization_id=organization.id,
+                    branch_id=branch.id,
+                    item_id=item.id,
+                    quantity=batch_quantity,
+                    on_date=date.today(),
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+        legacy_quantity = line.quantity - batch_quantity
+        legacy_available = balance.quantity_on_hand - batch_total
+        if legacy_available < 0 or legacy_quantity > legacy_available:
+            raise HTTPException(
+                status_code=409, detail=f"Insufficient eligible stock for item {item.name}"
+            )
+
         balance.quantity_on_hand -= line.quantity
         balance.version += 1
         sale.lines.append(
@@ -728,20 +783,40 @@ async def post_sale(
                 currency=line.currency,
             )
         )
-        session.add(
-            StockMovement(
-                id=str(uuid4()),
-                organization_id=organization.id,
-                branch_id=branch.id,
-                item_id=item.id,
-                quantity_delta=-line.quantity,
-                unit_code=item.base_unit_code,
-                source_type="sale",
-                source_id=sale_id,
-                idempotency_key=f"sale:{sale_id}:{index}",
-                actor_user_id=user.id,
+        movement_index = 0
+        for batch_balance, allocated_quantity in allocations:
+            batch_balance.quantity_on_hand -= allocated_quantity
+            session.add(
+                StockMovement(
+                    id=str(uuid4()),
+                    organization_id=organization.id,
+                    branch_id=branch.id,
+                    item_id=item.id,
+                    batch_id=batch_balance.batch_id,
+                    quantity_delta=-allocated_quantity,
+                    unit_code=item.base_unit_code,
+                    source_type="sale",
+                    source_id=sale_id,
+                    idempotency_key=f"sale:{sale_id}:{index}:batch:{movement_index}",
+                    actor_user_id=user.id,
+                )
             )
-        )
+            movement_index += 1
+        if legacy_quantity > 0:
+            session.add(
+                StockMovement(
+                    id=str(uuid4()),
+                    organization_id=organization.id,
+                    branch_id=branch.id,
+                    item_id=item.id,
+                    quantity_delta=-legacy_quantity,
+                    unit_code=item.base_unit_code,
+                    source_type="sale",
+                    source_id=sale_id,
+                    idempotency_key=f"sale:{sale_id}:{index}:legacy",
+                    actor_user_id=user.id,
+                )
+            )
     try:
         await session.commit()
     except IntegrityError as exc:

@@ -181,6 +181,10 @@ Reference documents:
 - [x] React client portal stock-adjustment form with non-zero signed quantity and reason validation, plus recent branch-scoped stock ledger history.
 - [ ] Validated structured import with row-level error reporting.
 - [x] Append-only stock movement ledger and current-balance projection.
+- [x] Branch-scoped lot/batch records with manufacture/expiry dates, supplier references and quarantined/recalled/closed states.
+- [x] Batch-level quantity balances and traceable receipt/issue stock movements.
+- [x] FEFO batch allocation that excludes expired, quarantined, recalled and closed lots; atomic balance updates and idempotent issue replay.
+- [x] Expiry-window batch listing for operational alerts.
 - [x] Client portal/API sales entry with line items and posting validation.
 - [x] Atomic sale + stock-out movement posting with idempotency.
 - [x] Manual adjustment reversal by appending a reasoned, actor-attributed compensating movement; database-enforced single reversal and non-negative balance guard.
@@ -189,7 +193,7 @@ Reference documents:
 - [ ] Tenant/branch-scoped inventory search, pagination and filtering beyond the initial read endpoints.
 - [ ] Permission matrix and cross-tenant tests for inventory and sales.
 
-**MVP boundary:** no purchase orders, goods-received notes, invoice ingestion, supplier integrations or POS integrations. The sales portal is the initial source of demand/stock-out history for reporting and forecasting.
+**MVP boundary:** batch receiving is currently a controlled stock receipt, not a purchase-order/GRN workflow. No purchase orders, invoice ingestion, supplier integrations or POS integrations are included yet. The sales portal is the initial source of demand/stock-out history for reporting and forecasting.
 
 ### M12 — Physical stocktaking
 

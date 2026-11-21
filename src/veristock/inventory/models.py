@@ -1,11 +1,12 @@
 """Inventory catalogue, stock ledger and client sales persistence."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy import (
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -85,7 +86,7 @@ class StockMovement(Base):
         CheckConstraint("quantity_delta != 0", name="ck_stock_movements_nonzero"),
         CheckConstraint(
             "source_type IN ('opening_balance', 'sale', 'stocktake_adjustment', "
-            "'reversal', 'manual_adjustment')",
+            "'reversal', 'manual_adjustment', 'batch_receipt', 'batch_issue')",
             name="ck_stock_movements_source_type",
         ),
         UniqueConstraint(
@@ -109,6 +110,9 @@ class StockMovement(Base):
     )
     item_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("inventory_items.id", ondelete="RESTRICT"), nullable=False
+    )
+    batch_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("inventory_batches.id", ondelete="RESTRICT")
     )
     quantity_delta: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     unit_code: Mapped[str] = mapped_column(String(24), nullable=False)
@@ -194,3 +198,76 @@ class SaleLine(Base):
     unit_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     currency: Mapped[str | None] = mapped_column(String(3))
     sale: Mapped["Sale"] = relationship(back_populates="lines")
+
+
+class InventoryBatch(Base):
+    """A traceable lot of an item received at a specific branch."""
+
+    __tablename__ = "inventory_batches"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "item_id",
+            "branch_id",
+            "lot_code",
+            name="uq_inventory_batches_scope_lot",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'quarantined', 'recalled', 'closed')",
+            name="ck_inventory_batches_status",
+        ),
+        CheckConstraint(
+            "expiry_date IS NULL OR manufactured_date IS NULL OR expiry_date >= manufactured_date",
+            name="ck_inventory_batches_dates",
+        ),
+        Index("ix_inventory_batches_expiry", "organization_id", "branch_id", "expiry_date"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    item_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inventory_items.id", ondelete="RESTRICT"), nullable=False
+    )
+    branch_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("branches.id", ondelete="RESTRICT"), nullable=False
+    )
+    lot_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    manufactured_date: Mapped[date | None] = mapped_column(Date)
+    expiry_date: Mapped[date | None] = mapped_column(Date)
+    supplier_reference: Mapped[str | None] = mapped_column(String(120))
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="active", server_default="active"
+    )
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class BatchStockBalance(Base):
+    """Quantity projection for one item lot at one branch."""
+
+    __tablename__ = "batch_stock_balances"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "branch_id", "item_id", "batch_id", name="uq_batch_balance_scope"
+        ),
+        CheckConstraint("quantity_on_hand >= 0", name="ck_batch_balance_nonnegative"),
+        Index("ix_batch_balance_item", "organization_id", "branch_id", "item_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    branch_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("branches.id", ondelete="RESTRICT"), nullable=False
+    )
+    item_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inventory_items.id", ondelete="RESTRICT"), nullable=False
+    )
+    batch_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inventory_batches.id", ondelete="RESTRICT"), nullable=False
+    )
+    quantity_on_hand: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
