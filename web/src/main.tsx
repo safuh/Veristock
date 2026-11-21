@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import { ReportsPanel } from "./ReportsPanel";
 
 const API = "/api";
 
@@ -198,6 +199,19 @@ function Workspace({ token, user, organization, onSelectOrganization, onSignOut 
   onSelectOrganization: (id: string) => void; onSignOut: () => void;
 }) {
   const isPlatform = organization.kind === "platform";
+  const [activeNav, setActiveNav] = useState("Overview");
+  const navigate = (label: string) => {
+    setActiveNav(label);
+    const targets: Record<string, string> = {
+      Overview: "client-overview", Branches: "client-branches",
+      Inventory: "client-inventory", Sales: "client-sales",
+      Stocktaking: "client-stocktaking", Discrepancies: "client-discrepancies",
+      Forecasts: "client-reports", Reports: "client-reports",
+      "Team & access": "team-access",
+    };
+    const target = targets[label];
+    if (target) document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand-lockup"><div className="brand-mark">V</div><div><strong>veristock</strong><small>ONE PLATFORM</small></div></div>
@@ -206,9 +220,14 @@ function Workspace({ token, user, organization, onSelectOrganization, onSignOut 
         {(isPlatform
           ? [["Overview", "⌂"], ["Client applications", "▤"], ["Organizations", "▦"], ["Operations", "◷"], ["Team & access", "♙"]]
           : [["Overview", "⌂"], ["Branches", "▦"], ["Inventory", "▤"], ["Sales", "↗"], ["Stocktaking", "◷"], ["Discrepancies", "⌁"], ["Forecasts", "⌁"], ["Reports", "▧"], ["Team & access", "♙"]]
-        ).map(([label, icon], index) => <div className={index === 0 ? "nav-item active" : "nav-item"} key={label}>
-          <span>{icon}</span>{label}{index === 0 && <i />}
-        </div>)}
+        ).map(([label, icon]) => <button
+          className={activeNav === label ? "nav-item active" : "nav-item"}
+          key={label}
+          type="button"
+          onClick={() => navigate(label)}
+        >
+          <span>{icon}</span>{label}{activeNav === label && <i />}
+        </button>)}
       </nav>
       <div className="sidebar-bottom"><div className="secure-indicator"><span /> Secure tenant session</div>
         <div className="user-mini"><div className="avatar">{user.identifier.slice(0, 1).toUpperCase()}</div>
@@ -332,6 +351,19 @@ type SaleRecord = {
   id: string; branch_id: string; reference: string | null; status: string;
   posted_at: string; lines: { item_id: string; quantity: string; unit_code: string }[];
 };
+type StockMovementRecord = {
+  movement_id: string;
+  branch_id: string;
+  item_id: string;
+  quantity_delta: string;
+  unit_code: string;
+  source_type: string;
+  source_id: string | null;
+  reversal_of_movement_id: string | null;
+  reason: string | null;
+  actor_user_id: string;
+  occurred_at: string;
+};
 type StocktakeRecord = {
   id: string; branch_id: string; reference: string; blind_count: boolean;
   status: string; created_at: string; item_count: number;
@@ -339,14 +371,64 @@ type StocktakeRecord = {
 type StocktakeScopeItem = {
   item_id: string; sku: string; barcode: string; name: string; unit_code: string;
 };
+type StocktakeEvidenceRecord = {
+  id: string; original_filename: string | null; media_type: string; byte_size: number;
+};
+type StocktakeReviewItem = {
+  stocktake_id: string;
+  reference: string;
+  branch_id: string;
+  branch_name: string;
+  submitted_at: string | null;
+  round_number: number;
+  item_count: number;
+  variance_count: number;
+  shortage_count: number;
+  surplus_count: number;
+};
+type StocktakeDecision = {
+  id: string;
+  stocktake_id: string;
+  round_id: string;
+  action: string;
+  reason_code: string | null;
+  reason: string | null;
+  actor_user_id: string;
+  created_at: string;
+};
 
 function ClientDashboard({ token, organization }: { token: string; organization: Organization }) {
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [teamBranch, setTeamBranch] = useState("");
+  const [teamMembers, setTeamMembers] = useState<Array<{
+    id: string; user_id: string; identifier: string; status: string; role_codes: string[];
+  }>>([]);
+  const [branchAssignments, setBranchAssignments] = useState<Array<{
+    membership_id: string; user_id: string; identifier: string; assigned_at: string;
+  }>>([]);
+  const [teamMemberToAssign, setTeamMemberToAssign] = useState("");
+  const [teamError, setTeamError] = useState("");
+  const [teamNotice, setTeamNotice] = useState("");
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("field_counter");
+  const [createdInvitation, setCreatedInvitation] = useState<{
+    email: string; role_code: string; expires_at: string; invitation_token: string;
+  } | null>(null);
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [balances, setBalances] = useState<StockBalance[]>([]);
+  const [movements, setMovements] = useState<StockMovementRecord[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [stocktakes, setStocktakes] = useState<StocktakeRecord[]>([]);
+  const [reviewQueue, setReviewQueue] = useState<StocktakeReviewItem[]>([]);
+  const [reviewAccess, setReviewAccess] = useState<boolean | null>(null);
+  const [reviewingStocktakeId, setReviewingStocktakeId] = useState<string | null>(null);
+  const [rejectingStocktakeId, setRejectingStocktakeId] = useState<string | null>(null);
+  const [rejectionReasonCode, setRejectionReasonCode] = useState("variance_unexplained");
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [decisionHistory, setDecisionHistory] = useState<Record<string, StocktakeDecision[]>>({});
+  const [historyStocktakeId, setHistoryStocktakeId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -357,6 +439,12 @@ function ClientDashboard({ token, organization }: { token: string; organization:
   const [openingBranch, setOpeningBranch] = useState("");
   const [openingItem, setOpeningItem] = useState("");
   const [openingQuantity, setOpeningQuantity] = useState("0");
+  const [adjustmentBranch, setAdjustmentBranch] = useState("");
+  const [adjustmentItem, setAdjustmentItem] = useState("");
+  const [adjustmentDelta, setAdjustmentDelta] = useState("");
+  const [adjustmentReason, setAdjustmentReason] = useState("");
+  const [reversalTargetId, setReversalTargetId] = useState<string | null>(null);
+  const [reversalReason, setReversalReason] = useState("");
   const [saleBranch, setSaleBranch] = useState("");
   const [saleItem, setSaleItem] = useState("");
   const [saleQuantity, setSaleQuantity] = useState("1");
@@ -367,13 +455,15 @@ function ClientDashboard({ token, organization }: { token: string; organization:
   const [stocktakeScope, setStocktakeScope] = useState<StocktakeScopeItem[]>([]);
   const [countValues, setCountValues] = useState<Record<string, string>>({});
   const [recordedCounts, setRecordedCounts] = useState<Set<string>>(new Set());
+  const [observationIds, setObservationIds] = useState<Record<string, string>>({});
+  const [evidenceByItem, setEvidenceByItem] = useState<Record<string, StocktakeEvidenceRecord[]>>({});
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [branchRows, inventorySummary, stockRows, itemRows, saleRows, stocktakeRows] =
+      const [branchRows, inventorySummary, stockRows, itemRows, saleRows, stocktakeRows, movementRows] =
         await Promise.all([
           request<Branch[]>("/branches", token, organization.id),
           request<InventorySummary>("/inventory/summary", token, organization.id),
@@ -381,17 +471,36 @@ function ClientDashboard({ token, organization }: { token: string; organization:
           request<InventoryItem[]>("/inventory/items", token, organization.id),
           request<SaleRecord[]>("/sales", token, organization.id),
           request<StocktakeRecord[]>("/stocktakes", token, organization.id),
+          request<StockMovementRecord[]>("/inventory/movements?limit=100", token, organization.id),
         ]);
       setBranches(branchRows);
       setSummary(inventorySummary);
       setBalances(stockRows);
+      setMovements(movementRows);
       setItems(itemRows);
       setSales(saleRows);
       setStocktakes(stocktakeRows);
+      try {
+        const queue = await request<StocktakeReviewItem[]>(
+          "/stocktakes/review-queue", token, organization.id,
+        );
+        setReviewQueue(queue);
+        setReviewAccess(true);
+      } catch (reason) {
+        const message = reason instanceof Error ? reason.message : "";
+        if (/permission|forbidden|403/i.test(message)) {
+          setReviewQueue([]);
+          setReviewAccess(false);
+        } else {
+          throw reason;
+        }
+      }
       setOpeningBranch((current) => current || branchRows[0]?.id || "");
+      setAdjustmentBranch((current) => current || branchRows[0]?.id || "");
       setSaleBranch((current) => current || branchRows[0]?.id || "");
       setStocktakeBranch((current) => current || branchRows[0]?.id || "");
       setOpeningItem((current) => current || itemRows[0]?.id || "");
+      setAdjustmentItem((current) => current || itemRows[0]?.id || "");
       setSaleItem((current) => current || itemRows[0]?.id || "");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load organization data");
@@ -401,6 +510,149 @@ function ClientDashboard({ token, organization }: { token: string; organization:
   }, [organization.id, token]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  const refreshTeam = useCallback(async () => {
+    if (!teamBranch) return;
+    setTeamLoading(true);
+    setTeamError("");
+    try {
+      const [members, assignments] = await Promise.all([
+        request<Array<{
+          id: string; user_id: string; identifier: string; status: string; role_codes: string[];
+        }>>("/memberships", token, organization.id),
+        request<Array<{
+          membership_id: string; user_id: string; identifier: string; assigned_at: string;
+        }>>(`/branches/${encodeURIComponent(teamBranch)}/members`, token, organization.id),
+      ]);
+      setTeamMembers(members.filter((member) => member.status === "active"));
+      setBranchAssignments(assignments);
+      setTeamMemberToAssign((current) =>
+        current && members.some((member) => member.id === current && member.status === "active")
+          ? current
+          : members.find((member) => member.status === "active" &&
+              !assignments.some((assignment) => assignment.membership_id === member.id))?.id ?? "",
+      );
+    } catch (reason) {
+      setTeamError(reason instanceof Error
+        ? reason.message
+        : "Unable to load team access. Check your assignment-management permissions.");
+    } finally {
+      setTeamLoading(false);
+    }
+  }, [organization.id, teamBranch, token]);
+
+  useEffect(() => { void refreshTeam(); }, [refreshTeam]);
+
+  const assignTeamMember = async () => {
+    if (!teamBranch || !teamMemberToAssign) return;
+    setTeamError("");
+    setTeamNotice("");
+    try {
+      await request(`/branches/${encodeURIComponent(teamBranch)}/members`, token, organization.id, {
+        method: "POST", body: JSON.stringify({ membership_id: teamMemberToAssign }),
+      });
+      setTeamNotice("Staff member assigned to this branch.");
+      await refreshTeam();
+    } catch (reason) {
+      setTeamError(reason instanceof Error ? reason.message : "Unable to assign staff member.");
+    }
+  };
+
+  const removeTeamMember = async (membershipId: string) => {
+    if (!teamBranch) return;
+    setTeamError("");
+    setTeamNotice("");
+    try {
+      await request(
+        `/branches/${encodeURIComponent(teamBranch)}/members/${encodeURIComponent(membershipId)}`,
+        token, organization.id, { method: "DELETE" },
+      );
+      setTeamNotice("Branch assignment removed. Organization membership remains active.");
+      await refreshTeam();
+    } catch (reason) {
+      setTeamError(reason instanceof Error ? reason.message : "Unable to remove branch assignment.");
+    }
+  };
+
+  const createTeamInvitation = async () => {
+    setTeamError("");
+    setTeamNotice("");
+    setCreatedInvitation(null);
+    try {
+      const invitation = await request<{
+        email: string; role_code: string; expires_at: string; invitation_token: string;
+      }>("/invitations", token, organization.id, {
+        method: "POST",
+        body: JSON.stringify({ email: inviteEmail, role_code: inviteRole }),
+      });
+      setCreatedInvitation(invitation);
+      setInviteEmail("");
+      setTeamNotice("Invitation created. Deliver the token securely; it is shown only once.");
+    } catch (reason) {
+      setTeamError(reason instanceof Error ? reason.message : "Unable to create invitation.");
+    }
+  };
+
+  // Restore an open count after a browser reload. The API returns only this
+  // counter's observations, preserving blind-count separation from peers.
+  useEffect(() => {
+    if (activeStocktake) return;
+    const openStocktake = stocktakes.find((record) => record.status === "open");
+    if (!openStocktake) return;
+    let cancelled = false;
+    const restore = async () => {
+      try {
+        const [scope, observations] = await Promise.all([
+          request<StocktakeScopeItem[]>(
+            `/stocktakes/${encodeURIComponent(openStocktake.id)}/scope`,
+            token,
+            organization.id,
+          ),
+          request<Array<{
+            id: string;
+            item_id: string;
+            counted_quantity: string;
+          }>>(
+            `/stocktakes/${encodeURIComponent(openStocktake.id)}/my-observations`,
+            token,
+            organization.id,
+          ),
+        ]);
+        const evidenceEntries = await Promise.all(
+          observations.map(async (observation) => {
+            const evidence = await request<StocktakeEvidenceRecord[]>(
+              `/stocktakes/${encodeURIComponent(openStocktake.id)}/observations/${encodeURIComponent(observation.id)}/evidence`,
+              token,
+              organization.id,
+            );
+            return [observation.item_id, evidence] as const;
+          }),
+        );
+        if (cancelled) return;
+        setActiveStocktake(openStocktake.id);
+        setStocktakeScope(scope);
+        setCountValues(Object.fromEntries(
+          observations.map((observation) => [
+            observation.item_id,
+            observation.counted_quantity,
+          ]),
+        ));
+        setRecordedCounts(new Set(observations.map((observation) => observation.item_id)));
+        setObservationIds(Object.fromEntries(
+          observations.map((observation) => [observation.item_id, observation.id]),
+        ));
+        setEvidenceByItem(Object.fromEntries(evidenceEntries));
+      } catch (reason) {
+        if (!cancelled) {
+          setError(reason instanceof Error
+            ? `Unable to restore the open count: ${reason.message}`
+            : "Unable to restore the open count.");
+        }
+      }
+    };
+    void restore();
+    return () => { cancelled = true; };
+  }, [activeStocktake, organization.id, stocktakes, token]);
 
   const perform = async (action: () => Promise<void>, success: string) => {
     setBusy(true);
@@ -438,6 +690,51 @@ function ClientDashboard({ token, organization }: { token: string; organization:
     });
   }, "Opening stock recorded in the movement ledger.");
 
+  const recordAdjustment = () => perform(async () => {
+    const delta = Number(adjustmentDelta);
+    if (!Number.isFinite(delta) || delta === 0) {
+      throw new Error("Enter a non-zero adjustment quantity.");
+    }
+    if (adjustmentReason.trim().length < 10) {
+      throw new Error("Explain the reason using at least 10 characters.");
+    }
+    const item = items.find((candidate) => candidate.id === adjustmentItem);
+    if (!item) throw new Error("Select an active inventory item.");
+    await request("/inventory/adjustments", token, organization.id, {
+      method: "POST",
+      body: JSON.stringify({
+        branch_id: adjustmentBranch,
+        item_id: adjustmentItem,
+        quantity_delta: adjustmentDelta,
+        unit_code: item.base_unit_code,
+        reason: adjustmentReason.trim(),
+        idempotency_key: crypto.randomUUID(),
+      }),
+    });
+    setAdjustmentDelta("");
+    setAdjustmentReason("");
+  }, "Stock adjusted. The ledger and on-hand balance have been updated.");
+
+  const reverseAdjustment = (movement: StockMovementRecord) => perform(async () => {
+    if (reversalReason.trim().length < 10) {
+      throw new Error("Explain the reversal using at least 10 characters.");
+    }
+    await request(
+      `/inventory/movements/${movement.movement_id}/reversal`,
+      token,
+      organization.id,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          reason: reversalReason.trim(),
+          idempotency_key: crypto.randomUUID(),
+        }),
+      },
+    );
+    setReversalTargetId(null);
+    setReversalReason("");
+  }, "Adjustment reversed with a compensating ledger entry.");
+
   const postSale = () => perform(async () => {
     await request("/sales", token, organization.id, {
       method: "POST",
@@ -466,6 +763,8 @@ function ClientDashboard({ token, organization }: { token: string; organization:
     setStocktakeScope(scope);
     setCountValues({});
     setRecordedCounts(new Set());
+    setObservationIds({});
+    setEvidenceByItem({});
     setStocktakeReference("");
   }, "Stocktake opened. Expected quantities are hidden from counters.");
 
@@ -474,24 +773,136 @@ function ClientDashboard({ token, organization }: { token: string; organization:
     if (quantity === undefined || quantity.trim() === "") {
       throw new Error("Enter a physical quantity before saving this count.");
     }
-    await request(`/stocktakes/${activeStocktake}/observations`, token, organization.id, {
-      method: "POST",
-      body: JSON.stringify({
-        item_id: item.item_id, counted_quantity: quantity, unit_code: item.unit_code,
-        idempotency_key: crypto.randomUUID(),
-      }),
-    });
+    const observation = await request<{ id: string }>(
+      `/stocktakes/${activeStocktake}/observations`, token, organization.id, {
+        method: "POST",
+        body: JSON.stringify({
+          item_id: item.item_id, counted_quantity: quantity, unit_code: item.unit_code,
+          idempotency_key: crypto.randomUUID(),
+        }),
+      },
+    );
+    setObservationIds((current) => ({ ...current, [item.item_id]: observation.id }));
     setRecordedCounts((current) => new Set(current).add(item.item_id));
   }, `Count recorded for ${item.name}.`);
 
+  const uploadCountEvidence = (
+    item: StocktakeScopeItem,
+    file: File,
+  ) => perform(async () => {
+    const observationId = observationIds[item.item_id];
+    if (!activeStocktake || !observationId) {
+      throw new Error("Save the physical count before attaching evidence.");
+    }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      throw new Error("Choose a JPEG, PNG or WebP image.");
+    }
+    const response = await fetch(
+      `${API}/stocktakes/${encodeURIComponent(activeStocktake)}/observations/${encodeURIComponent(observationId)}/evidence?filename=${encodeURIComponent(file.name)}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Organization-ID": organization.id,
+          "Content-Type": file.type,
+        },
+        body: file,
+        credentials: "include",
+      },
+    );
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as { detail?: string };
+      throw new Error(payload.detail ?? `Evidence upload failed (${response.status})`);
+    }
+    const evidence = await response.json() as StocktakeEvidenceRecord;
+    setEvidenceByItem((current) => ({
+      ...current,
+      [item.item_id]: [...(current[item.item_id] ?? []), evidence],
+    }));
+  }, `Evidence attached to the count for ${item.name}.`);
+
   const submitStocktake = () => perform(async () => {
     if (!activeStocktake) return;
-    await request(`/stocktakes/${activeStocktake}/submit`, token, organization.id, {
+    const submittedStocktakeId = activeStocktake;
+    await request(`/stocktakes/${submittedStocktakeId}/submit`, token, organization.id, {
       method: "POST", body: JSON.stringify({}),
     });
+    setStocktakes((current) => current.map((record) =>
+      record.id === submittedStocktakeId
+        ? { ...record, status: "submitted" }
+        : record,
+    ));
     setActiveStocktake(null);
     setStocktakeScope([]);
   }, "Count round submitted for review.");
+
+  const approveStocktake = (stocktakeId: string) => perform(async () => {
+    setReviewingStocktakeId(stocktakeId);
+    try {
+      await request(
+        `/stocktakes/${encodeURIComponent(stocktakeId)}/approve`,
+        token,
+        organization.id,
+        { method: "POST" },
+      );
+      setDecisionHistory((current) => {
+        const next = { ...current };
+        delete next[stocktakeId];
+        return next;
+      });
+    } finally {
+      setReviewingStocktakeId(null);
+    }
+  }, "Stocktake approved and ledger reconciliation completed.");
+
+  const rejectStocktake = (stocktakeId: string) => perform(async () => {
+    if (rejectionReason.trim().length < 10) {
+      throw new Error("Explain why this count is being rejected (at least 10 characters).");
+    }
+    setReviewingStocktakeId(stocktakeId);
+    try {
+      await request(
+        `/stocktakes/${encodeURIComponent(stocktakeId)}/reject`,
+        token,
+        organization.id,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            reason_code: rejectionReasonCode,
+            reason: rejectionReason.trim(),
+          }),
+        },
+      );
+      setRejectingStocktakeId(null);
+      setRejectionReason("");
+      setDecisionHistory((current) => {
+        const next = { ...current };
+        delete next[stocktakeId];
+        return next;
+      });
+    } finally {
+      setReviewingStocktakeId(null);
+    }
+  }, "Stocktake rejected. A new count round is now open.");
+
+  const toggleDecisionHistory = async (stocktakeId: string) => {
+    if (historyStocktakeId === stocktakeId) {
+      setHistoryStocktakeId(null);
+      return;
+    }
+    setHistoryStocktakeId(stocktakeId);
+    setError("");
+    try {
+      const history = await request<StocktakeDecision[]>(
+        `/stocktakes/${encodeURIComponent(stocktakeId)}/decisions`,
+        token,
+        organization.id,
+      );
+      setDecisionHistory((current) => ({ ...current, [stocktakeId]: history }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to load decision history");
+    }
+  };
 
   const name = organization.trading_name ?? organization.legal_name;
   return <div className="content">
@@ -501,14 +912,16 @@ function ClientDashboard({ token, organization }: { token: string; organization:
     {error && <div className="alert">{error}</div>}{notice && <div className="success">{notice}</div>}
     <div className="client-banner"><div><p className="eyebrow">YOUR ORGANIZATION</p><h2>{name}</h2>
       <p>{organization.legal_name} <span>·</span> {organization.timezone}</p></div><div className="banner-icon">▦</div></div>
-    <div className="stat-grid client-stats">
+    <div className="stat-grid client-stats" id="client-overview">
       <Stat label="Active branches" value={loading ? "—" : String(summary?.branch_count ?? branches.length)} hint="Registered locations" icon="⌖" />
       <Stat label="Inventory items" value={loading ? "—" : String(summary?.item_count ?? 0)} hint="Active catalogue items" icon="▤" />
       <Stat label="Stocked item types" value={loading ? "—" : String(summary?.stocked_item_count ?? 0)} hint="Items with balances" icon="▦" />
       <Stat label="Units on hand" value={loading ? "—" : Number(summary?.total_units_on_hand ?? 0).toLocaleString()} hint="Across all branches" icon="✓" />
     </div>
 
-    <section className="panel">
+    <div id="client-reports"><ReportsPanel token={token} organizationId={organization.id} /></div>
+
+    <section className="panel" id="client-inventory">
       <div className="panel-heading"><div><p className="eyebrow">CATALOGUE</p><h2>Inventory items</h2>
         <p className="muted">Create and maintain the items your organization counts and sells.</p></div></div>
       <div className="operation-form">
@@ -536,7 +949,52 @@ function ClientDashboard({ token, organization }: { token: string; organization:
       </div>
     </section>
 
-    <section className="panel">
+    <section className="panel" id="client-adjustments">
+      <div className="panel-heading"><div><p className="eyebrow">CONTROLLED CORRECTION</p><h2>Adjust stock</h2>
+        <p className="muted">Record a verified gain or loss. Every adjustment requires a reason and creates an auditable ledger entry.</p></div></div>
+      <div className="operation-form">
+        <label>Branch<select value={adjustmentBranch} onChange={(e) => setAdjustmentBranch(e.target.value)}>
+          {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
+        <label>Item<select value={adjustmentItem} onChange={(e) => setAdjustmentItem(e.target.value)}>
+          {items.filter((item) => item.status === "active").map((item) => <option key={item.id} value={item.id}>{item.name} ({item.base_unit_code})</option>)}</select></label>
+        <label>Quantity change<input type="number" step="0.0001" value={adjustmentDelta} onChange={(e) => setAdjustmentDelta(e.target.value)} placeholder="e.g. 5 or -2" /></label>
+        <label>Reason<textarea value={adjustmentReason} onChange={(e) => setAdjustmentReason(e.target.value)} minLength={10} maxLength={500} placeholder="Explain the verified discrepancy or correction (at least 10 characters)." /></label>
+        <button className="primary" disabled={busy || !adjustmentBranch || !adjustmentItem || !adjustmentDelta || adjustmentReason.trim().length < 10} onClick={() => void recordAdjustment()}>Record adjustment</button>
+      </div>
+      <p className="muted">Negative changes cannot reduce stock below zero. Corrections cannot be edited or deleted; use a new, reasoned adjustment to correct a mistake.</p>
+    </section>
+
+    <section className="panel" id="client-stock-ledger">
+      <div className="panel-heading"><div><p className="eyebrow">AUDIT TRAIL</p><h2>Recent stock movements</h2>
+        <p className="muted">Latest 100 ledger entries visible within your branch access.</p></div></div>
+      <div className="table-wrap"><table><thead><tr><th>DATE</th><th>BRANCH</th><th>ITEM</th><th>CHANGE</th><th>SOURCE</th><th>REASON</th><th>ACTOR / ACTION</th></tr></thead>
+        <tbody>{movements.map((movement) => {
+          const hasBeenReversed = movements.some((entry) => entry.reversal_of_movement_id === movement.movement_id);
+          return <tr key={movement.movement_id}>
+            <td>{new Date(movement.occurred_at).toLocaleString()}</td>
+            <td>{branches.find((branch) => branch.id === movement.branch_id)?.name ?? movement.branch_id}</td>
+            <td>{items.find((item) => item.id === movement.item_id)?.name ?? movement.item_id}</td>
+            <td>{Number(movement.quantity_delta).toLocaleString()} {movement.unit_code}</td>
+            <td>{movement.source_type.replaceAll("_", " ")}</td>
+            <td>{movement.reason ?? "—"}</td>
+            <td>{movement.actor_user_id}
+              {movement.source_type === "manual_adjustment" && !hasBeenReversed && <button className="secondary" disabled={busy}
+                onClick={() => { setReversalTargetId(movement.movement_id); setReversalReason(""); }}>Reverse</button>}
+              {hasBeenReversed && <small className="muted">Reversed</small>}
+              {reversalTargetId === movement.movement_id && <div className="reject-form">
+                <label>Reversal reason<textarea rows={2} minLength={10} maxLength={500} value={reversalReason}
+                  onChange={(event) => setReversalReason(event.target.value)} placeholder="Explain why this adjustment is being reversed." /></label>
+                <button className="reject" disabled={busy || reversalReason.trim().length < 10}
+                  onClick={() => void reverseAdjustment(movement)}>Confirm reversal</button>
+                <button className="secondary" disabled={busy} onClick={() => setReversalTargetId(null)}>Cancel</button>
+              </div>}
+            </td>
+          </tr>;
+        })}
+          {!movements.length && <tr><td colSpan={7} className="muted">No stock movements recorded yet.</td></tr>}</tbody></table></div>
+    </section>
+
+    <section className="panel" id="client-sales">
       <div className="panel-heading"><div><p className="eyebrow">SALES LEDGER</p><h2>Record a sale</h2>
         <p className="muted">Posting a sale atomically creates stock-out movements.</p></div></div>
       <div className="operation-form">
@@ -555,7 +1013,7 @@ function ClientDashboard({ token, organization }: { token: string; organization:
           {!sales.length && <tr><td colSpan={4} className="muted">No sales posted yet.</td></tr>}</tbody></table></div>
     </section>
 
-    <section className="panel">
+    <section className="panel" id="client-stocktaking">
       <div className="panel-heading"><div><p className="eyebrow">PHYSICAL VERIFICATION</p><h2>Stocktaking</h2>
         <p className="muted">Create a blind count from a frozen expected-stock snapshot.</p></div></div>
       <div className="operation-form">
@@ -574,6 +1032,26 @@ function ClientDashboard({ token, organization }: { token: string; organization:
             value={countValues[item.item_id] ?? ""} onChange={(e) => setCountValues((current) => ({ ...current, [item.item_id]: e.target.value }))} />
           <button className="secondary" disabled={busy || recordedCounts.has(item.item_id) || countValues[item.item_id] === undefined || countValues[item.item_id].trim() === ""}
             onClick={() => void recordCount(item)}>{recordedCounts.has(item.item_id) ? "Count saved" : "Save count"}</button>
+          {(recordedCounts.has(item.item_id) || (evidenceByItem[item.item_id] ?? []).length > 0) && <div className="count-evidence">
+            {recordedCounts.has(item.item_id) && <label className="secondary evidence-upload">
+              Add photo evidence
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={busy}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  if (file) void uploadCountEvidence(item, file);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>}
+            {(evidenceByItem[item.item_id] ?? []).map((evidence) => (
+              <small className="muted" key={evidence.id}>
+                {evidence.original_filename ?? "Evidence image"} · {(evidence.byte_size / 1024).toFixed(1)} KB
+              </small>
+            ))}
+          </div>}
         </div>)}
       </div>}
       <div className="table-wrap"><table><thead><tr><th>REFERENCE</th><th>CREATED</th><th>ITEMS</th><th>STATUS</th></tr></thead>
@@ -581,6 +1059,51 @@ function ClientDashboard({ token, organization }: { token: string; organization:
           <td>{new Date(record.created_at).toLocaleDateString()}</td><td>{record.item_count}</td>
           <td><span className={`status ${record.status}`}>{record.status}</span></td></tr>)}
           {!stocktakes.length && <tr><td colSpan={4} className="muted">No stocktakes created yet.</td></tr>}</tbody></table></div>
+      {reviewAccess && <div className="review-queue" id="client-discrepancies">
+        <div className="panel-heading"><div><p className="eyebrow">SUPERVISOR WORKFLOW</p><h3>Submitted counts awaiting review</h3>
+          <p className="muted">Review the latest submitted round. Approval posts variances to the stock ledger; rejection opens a new count round.</p></div>
+          <span className="count-pill">{reviewQueue.length} pending</span></div>
+        <div className="table-wrap"><table><thead><tr><th>STOCKTAKE</th><th>BRANCH</th><th>ROUND</th><th>ITEMS</th><th>VARIANCES</th><th>SHORT / SURPLUS</th><th>REVIEW</th></tr></thead>
+          <tbody>{reviewQueue.map((entry) => <tr key={entry.stocktake_id}>
+            <td><strong>{entry.reference}</strong><small>{entry.submitted_at ? new Date(entry.submitted_at).toLocaleString() : "Submission time unavailable"}</small></td>
+            <td>{entry.branch_name}</td><td>{entry.round_number}</td><td>{entry.item_count}</td>
+            <td><strong>{entry.variance_count}</strong></td><td>{entry.shortage_count} / {entry.surplus_count}</td>
+            <td><div className="review-actions">
+              <button className="approve" disabled={busy || reviewingStocktakeId === entry.stocktake_id} onClick={() => void approveStocktake(entry.stocktake_id)}>
+                {reviewingStocktakeId === entry.stocktake_id ? "Saving…" : "Approve"}
+              </button>
+              <button className="reject" disabled={busy || reviewingStocktakeId === entry.stocktake_id} onClick={() => {
+                setRejectingStocktakeId((current) => current === entry.stocktake_id ? null : entry.stocktake_id);
+                setRejectionReason("");
+              }}>Reject</button>
+              <button className="secondary" disabled={busy} onClick={() => void toggleDecisionHistory(entry.stocktake_id)}>
+                {historyStocktakeId === entry.stocktake_id ? "Hide history" : "History"}
+              </button>
+            </div>
+            {rejectingStocktakeId === entry.stocktake_id && <div className="reject-form">
+              <label>Reason code<select value={rejectionReasonCode} onChange={(event) => setRejectionReasonCode(event.target.value)}>
+                <option value="variance_unexplained">Variance unexplained</option>
+                <option value="evidence_insufficient">Evidence insufficient</option>
+                <option value="counting_procedure">Counting procedure</option>
+                <option value="scope_or_unit_error">Scope or unit error</option>
+                <option value="other">Other</option>
+              </select></label>
+              <label>Explanation<textarea rows={3} minLength={10} maxLength={500} value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} placeholder="Explain what needs to be corrected (10–500 characters)." /></label>
+              <button className="reject" disabled={busy || rejectionReason.trim().length < 10} onClick={() => void rejectStocktake(entry.stocktake_id)}>Confirm rejection and reopen count</button>
+            </div>}
+            {historyStocktakeId === entry.stocktake_id && <div className="decision-history">
+              {(decisionHistory[entry.stocktake_id] ?? []).map((decision) => <div key={decision.id}>
+                <strong>{decision.action.replaceAll("_", " ")}</strong>
+                <small>{decision.reason_code ? decision.reason_code.replaceAll("_", " ") : "No reason required"} · {new Date(decision.created_at).toLocaleString()}</small>
+                {decision.reason && <p>{decision.reason}</p>}
+              </div>)}
+              {decisionHistory[entry.stocktake_id]?.length === 0 && <p className="muted">No supervisor decisions recorded yet.</p>}
+              {!decisionHistory[entry.stocktake_id] && <p className="muted">Loading decision history…</p>}
+            </div>}
+            </td>
+          </tr>)}
+          {!reviewQueue.length && <tr><td colSpan={7} className="muted">No submitted stocktakes are awaiting a decision.</td></tr>}</tbody></table></div>
+      </div>}
     </section>
 
     <section className="panel">
@@ -591,12 +1114,79 @@ function ClientDashboard({ token, organization }: { token: string; organization:
         <div className="table-wrap"><table><thead><tr><th>ITEM</th><th>SKU</th><th>BRANCH</th><th>ON HAND</th><th>UNIT</th></tr></thead>
           <tbody>{balances.map((row) => <tr key={row.item_id + row.branch_id}><td><strong>{row.item_name}</strong></td><td>{row.sku ?? "—"}</td><td>{row.branch_name} <small>{row.branch_code}</small></td><td><strong>{Number(row.quantity_on_hand).toLocaleString()}</strong></td><td>{row.unit_code}</td></tr>)}</tbody></table></div>}
     </section>
-    <section className="panel">
+    <section className="panel" id="client-branches">
       <div className="panel-heading"><div><p className="eyebrow">LOCATIONS</p><h2>Your branches</h2></div><span className="count-pill">{branches.length} locations</span></div>
       {branches.length === 0 ? <div className="empty-state">No branches registered yet.</div> :
         <div className="branch-grid">{branches.map((branch) => <div className="branch-card" key={branch.id}><div className="branch-icon">⌖</div>
           <div><strong>{branch.name}</strong><small>{branch.code} · {[branch.town, branch.county].filter(Boolean).join(", ")}</small></div>
           <span className={`status ${branch.status}`}>{branch.status}</span></div>)}</div>}
+    </section>
+
+    <section className="panel" id="team-access">
+      <div className="panel-heading">
+        <div><p className="eyebrow">WORKFORCE CONTROL</p><h2>Team & branch access</h2>
+          <p className="muted">Assign active organization members to the locations where they are permitted to count stock.</p></div>
+        <button className="secondary" onClick={() => void refreshTeam()} disabled={teamLoading}>↻ Refresh</button>
+      </div>
+      <div className="team-access-body">
+        {teamError && <div className="alert">{teamError}</div>}
+        {teamNotice && <div className="success">{teamNotice}</div>}
+
+        <div className="team-invite">
+          <div><p className="eyebrow">ADD A TEAM MEMBER</p><h3>Invite to this organization</h3>
+            <p className="muted">Invitations expire after 72 hours. No email delivery provider is configured yet, so securely share the one-time token with the invitee.</p></div>
+          <div className="team-assignment-form invite-form">
+            <label>Email address<input type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="staff@company.com" /></label>
+            <label>Access role<select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)}>
+              <option value="field_counter">Field counter</option>
+              <option value="client_readonly">Read-only</option>
+              <option value="client_reviewer">Stocktake reviewer</option>
+              <option value="client_manager">Client manager</option>
+            </select></label>
+            <button className="primary" disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail.trim())}
+              onClick={() => void createTeamInvitation()}>Create invitation</button>
+          </div>
+          {createdInvitation && <div className="invitation-result">
+            <strong>One-time invitation token</strong>
+            <code>{createdInvitation.invitation_token}</code>
+            <small>{createdInvitation.email} · {createdInvitation.role_code} · Expires {new Date(createdInvitation.expires_at).toLocaleString()}</small>
+            <button className="secondary" onClick={() => {
+              void navigator.clipboard.writeText(createdInvitation.invitation_token)
+                .then(() => setTeamNotice("Invitation token copied."))
+                .catch(() => setTeamError("Clipboard access was unavailable; select and copy the token manually."));
+            }}>Copy token</button>
+          </div>}
+        </div>
+        <div className="team-assignment-form">
+          <label>Branch
+            <select value={teamBranch} onChange={(event) => setTeamBranch(event.target.value)}>
+              {branches.filter((branch) => branch.status === "active").map((branch) => <option key={branch.id} value={branch.id}>{branch.name} ({branch.code})</option>)}
+            </select>
+          </label>
+          <label>Active organization member
+            <select value={teamMemberToAssign} onChange={(event) => setTeamMemberToAssign(event.target.value)}>
+              <option value="">Select a member</option>
+              {teamMembers.filter((member) => !branchAssignments.some((assignment) => assignment.membership_id === member.id))
+                .map((member) => <option key={member.id} value={member.id}>{member.identifier} · {member.role_codes.join(", ") || "No role"}</option>)}
+            </select>
+          </label>
+          <button className="primary" disabled={teamLoading || !teamBranch || !teamMemberToAssign}
+            onClick={() => void assignTeamMember()}>Assign to branch</button>
+        </div>
+        <div className="panel-heading team-list-heading">
+          <div><h3>Assigned staff</h3><p className="muted">Removing an assignment does not suspend or remove the user's organization account.</p></div>
+          <span className="count-pill">{branchAssignments.length} assigned</span>
+        </div>
+        {teamLoading ? <div className="loading">Loading branch assignments…</div> :
+          !teamError && branchAssignments.length === 0 ? <div className="empty-state">No staff are assigned to this branch yet.</div> :
+          <div className="table-wrap"><table><thead><tr><th>MEMBER</th><th>ASSIGNED</th><th>ACTION</th></tr></thead>
+            <tbody>{branchAssignments.map((assignment) => <tr key={assignment.membership_id}>
+              <td><strong>{assignment.identifier}</strong><small>{teamMembers.find((member) => member.id === assignment.membership_id)?.role_codes.join(", ") || "Organization member"}</small></td>
+              <td>{new Date(assignment.assigned_at).toLocaleString()}</td>
+              <td><button className="reject" onClick={() => void removeTeamMember(assignment.membership_id)}>Remove assignment</button></td>
+            </tr>)}</tbody>
+          </table></div>}
+      </div>
     </section>
     <p className="footnote">Your data is isolated to {name}. All stock changes are recorded through the organization-scoped ledger.</p>
   </div>;

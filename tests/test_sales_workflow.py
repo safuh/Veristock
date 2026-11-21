@@ -34,7 +34,9 @@ async def test_opening_balance_and_sale_posting_are_atomic_and_idempotent(tmp_pa
     factory = async_sessionmaker(engine, expire_on_commit=False)
     user_id, org_id, branch_id, item_id = (str(uuid4()) for _ in range(4))
     membership_id, role_id = str(uuid4()), str(uuid4())
-    permission_ids = {code: str(uuid4()) for code in ("inventory.manage", "inventory.read", "sales.record")}
+    permission_ids = {
+        code: str(uuid4()) for code in ("inventory.manage", "inventory.read", "sales.record")
+    }
     try:
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
@@ -46,7 +48,9 @@ async def test_opening_balance_and_sale_posting_are_atomic_and_idempotent(tmp_pa
                     OrganizationMembership(
                         id=membership_id, organization_id=org_id, user_id=user_id, status="active"
                     ),
-                    Role(id=role_id, code="client_operator", name="Client Operator", scope="client"),
+                    Role(
+                        id=role_id, code="client_operator", name="Client Operator", scope="client"
+                    ),
                     MembershipRole(membership_id=membership_id, role_id=role_id),
                     Branch(id=branch_id, organization_id=org_id, code="MAIN", name="Main"),
                     InventoryItem(
@@ -134,6 +138,50 @@ async def test_opening_balance_and_sale_posting_are_atomic_and_idempotent(tmp_pa
         rejected = client.post("/api/sales", headers=headers, json=insufficient)
         assert rejected.status_code == 409
 
+        adjustment = client.post(
+            "/api/inventory/adjustments",
+            headers=headers,
+            json={
+                "branch_id": branch_id,
+                "item_id": item_id,
+                "quantity_delta": "2",
+                "unit_code": "EA",
+                "reason": "Correct a verified receiving discrepancy",
+                "idempotency_key": "adjustment-register-001",
+            },
+        )
+        assert adjustment.status_code == 201
+        assert Decimal(adjustment.json()["quantity_on_hand"]) == Decimal("9.0000")
+
+        reversal_payload = {
+            "reason": "Reverse the adjustment entered against the wrong count",
+            "idempotency_key": "adjustment-reversal-001",
+        }
+        reversal = client.post(
+            f"/api/inventory/movements/{adjustment.json()['movement_id']}/reversal",
+            headers=headers,
+            json=reversal_payload,
+        )
+        assert reversal.status_code == 201
+        assert Decimal(reversal.json()["quantity_delta"]) == Decimal("-2.0000")
+        assert reversal.json()["source_type"] == "reversal"
+        assert reversal.json()["source_id"] == adjustment.json()["movement_id"]
+
+        reversal_replay = client.post(
+            f"/api/inventory/movements/{adjustment.json()['movement_id']}/reversal",
+            headers=headers,
+            json=reversal_payload,
+        )
+        assert reversal_replay.status_code == 201
+        assert reversal_replay.json()["movement_id"] == reversal.json()["movement_id"]
+
+        duplicate_reversal = client.post(
+            f"/api/inventory/movements/{adjustment.json()['movement_id']}/reversal",
+            headers=headers,
+            json={**reversal_payload, "idempotency_key": "adjustment-reversal-002"},
+        )
+        assert duplicate_reversal.status_code == 409
+
         balances = client.get("/api/inventory/balances", headers=headers)
         assert balances.status_code == 200
         assert Decimal(balances.json()[0]["quantity_on_hand"]) == Decimal("7.0000")
@@ -141,13 +189,18 @@ async def test_opening_balance_and_sale_posting_are_atomic_and_idempotent(tmp_pa
     engine = create_async_engine(database_url)
     try:
         async with async_sessionmaker(engine)() as session:
-            assert await session.scalar(select(Sale).where(Sale.organization_id == org_id)) is not None
-            assert await session.scalar(
-                select(StockMovement.id).where(
-                    StockMovement.organization_id == org_id,
-                    StockMovement.source_type == "sale",
+            assert (
+                await session.scalar(select(Sale).where(Sale.organization_id == org_id)) is not None
+            )
+            assert (
+                await session.scalar(
+                    select(StockMovement.id).where(
+                        StockMovement.organization_id == org_id,
+                        StockMovement.source_type == "sale",
+                    )
                 )
-            ) is not None
+                is not None
+            )
             balance = await session.scalar(
                 select(StockBalance).where(
                     StockBalance.organization_id == org_id,
@@ -157,5 +210,6 @@ async def test_opening_balance_and_sale_posting_are_atomic_and_idempotent(tmp_pa
             )
             assert balance is not None
             assert balance.quantity_on_hand == Decimal("7.0000")
+            assert balance.version == 4
     finally:
         await engine.dispose()

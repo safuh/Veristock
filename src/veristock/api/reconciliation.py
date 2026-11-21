@@ -23,6 +23,7 @@ from veristock.stocktaking.models import (
     ReconciliationLine,
     ReconciliationRun,
     Stocktake,
+    StocktakeDecision,
     StocktakeObservation,
     StocktakeRound,
     StocktakeScopeItem,
@@ -323,6 +324,8 @@ async def approve_reconciliation(
     )
     if stocktake is None:
         raise HTTPException(status_code=409, detail="Stocktake no longer exists")
+    if stocktake.status != "submitted":
+        raise HTTPException(status_code=409, detail="Stocktake has already been approved or closed")
 
     scope_versions = {
         scope.item_id: scope.expected_balance_version
@@ -411,6 +414,21 @@ async def approve_reconciliation(
             decision="approved",
             decided_by_user_id=user.id,
             note=run.decision_note,
+        )
+    )
+    completed_at = datetime.now(UTC)
+    stocktake.status = "completed"
+    stocktake.completed_at = completed_at
+    stocktake.approved_by_user_id = user.id
+    session.add(
+        StocktakeDecision(
+            id=str(uuid4()),
+            organization_id=organization.id,
+            stocktake_id=stocktake.id,
+            round_id=run.round_id,
+            action="approved",
+            actor_user_id=user.id,
+            created_at=completed_at,
         )
     )
     await session.commit()

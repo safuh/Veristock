@@ -3,7 +3,7 @@
 **Status:** Proposed MVP architecture  
 **Scope:** Full browser-based MVP (management, field operations, client portal)  
 **Repository:** `safuh/Veristock`  
-**AI policy:** Four bounded AI capabilities are in the MVP. AI is isolated in `veristock.ai` and cannot own or mutate business facts. See [ADR 0003](adr/0003-mvp-ai-boundaries-and-mvp-scope.md).
+**Delivery policy:** deterministic business logic only. AI/ML, LLMs, computer vision and model-provider integrations are deferred until the non-AI product is accepted.
 
 ## 1. Product shape
 
@@ -38,7 +38,7 @@ The management and client browser workspaces have an initial implementation unde
 | Deployment | Docker; Compose for local development |
 | Testing | Pytest, API integration tests, frontend tests and end-to-end browser tests |
 
-Do not introduce microservices, Kubernetes dependency, event streaming, a distributed cache, vector stores, or a workflow engine as MVP prerequisites. AI adapters are optional and provider-neutral; install model libraries only in the AI extra/runtime that needs them.
+Do not introduce microservices, Kubernetes dependency, event streaming, a distributed cache, vector stores, model providers or a workflow engine as MVP prerequisites.
 
 ## 3. Context and runtime topology
 
@@ -379,19 +379,18 @@ Architecture is not considered implemented merely because files or endpoints exi
 - updated setup and operational documentation.
 
 
-## 14. Approved MVP scope update (2026-11-11)
+## 14. Approved MVP scope update (2026-11-21)
 
-The MVP now includes:
+The current delivery is explicitly deterministic and AI-free:
 
-- **Inventory ledger and client sales entry:** clients post sales through the portal; posting creates auditable stock-out movements atomically. Reports and forecasts use committed sales/movement history.
-- **Dual-performer stocktaking:** the same stocktake workflow supports client employees and Veristock employees explicitly assigned to the client branch/task. Blind-count and tenant/resource authorization remain mandatory.
-- **Computer-vision assistance:** barcode/OCR and catalogue matching are advisory; a person confirms the item and quantity before count submission.
-- **Forecasting and replenishment:** deterministic SQL-derived demand history feeds CPU-friendly baseline forecasts and explainable reorder recommendations.
-- **Discrepancy intelligence:** rules/statistical anomaly signals prioritize review; they are not fraud verdicts.
-- **Automated BI:** SQL/Python calculates every authoritative metric. An optional LLM may narrate precomputed metrics and cite source references; it may not calculate or invent figures.
+- Inventory ledger and client sales entry: posted sales create auditable stock-out movements atomically.
+- Dual-performer stocktaking: client counters and assigned Veristock staff operate within tenant, branch and assignment authorization.
+- Evidence capture: private stocktake evidence is associated with count observations; object-storage abstraction, malware scanning and retention controls remain open.
+- Forecasting and replenishment: deterministic SQL-derived sales history feeds baseline demand forecasts and explainable reorder recommendations.
+- Discrepancy intelligence: immutable reconciliation runs, signed quantity variances, reviewer separation-of-duties and atomic approval posting. Human review remains authoritative.
+- Reporting: SQL/Python computes authoritative metrics; report endpoints do not call external model providers.
 
-AI services are optional at runtime. Core inventory, sales posting, physical counting, reconciliation and deterministic reporting must continue when every AI provider is offline. AI dependencies are not imported by business domains.
-
+No AI/LLM/agent features, computer vision, OCR, inference endpoints, model dependencies or AI-specific infrastructure are included. All authoritative quantities and stock movements remain deterministic and auditable.
 
 ## Organization domain
 

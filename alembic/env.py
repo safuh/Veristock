@@ -20,12 +20,14 @@ from veristock.identity import (
     User,  # noqa: F401
 )
 from veristock.inventory import models as inventory_models  # noqa: F401
+from veristock.inventory import policies as replenishment_policies  # noqa: F401
 from veristock.invitations.models import OrganizationInvitation  # noqa: F401
 from veristock.organizations.models import (
     Branch,  # noqa: F401
     OrganizationContact,  # noqa: F401
     OrganizationEnrollment,  # noqa: F401
 )
+from veristock.stocktaking import evidence_models as stocktake_evidence_models  # noqa: F401
 from veristock.stocktaking import models as stocktaking_models  # noqa: F401
 from veristock.workforce.models import EmployeeProfile  # noqa: F401
 

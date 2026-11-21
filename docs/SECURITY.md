@@ -80,3 +80,16 @@ These controls should be implemented and verified before making stronger product
 ## Security reporting
 
 Do not disclose suspected vulnerabilities in public issue threads before maintainers have had an opportunity to assess them. Use the repository's configured private security-reporting mechanism when one is available; otherwise contact the project maintainer privately with reproduction details and affected versions.
+
+
+## Stocktake evidence uploads
+
+Stocktake image evidence is uploaded as a raw request body and is limited by `STOCKTAKE_EVIDENCE_MAX_BYTES` (8 MiB by default; configurable up to 32 MiB). The API accepts JPEG, PNG and WebP media types and checks the file signature against the declared type. Evidence is stored under a generated random filename in the private `STOCKTAKE_EVIDENCE_STORAGE_DIR` directory (default: `.data/stocktake-evidence`); the storage key is never returned to clients. The API records the tenant, stocktake, count round, observation, uploader, media type, byte size and SHA-256 digest. Retrieval requires the tenant's `stocktake.read` permission and uses private, non-cacheable responses.
+
+**Deployment requirements and current limitations:**
+
+- Mount the configured directory on private persistent storage, excluded from static web serving and public buckets. Back it up consistently with the database.
+- The current adapter is local-filesystem storage. It is suitable for a single API instance with a persistent volume; multiple replicas need a shared private object-storage adapter before horizontal scaling.
+- Signature checking is not malware scanning or full image decoding. Do not treat uploaded images as trusted input; add an approved malware/content-scanning pipeline and image re-encoding before broad production exposure.
+- Configure reverse-proxy request-body limits as well as the application limit. Do not expose the evidence directory through a static-file server.
+- Evidence metadata is tenant-scoped. The API does not provide public URLs or direct storage-key access.

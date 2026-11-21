@@ -66,16 +66,10 @@ async def test_identity_endpoints_require_valid_user_and_tenant_membership(
         database_url=database_url,
     )
     token_service = TokenService("v" * 32)
-    access_token = token_service.create(
-        user_id, timedelta(minutes=10), token_type="access"
-    )
-    outsider_token = token_service.create(
-        other_user_id, timedelta(minutes=10), token_type="access"
-    )
+    access_token = token_service.create(user_id, timedelta(minutes=10), token_type="access")
+    outsider_token = token_service.create(other_user_id, timedelta(minutes=10), token_type="access")
 
-    with TestClient(
-        create_app(settings, access_token_service=token_service)
-    ) as client:
+    with TestClient(create_app(settings, access_token_service=token_service)) as client:
         no_token = client.get("/api/identity/me")
         assert no_token.status_code == 401
 
@@ -96,6 +90,7 @@ async def test_identity_endpoints_require_valid_user_and_tenant_membership(
         )
         assert context.status_code == 200
         assert context.json()["id"] == organization_id
+        assert context.json()["can_manage_inventory"] is False
 
         cross_tenant = client.get(
             "/api/identity/context",
@@ -115,9 +110,7 @@ async def test_identity_endpoints_require_valid_user_and_tenant_membership(
         )
         assert outsider.status_code == 403
 
-        invalid_type = token_service.create(
-            user_id, timedelta(minutes=10), token_type="refresh"
-        )
+        invalid_type = token_service.create(user_id, timedelta(minutes=10), token_type="refresh")
         wrong_token_type = client.get(
             "/api/identity/me",
             headers={"Authorization": f"Bearer {invalid_type}"},

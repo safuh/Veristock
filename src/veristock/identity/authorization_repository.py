@@ -3,6 +3,8 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from veristock.organizations.models import Branch, BranchMembership
+
 from .authorization import (
     MembershipRole,
     Organization,
@@ -23,6 +25,30 @@ class AuthorizationRepository:
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    async def has_branch_assignment(
+        self, user_id: str, organization_id: str, branch_id: str
+    ) -> bool:
+        """Return true only for an active member assigned to this tenant branch."""
+        statement = (
+            select(BranchMembership.id)
+            .join(
+                OrganizationMembership,
+                OrganizationMembership.id == BranchMembership.membership_id,
+            )
+            .join(Branch, Branch.id == BranchMembership.branch_id)
+            .where(
+                BranchMembership.organization_id == organization_id,
+                BranchMembership.branch_id == branch_id,
+                OrganizationMembership.organization_id == organization_id,
+                OrganizationMembership.user_id == user_id,
+                OrganizationMembership.status == "active",
+                Branch.organization_id == organization_id,
+                Branch.status == "active",
+            )
+            .limit(1)
+        )
+        return (await self.session.scalar(statement)) is not None
 
     async def has_active_membership(self, user_id: str, organization_id: str) -> bool:
         statement = (

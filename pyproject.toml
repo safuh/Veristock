@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "veristock"
 version = "0.1.0"
-description = "A reusable FastAPI backend foundation with SQLAlchemy, Alembic, Docker, and Kubernetes."
+description = "Multi-tenant inventory verification and stocktaking platform."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
-authors = [{name = "Safu Harry", email = "harrysafu@gmail.com"}]
-keywords = ["fastapi", "sqlalchemy", "alembic", "postgresql", "docker", "kubernetes", "backend", "jwt"]
+authors = [{name = "Veristock Inventory Solutions Ltd."}]
+keywords = ["inventory", "stocktaking", "multi-tenant", "fastapi", "sqlalchemy", "postgresql", "retail"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -20,7 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Framework :: FastAPI",
-    "Topic :: Software Development :: Libraries",
+    "Topic :: Office/Business",
 ]
 
 dependencies = [
@@ -49,9 +49,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/safuh/FastApiBackbone"
-Repository = "https://github.com/safuh/FastApiBackbone"
-Issues = "https://github.com/safuh/FastApiBackbone/issues"
+Homepage = "https://github.com/safuh/Veristock"
+Repository = "https://github.com/safuh/Veristock"
+Issues = "https://github.com/safuh/Veristock/issues"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -24,8 +24,7 @@ async def test_alembic_upgrade_and_downgrade() -> None:
         async with engine.connect() as connection:
             result = await connection.execute(
                 text(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name = 'users'"
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"
                 )
             )
             user_columns = {row[0] for row in result}
@@ -38,18 +37,20 @@ async def test_alembic_upgrade_and_downgrade() -> None:
             refresh_token_columns = {row[0] for row in result}
             result = await connection.execute(
                 text(
-                    "SELECT table_name FROM information_schema.tables "
-                    "WHERE table_schema = 'public'"
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'stock_movements'"
+                )
+            )
+            stock_movement_columns = {row[0] for row in result}
+            result = await connection.execute(
+                text(
+                    "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
                 )
             )
             table_names = {row[0] for row in result}
-            result = await connection.execute(
-                text("SELECT COUNT(*) FROM permissions")
-            )
+            result = await connection.execute(text("SELECT COUNT(*) FROM permissions"))
             permission_count = result.scalar_one()
-            result = await connection.execute(
-                text("SELECT COUNT(*) FROM roles")
-            )
+            result = await connection.execute(text("SELECT COUNT(*) FROM roles"))
             role_count = result.scalar_one()
             result = await connection.execute(
                 text(
@@ -60,6 +61,15 @@ async def test_alembic_upgrade_and_downgrade() -> None:
                 )
             )
             client_admin_invite_grant = result.scalar_one()
+            result = await connection.execute(
+                text(
+                    "SELECT COUNT(*) FROM role_permissions rp "
+                    "JOIN roles r ON r.id = rp.role_id "
+                    "JOIN permissions p ON p.id = rp.permission_id "
+                    "WHERE r.code = 'client_reviewer' AND p.code = 'stocktake.approve'"
+                )
+            )
+            reviewer_approval_grant = result.scalar_one()
         assert {"id", "identifier", "password_hash", "status", "created_at"} <= user_columns
         assert {"token_id", "subject", "expires_at", "revoked"} <= refresh_token_columns
         assert {
@@ -68,11 +78,27 @@ async def test_alembic_upgrade_and_downgrade() -> None:
             "employee_profiles",
             "organization_invitations",
         } <= table_names
+        assert {
+            "source_type",
+            "idempotency_key",
+            "actor_user_id",
+            "reason",
+            "reversal_of_movement_id",
+        } <= stock_movement_columns
         assert permission_count > 0
         assert role_count == 10
         assert client_admin_invite_grant == 1
+        assert reviewer_approval_grant == 1
     finally:
         await engine.dispose()
 
     subprocess.run([*command, "downgrade", "base"], check=True, env=env)
     subprocess.run([*command, "upgrade", "head"], check=True, env=env)
+
+
+def test_stock_movement_reversal_migration_is_present():
+    from pathlib import Path
+
+    migration = Path("alembic/versions/0023_stock_movement_reversal.py").read_text()
+    assert "reversal_of_movement_id" in migration
+    assert "uq_stock_movements_single_reversal" in migration

@@ -28,3 +28,7 @@ mobile/.flutter-plugins-dependencies
 mobile/.packages
 mobile/android/.gradle/
 mobile/android/local.properties
+
+# Private local evidence uploads
+.data/
+*.tsbuildinfo

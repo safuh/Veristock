@@ -22,7 +22,7 @@ from veristock.identity import (
     User,
 )
 from veristock.inventory.models import InventoryItem, StockBalance
-from veristock.organizations.models import Branch
+from veristock.organizations.models import Branch, BranchMembership
 
 
 def test_reconciliation_approval_posts_stock_adjustment_and_prevents_self_approval(
@@ -61,6 +61,13 @@ def test_reconciliation_approval_posts_stock_adjustment_and_prevents_self_approv
                             user_id=reviewer,
                             status="active",
                         ),
+                        BranchMembership(
+                            id=str(uuid4()),
+                            organization_id=org,
+                            branch_id=branch,
+                            membership_id=counter_membership,
+                            assigned_by_user_id=reviewer,
+                        ),
                         Role(id=counter_role, code="counter", name="Counter", scope="client"),
                         Role(
                             id=reviewer_role,
@@ -96,6 +103,7 @@ def test_reconciliation_approval_posts_stock_adjustment_and_prevents_self_approv
                     "reconciliation.run",
                     "reconciliation.review",
                     "reconciliation.approve",
+                    "stocktake.approve",
                 )
                 ids = {}
                 for code in codes:
@@ -174,8 +182,14 @@ def test_reconciliation_approval_posts_stock_adjustment_and_prevents_self_approv
         )
         assert replay.status_code == 200
         assert replay.json()["status"] == "approved"
+        legacy_approval = client.post(
+            f"/api/stocktakes/{stocktake_id}/approve", headers=reviewer_headers
+        )
+        assert legacy_approval.status_code == 409
         closed_recount = client.post(
-            f"/api/stocktakes/{stocktake_id}/recount", headers=counter_headers
+            f"/api/stocktakes/{stocktake_id}/recount",
+            headers=reviewer_headers,
+            json={"reason_code": "counting_error", "reason": "Review is complete"},
         )
         assert closed_recount.status_code == 409
 

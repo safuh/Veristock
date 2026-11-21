@@ -35,11 +35,9 @@ def create_app(
     auth_application_factory: AuthApplicationFactory | None = None,
     access_token_service: TokenService | None = None,
 ) -> FastAPI:
-    """Create the API application with explicit authentication composition.
+    """Create the API application with explicit infrastructure composition.
 
-    When JWT settings are provided, the standard SQLAlchemy authentication
-    application and access-token validator are composed automatically. Custom
-    implementations can be injected for tests or alternate identity providers.
+    Authentication services can be injected for tests or alternate issuers.
     """
     resolved = settings or get_settings()
     configure_logging(resolved)
@@ -47,15 +45,14 @@ def create_app(
     if resolved.jwt_secret_key is not None:
         secret_key = resolved.jwt_secret_key.get_secret_value()
         if auth_application_factory is None:
+
             def configured_auth_application(
                 session: AsyncSession,
             ) -> AuthenticationApplication:
                 return create_sqlalchemy_auth_application(
                     session,
                     secret_key=secret_key,
-                    access_token_lifetime=timedelta(
-                        seconds=resolved.access_token_lifetime_seconds
-                    ),
+                    access_token_lifetime=timedelta(seconds=resolved.access_token_lifetime_seconds),
                     refresh_token_lifetime=timedelta(
                         seconds=resolved.refresh_token_lifetime_seconds
                     ),
@@ -67,9 +64,7 @@ def create_app(
     elif resolved.environment is Environment.PRODUCTION and (
         auth_application_factory is None or access_token_service is None
     ):
-        raise ValueError(
-            "Production requires JWT_SECRET_KEY or explicit authentication services"
-        )
+        raise ValueError("Production requires JWT_SECRET_KEY or explicit authentication services")
 
     app = FastAPI(
         title=resolved.app_name,

@@ -49,7 +49,7 @@ Alembic migrations -> explicit release operation
 9. Runtime configuration and secrets are injected by the environment.
 10. Object storage access is authorized through the tenant-owned parent resource.
 11. Frontend route visibility is not authorization; the API remains authoritative.
-12. No AI, LLM, agent, vector database or AI-related scaffolding is included in the MVP.
+12. No AI, LLM, agent, computer-vision, model-provider or vector-database scaffolding is included in the MVP.
 
 ## Product workspaces
 

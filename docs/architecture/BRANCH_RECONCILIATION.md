@@ -1,34 +1,57 @@
 # Branch reconciliation and continuation policy
 
-This note records the repository's pre-existing development lines so completed work is not lost or reimplemented.
+This document records completed development branches and the integration decision used for the current non-AI product line.
 
-## Known branches
+## Preserved branches
 
 | Branch | Latest observed tip | Scope and disposition |
 |---|---|---|
-| `main` | `5d7471c` | Initial repository foundation. |
-| `feat/mvp-architecture-domain-model` | `de50e13` | Product MVP baseline: tenancy, RBAC, organization onboarding, invitations, workforce profiles, tenant-scoped inventory, sales posting, physical stocktake capture/recounts, browser shell and Android client foundation. Selected as the baseline for the current no-AI continuation. |
-| `feat/ai-foundation` | `cfe9a09` | Later superset of the MVP line. It contains additional non-AI work (branch assignments, evidence uploads, stocktake approval/rejection, manual adjustments and reversals, replenishment policies, deterministic reports, and browser/mobile refinements) alongside AI work. Do not merge this branch wholesale while AI is deferred. Port and verify its non-AI improvements selectively, preserving the migration chain. |
-| `feat/inventory-core` | `18444cf` (local) | Earlier standalone catalogue/warehouse/stock-ledger prototype. Its generic product/category/warehouse schema is superseded by the tenant-owned inventory and branch model in the MVP line. Preserve the branch as historical work; do not merge its conflicting migration/model layer directly. |
+| `main` | `5d7471c` | Initial repository foundation; not modified by this integration. |
+| `feat/mvp-architecture-domain-model` | `de50e13` | Product MVP baseline: tenancy, RBAC, organization onboarding, inventory, sales, stocktake capture, browser and Android foundations. |
+| `feat/ai-foundation` | `cfe9a09` | 222 commits beyond the common product baseline. Contains substantial non-AI work as well as AI features. Preserved unchanged as a source branch. |
+| `feat/inventory-core` | `18444cf` | Earlier standalone product/category/warehouse prototype. Preserved as historical work; its schema conflicts with the tenant-owned branch/item model. |
+| `feat/continue-mvp-no-ai` | `0f1832e` | Non-AI baseline plus immutable reconciliation/approval and balance-version safeguards. Preserved unchanged. |
 
-The two remote feature branches were observed to share the initial `main` base. The local `feat/inventory-core` work is a separate implementation and is not an ancestor of the product MVP line.
+## Integrated branch
 
-## Current continuation
+The active integration branch is `feat/integrated-no-ai`. It merges the completed non-AI capabilities from `feat/ai-foundation` into `feat/continue-mvp-no-ai`, while explicitly excluding AI implementation.
 
-The active implementation branch is `feat/continue-mvp-no-ai`, based on `feat/mvp-architecture-domain-model`. It deliberately excludes the AI package/contracts from the baseline and keeps the current scope deterministic.
+Non-AI capabilities retained from the source branch include:
+- Branch membership assignments and branch-scoped field access.
+- Private stocktake evidence metadata, upload and authorized retrieval.
+- Supervisor review queue, recount reasons, rejection and immutable decision history.
+- Reasoned manual stock adjustments and database-enforced single reversal.
+- Branch/item replenishment policies.
+- Deterministic inventory summary, sales-velocity demand planning, stock availability evidence and rolling-origin forecast evaluation.
+- React report/policy/stocktake workflow refinements and Android session restoration.
 
-The current increment adds:
-- Versioned, immutable reconciliation runs tied to a submitted count round.
-- Frozen expected-versus-physical quantity lines and shortage/surplus/matched classification.
-- Independent reviewer approval/rejection with separation-of-duties checks.
-- Atomic posting of approved variance to stock balances and the movement ledger.
-- Stock-balance versioning so an approval is rejected if intervening stock movements occurred after the stocktake snapshot.
-- A forward Alembic migration and end-to-end API tests.
+The pure deterministic forecast calculations were moved from the old AI package to `veristock.analytics.forecasting`. Reporting endpoints now expose deterministic results only. AI provider composition, narrative endpoints, AI audit storage/API, AI migrations, AI tests and AI environment settings are excluded.
+
+## Migration reconciliation
+
+The migration chain is linear:
+- `0013_client_stocktake_submit`
+- `0014_reconciliation` — immutable reconciliation runs, approval records and stock-balance version snapshots
+- `0015_replenishment_policies`
+- `0016_stocktake_approval`
+- `0017_stocktake_decisions`
+- `0018_stocktake_rejection`
+- `0019_stocktake_evidence`
+- `0020_branch_memberships`
+- `0021_client_admin_member_invite`
+- `0022_stock_movement_reason`
+- `0023_stock_movement_reversal`
+
+The AI-only audit migration was removed. The replenishment migration now follows `0014_reconciliation`. SQLite portability fixes use Alembic batch operations for the stocktake and decision check-constraint changes. Existing released migration files before this chain remain unchanged.
+
+## Approval safety
+
+There are two historical stocktake approval surfaces. They must not both post stock adjustments for one stocktake. The reconciliation approval now marks the stocktake completed and records an approved decision; the legacy direct stocktake approval endpoint only accepts submitted stocktakes. The reconciliation endpoint also rejects a stocktake already completed by the legacy flow. This makes the terminal state mutually exclusive and prevents double posting.
 
 ## Integration rules
 
-1. Do not merge `feat/ai-foundation` wholesale while AI is excluded.
-2. Port non-AI changes as coherent slices with their tests and documentation.
-3. Reconcile Alembic revision ancestry before importing any migration from another branch; never leave multiple heads or rewrite already-released migrations.
-4. Keep tenant authorization, branch scope, immutable count observations and approval separation-of-duties intact.
-5. Do not merge to `main` until the product acceptance tracker and full CI suite are green.
+1. Do not merge the AI implementation back into this branch while AI remains deferred.
+2. Keep deterministic forecasting in the analytics domain, not in an AI-named package.
+3. Preserve the linear Alembic history; never create multiple heads or rewrite released migrations.
+4. Maintain tenant/branch authorization, immutable count observations, separation of duties and append-only stock movement history.
+5. Do not merge into `main` until the full backend, browser, Android, migration and tenant-isolation acceptance suites are green.

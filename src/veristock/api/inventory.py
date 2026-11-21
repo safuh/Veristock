@@ -3,16 +3,19 @@
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import distinct, func, select
+from sqlalchemy import distinct, func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from veristock.api.branch_access import accessible_branch_ids
 from veristock.identity.authorization import Organization
 from veristock.identity.authorization_dependencies import (
+    get_current_user,
     get_db_session,
     require_permission,
 )
+from veristock.identity.models import User
 from veristock.inventory.models import InventoryItem, StockBalance
 from veristock.organizations.models import Branch
 
@@ -53,9 +56,13 @@ class InventorySummaryRead(BaseModel):
 @router.get("/summary", response_model=InventorySummaryRead)
 async def inventory_summary(
     organization: InventoryRead,
+    user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> InventorySummaryRead:
-    """Return high-level inventory totals for the selected tenant only."""
+    """Return inventory totals limited to the user's authorized branch scope."""
+    branch_ids = await accessible_branch_ids(session, user, organization)
+    branch_filter = Branch.id.in_(branch_ids) if branch_ids is not None else true()
+    balance_filter = StockBalance.branch_id.in_(branch_ids) if branch_ids is not None else true()
     item_count = await session.scalar(
         select(func.count(InventoryItem.id)).where(
             InventoryItem.organization_id == organization.id,
@@ -66,13 +73,17 @@ async def inventory_summary(
         select(func.count(Branch.id)).where(
             Branch.organization_id == organization.id,
             Branch.status == "active",
+            branch_filter,
         )
     )
     balances = await session.execute(
         select(
             func.count(distinct(StockBalance.item_id)),
             func.coalesce(func.sum(StockBalance.quantity_on_hand), 0),
-        ).where(StockBalance.organization_id == organization.id)
+        ).where(
+            StockBalance.organization_id == organization.id,
+            balance_filter,
+        )
     )
     stocked_item_count, total_units = balances.one()
     return InventorySummaryRead(
@@ -92,9 +103,7 @@ async def list_inventory_items(
     offset: int = Query(default=0, ge=0),
 ) -> list[InventoryItem]:
     """List catalogue items belonging to the selected tenant."""
-    statement = select(InventoryItem).where(
-        InventoryItem.organization_id == organization.id
-    )
+    statement = select(InventoryItem).where(InventoryItem.organization_id == organization.id)
     if status != "all":
         statement = statement.where(InventoryItem.status == status)
     result = await session.scalars(
@@ -106,12 +115,21 @@ async def list_inventory_items(
 @router.get("/balances", response_model=list[StockBalanceRead])
 async def list_stock_balances(
     organization: InventoryRead,
+    user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     branch_id: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[StockBalanceRead]:
-    """List current item balances with branch labels, scoped to the active tenant."""
+    """List balances only for branches the authenticated user may access."""
+    allowed_branch_ids = await accessible_branch_ids(session, user, organization)
+    if (
+        branch_id is not None
+        and allowed_branch_ids is not None
+        and branch_id not in allowed_branch_ids
+    ):
+        raise HTTPException(status_code=404, detail="Active branch not found")
+
     statement = (
         select(StockBalance, InventoryItem, Branch)
         .join(
@@ -121,18 +139,17 @@ async def list_stock_balances(
         )
         .join(
             Branch,
-            (Branch.id == StockBalance.branch_id)
-            & (Branch.organization_id == organization.id),
+            (Branch.id == StockBalance.branch_id) & (Branch.organization_id == organization.id),
         )
         .where(StockBalance.organization_id == organization.id)
     )
     if branch_id is not None:
         statement = statement.where(StockBalance.branch_id == branch_id)
+    elif allowed_branch_ids is not None:
+        statement = statement.where(StockBalance.branch_id.in_(allowed_branch_ids))
     rows = (
         await session.execute(
-            statement.order_by(Branch.code, InventoryItem.name)
-            .limit(limit)
-            .offset(offset)
+            statement.order_by(Branch.code, InventoryItem.name).limit(limit).offset(offset)
         )
     ).all()
     return [
