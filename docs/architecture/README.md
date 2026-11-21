@@ -6,6 +6,8 @@ Veristock One is a multi-tenant inventory verification platform with three brows
 
 - [Product architecture](PRODUCT_ARCHITECTURE.md) — runtime topology, module boundaries, tenancy, security, workflows, frontend workspaces, non-functional requirements and delivery sequence.
 - [Domain model](DOMAIN_MODEL.md) — entities, relationships, lifecycle states, invariants and recommended migration order.
+- [Branch reconciliation](BRANCH_RECONCILIATION.md) — preserved feature branches, completed work and safe integration policy.
+- [Reconciliation module](../modules/reconciliation/README.md) — API contract, posting safeguards and current boundaries.
 - [Architecture decision records](.) — durable technical decisions as they are accepted.
 
 ## Runtime dependency flow

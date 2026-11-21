@@ -130,6 +130,10 @@ A corrected source file creates a new import and snapshot. Never mutate the snap
 ### InventoryLocation
 Optional client-defined location hierarchy within a branch (warehouse, room, aisle, rack, shelf, bin). A count may operate at branch level if the client does not provide finer location data.
 
+### StockBalance and movement versioning
+
+StockBalance is the current quantity projection for one organization/branch/item. Its integer version starts at 1 and increments on every posted stock-changing operation. When a stocktake scope is frozen, it stores both the expected quantity and the balance version. Reconciliation approval must verify that the current balance version still matches the frozen version before applying any variance. This prevents a count from overwriting sales, receipts or other movements recorded after the count snapshot, including cases where intervening movements happen to net to the same quantity.
+
 ## 6. Stocktaking domain
 
 ### Stocktake

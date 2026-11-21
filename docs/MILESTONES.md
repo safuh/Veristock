@@ -4,9 +4,9 @@ This tracker defines the Veristock One MVP across its browser workspaces and And
 
 ## Product scope
 
-**Included:** FastAPI backend, React + TypeScript browser application, management workspace, field operations workspace, client portal, PostgreSQL, tenant isolation, RBAC, branch/item/unit inventory, opening-stock onboarding, client-entered sales, stocktaking by either Veristock or client employees, reconciliation, inventory analytics/reporting, forecasting, discrepancy-risk detection and computer-vision-assisted counts.
+**Included:** FastAPI backend, React + TypeScript browser application, management workspace, field operations workspace, client portal, PostgreSQL, tenant isolation, RBAC, branch/item/unit inventory, opening-stock onboarding, client-entered sales, physical stocktaking, deterministic reconciliation, inventory analytics and reporting.
 
-**Explicitly excluded from this MVP:** purchase-order/receipt/invoice document processing, supplier and POS integrations, fixed-asset verification, advanced accounting/billing, native iOS app, microservices, general-purpose support agents and employee performance ranking. AI is in scope only for the four capabilities in ADR 0003; no general agent platform or vector database is required initially.
+**Explicitly excluded from the current delivery:** AI/ML inference, computer vision, LLMs, machine-learning forecasting, purchase-order/receipt/invoice document processing, supplier and POS integrations, fixed-asset verification, advanced accounting/billing, native iOS app, microservices, general-purpose support agents and employee performance ranking. AI is deferred until the deterministic inventory, count, reconciliation and reporting workflows are complete and accepted.
 
 ## Foundation milestones retained from the backend repository
 
@@ -171,7 +171,7 @@ Reference documents:
 - [ ] Optional warehouse/bin locations.
 - [x] Validated manual opening-stock entry with actor provenance and idempotency.
 - [ ] Validated structured import with row-level error reporting.
-- [ ] Append-only stock movement ledger and current-balance projection.
+- [ ] Append-only stock movement ledger with database-enforced immutability and current-balance projection.
 - [x] Client portal/API sales entry with line items and posting validation.
 - [x] Atomic sale + stock-out movement posting with idempotency.
 - [ ] Reversal/correction workflow; no direct edits to posted sales or movements.
@@ -191,20 +191,22 @@ Reference documents:
 - [x] Blind-count API behavior; expected quantities are withheld from blind count scope responses.
 - [x] Manual/barcode-identified item quantity capture API.
 - [ ] Image evidence upload with private storage and authorized retrieval.
-- [ ] Vision-assisted barcode/OCR/catalogue matching with confidence and manual confirmation.
+- [ ] Structured barcode matching for unidentified items with manual confirmation.
 - [ ] Batch, serial, expiry and condition capture where enabled by item policy.
 - [x] Idempotent count observations and immutable count rounds with completeness checks.
 - [x] Recount round creation; [ ] supervisor queue and richer audit events.
 
 ### M13 — Reconciliation and discrepancy intelligence
 
-- [ ] Reconciliation against frozen expected-stock snapshots and accepted count rounds.
+**Status: in progress — deterministic reconciliation calculation, immutable versioned runs, quantity variance classification, reviewer separation-of-duties and approval/rejection decisions are implemented. Approval posts balanced stock adjustments to the movement ledger atomically. Optimistic balance-version checks reject approvals if stock moved after the frozen snapshot. Advanced exception resolution and financial variance remain open.**
+
+- [x] Reconciliation against frozen expected-stock snapshots and accepted count rounds.
 - [ ] Configurable matching grain and unit validation.
 - [ ] Shortage, surplus, missing, unrecognized and condition exceptions.
-- [ ] Quantity variance and verified-cost financial variance.
+- [x] Quantity variance; [ ] verified-cost financial variance.
 - [ ] Exception resolution and recount handoff.
-- [ ] Reviewer approval and separation-of-duties enforcement.
-- [ ] Immutable, versioned reconciliation runs.
+- [x] Reviewer approval and separation-of-duties enforcement.
+- [x] Immutable, versioned reconciliation runs.
 - [ ] Deterministic anomaly rules for unusual adjustments, sales and stock movement patterns.
 - [ ] Explainable risk signals with evidence references; human review only, no automated accusations.
 
@@ -217,19 +219,12 @@ Reference documents:
 - [ ] Replenishment calculations use lead time, safety stock and configured service levels.
 - [ ] Report period, filters, generation timestamp and source watermark are recorded.
 - [ ] PDF/spreadsheet exports from deterministic query results.
-- [ ] Optional LLM narrative grounded only in authorized, precomputed metrics.
 - [ ] Tenant-scoped reporting permissions and cross-tenant tests.
-- [ ] Reports remain available when AI providers are unavailable.
+- [x] Core inventory and reconciliation workflows operate without AI providers.
 
-### M14A — AI platform foundations
+### AI — explicitly deferred
 
-- [ ] Separate `veristock.ai` package with provider-neutral interfaces.
-- [ ] Model/provider configuration and safe timeouts; no provider secrets in domain modules.
-- [ ] Structured outputs validated with Pydantic.
-- [ ] Model/version, confidence, latency and failure metadata recorded.
-- [ ] Evaluation fixtures for OCR/matching, forecasts, anomaly signals and report narratives.
-- [ ] Human approval for any proposed action that can affect stock or business decisions.
-- [ ] AI failure isolation: inventory, sales, counting and deterministic reporting continue without AI.
+AI is not part of the current delivery. Do not add model providers, inference endpoints, OCR/vision workflows, LLM narratives, AI dependencies or AI-specific operational infrastructure while the deterministic product milestones remain open. Revisit only after M8–M16 non-AI acceptance is complete and the product owner explicitly reopens the scope.
 
 ### M15 — Browser workspaces
 
@@ -253,7 +248,7 @@ Reference documents:
 
 ### M16 — Production hardening and release
 
-- [ ] Full unit, integration, tenant-isolation, authorization, AI evaluation and browser test suites pass.
+- [ ] Full unit, integration, tenant-isolation, authorization, deterministic business-workflow and browser test suites pass.
 - [ ] PostgreSQL migration upgrade/downgrade and rollback procedures verified.
 - [ ] Upload limits, file authorization and storage lifecycle verified.
 - [ ] Backup and restore drill completed.
@@ -268,4 +263,4 @@ The Veristock One MVP is releasable only when required M8–M16 acceptance crite
 
 ## Change control
 
-AI capabilities are part of the agreed MVP scope but must be introduced only at the M14/M14A milestones, after their deterministic data contracts and evaluation criteria are ready. No AI scaffolding belongs in earlier inventory or stocktaking slices. Changes to the agreed product scope, data ownership, authorization model or immutable count/reconciliation rules require an explicit architecture decision and updated acceptance criteria.
+AI is explicitly deferred and excluded from the current implementation. Complete and verify deterministic inventory, sales, stocktaking, reconciliation, reporting and security workflows first. Reopening AI scope requires an explicit product decision and updated acceptance criteria. Changes to data ownership, authorization or immutable count/reconciliation rules require an architecture decision.
