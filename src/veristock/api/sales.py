@@ -155,7 +155,9 @@ async def record_opening_balance(
             or existing.item_id != payload.item_id
             or existing.quantity_delta != payload.quantity
         ):
-            raise HTTPException(status_code=409, detail="Idempotency key was used for another operation")
+            raise HTTPException(
+                status_code=409, detail="Idempotency key was used for another operation"
+            )
         balance = await session.scalar(
             select(StockBalance).where(
                 StockBalance.organization_id == organization.id,
@@ -191,14 +193,18 @@ async def record_opening_balance(
         raise HTTPException(status_code=404, detail="Active branch or inventory item not found")
 
     balance = await session.scalar(
-        select(StockBalance).where(
+        select(StockBalance)
+        .where(
             StockBalance.organization_id == organization.id,
             StockBalance.branch_id == branch.id,
             StockBalance.item_id == item.id,
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     if balance is not None and balance.quantity_on_hand != 0:
-        raise HTTPException(status_code=409, detail="Opening balance already exists; use an adjustment workflow")
+        raise HTTPException(
+            status_code=409, detail="Opening balance already exists; use an adjustment workflow"
+        )
     if balance is None:
         balance = StockBalance(
             id=str(uuid4()),
@@ -210,6 +216,7 @@ async def record_opening_balance(
         session.add(balance)
     else:
         balance.quantity_on_hand = payload.quantity
+        balance.version += 1
     session.add(
         StockMovement(
             id=str(uuid4()),
@@ -227,7 +234,9 @@ async def record_opening_balance(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(status_code=409, detail="Opening balance conflicts with another request") from exc
+        raise HTTPException(
+            status_code=409, detail="Opening balance conflicts with another request"
+        ) from exc
     return OpeningBalanceRead(
         branch_id=branch.id,
         item_id=item.id,
@@ -261,8 +270,14 @@ async def post_sale(
             (line.item_id, line.quantity, line.unit_code, line.unit_price, line.currency)
             for line in prior_lines
         )
-        if prior.branch_id != payload.branch_id or prior.reference != payload.reference or requested != recorded:
-            raise HTTPException(status_code=409, detail="Idempotency key was used for a different sale")
+        if (
+            prior.branch_id != payload.branch_id
+            or prior.reference != payload.reference
+            or requested != recorded
+        ):
+            raise HTTPException(
+                status_code=409, detail="Idempotency key was used for a different sale"
+            )
         return prior
 
     branch = await session.scalar(
@@ -294,13 +309,17 @@ async def post_sale(
         if line.unit_code.strip().upper() != item.base_unit_code.upper():
             raise HTTPException(status_code=422, detail=f"Unit mismatch for item {item.name}")
         if (line.unit_price is None) != (line.currency is None):
-            raise HTTPException(status_code=422, detail="Unit price and currency must be supplied together")
+            raise HTTPException(
+                status_code=422, detail="Unit price and currency must be supplied together"
+            )
         balance = await session.scalar(
-            select(StockBalance).where(
+            select(StockBalance)
+            .where(
                 StockBalance.organization_id == organization.id,
                 StockBalance.branch_id == branch.id,
                 StockBalance.item_id == item.id,
-            ).with_for_update()
+            )
+            .with_for_update()
         )
         if balance is None or balance.quantity_on_hand < line.quantity:
             raise HTTPException(status_code=409, detail=f"Insufficient stock for item {item.name}")
@@ -318,6 +337,7 @@ async def post_sale(
     session.add(sale)
     for index, (line, item, balance) in enumerate(prepared):
         balance.quantity_on_hand -= line.quantity
+        balance.version += 1
         sale.lines.append(
             SaleLine(
                 id=str(uuid4()),

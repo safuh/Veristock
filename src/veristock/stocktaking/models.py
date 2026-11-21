@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -68,6 +69,9 @@ class StocktakeScopeItem(Base):
         String(36), ForeignKey("inventory_items.id", ondelete="RESTRICT"), nullable=False
     )
     expected_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    expected_balance_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     unit_code: Mapped[str] = mapped_column(String(24), nullable=False)
 
 
@@ -97,7 +101,9 @@ class StocktakeObservation(Base):
     __tablename__ = "stocktake_observations"
     __table_args__ = (
         UniqueConstraint("round_id", "item_id", name="uq_stocktake_observation_round_item"),
-        UniqueConstraint("organization_id", "idempotency_key", name="uq_stocktake_observation_idempotency"),
+        UniqueConstraint(
+            "organization_id", "idempotency_key", name="uq_stocktake_observation_idempotency"
+        ),
         CheckConstraint("counted_quantity >= 0", name="ck_stocktake_count_nonnegative"),
         Index("ix_stocktake_observations_org_item", "organization_id", "item_id"),
     )
@@ -122,5 +128,109 @@ class StocktakeObservation(Base):
         String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     counted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ReconciliationRun(Base):
+    """Immutable calculation of one submitted physical count round."""
+
+    __tablename__ = "reconciliation_runs"
+    __table_args__ = (
+        UniqueConstraint("stocktake_id", "version", name="uq_reconciliation_stocktake_version"),
+        UniqueConstraint("stocktake_id", "round_id", name="uq_reconciliation_stocktake_round"),
+        CheckConstraint(
+            "status IN ('calculated', 'approved', 'rejected')",
+            name="ck_reconciliation_runs_status",
+        ),
+        CheckConstraint("version >= 1", name="ck_reconciliation_runs_version"),
+        Index("ix_reconciliation_runs_org_status", "organization_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    stocktake_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("stocktakes.id", ondelete="RESTRICT"), nullable=False
+    )
+    round_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("stocktake_rounds.id", ondelete="RESTRICT"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="calculated")
+    calculated_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    calculated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    decided_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decision_note: Mapped[str | None] = mapped_column(String(1000))
+
+
+class ReconciliationLine(Base):
+    """Frozen expected/observed comparison for one item in a run."""
+
+    __tablename__ = "reconciliation_lines"
+    __table_args__ = (
+        UniqueConstraint("run_id", "item_id", name="uq_reconciliation_line_run_item"),
+        CheckConstraint("expected_quantity >= 0", name="ck_reconciliation_expected_nonnegative"),
+        CheckConstraint("physical_quantity >= 0", name="ck_reconciliation_physical_nonnegative"),
+        CheckConstraint(
+            "variance_quantity = physical_quantity - expected_quantity",
+            name="ck_reconciliation_variance_consistent",
+        ),
+        CheckConstraint(
+            "classification IN ('matched', 'shortage', 'surplus')",
+            name="ck_reconciliation_line_classification",
+        ),
+        Index("ix_reconciliation_lines_org_item", "organization_id", "item_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("reconciliation_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    item_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inventory_items.id", ondelete="RESTRICT"), nullable=False
+    )
+    expected_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    physical_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    variance_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    unit_code: Mapped[str] = mapped_column(String(24), nullable=False)
+    classification: Mapped[str] = mapped_column(String(16), nullable=False)
+
+
+class ReconciliationApproval(Base):
+    """Append-only approval decision for a reconciliation run."""
+
+    __tablename__ = "reconciliation_approvals"
+    __table_args__ = (
+        UniqueConstraint("run_id", name="uq_reconciliation_approval_run"),
+        CheckConstraint(
+            "decision IN ('approved', 'rejected')", name="ck_reconciliation_approval_decision"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("reconciliation_runs.id", ondelete="RESTRICT"), nullable=False
+    )
+    decision: Mapped[str] = mapped_column(String(16), nullable=False)
+    decided_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    note: Mapped[str | None] = mapped_column(String(1000))
+    decided_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

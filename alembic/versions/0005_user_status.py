@@ -17,23 +17,23 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Add a persisted account state; existing users remain active."""
-    op.add_column(
-        "users",
-        sa.Column(
-            "status",
-            sa.String(length=16),
-            nullable=False,
-            server_default="active",
-        ),
-    )
-    op.create_check_constraint(
-        "ck_users_status",
-        "users",
-        "status IN ('active', 'suspended', 'disabled')",
-    )
+    with op.batch_alter_table("users") as batch_op:
+        batch_op.add_column(
+            sa.Column(
+                "status",
+                sa.String(length=16),
+                nullable=False,
+                server_default="active",
+            )
+        )
+        batch_op.create_check_constraint(
+            "ck_users_status",
+            "status IN ('active', 'suspended', 'disabled')",
+        )
 
 
 def downgrade() -> None:
     """Remove account status from users."""
-    op.drop_constraint("ck_users_status", "users", type_="check")
-    op.drop_column("users", "status")
+    with op.batch_alter_table("users") as batch_op:
+        batch_op.drop_constraint("ck_users_status", type_="check")
+        batch_op.drop_column("status")

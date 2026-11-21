@@ -22,6 +22,7 @@ from veristock.identity.models import User
 from veristock.inventory.models import InventoryItem, StockBalance
 from veristock.organizations.models import Branch
 from veristock.stocktaking.models import (
+    ReconciliationRun,
     Stocktake,
     StocktakeObservation,
     StocktakeRound,
@@ -119,13 +120,15 @@ async def create_stocktake(
         ).all()
     )
     balances = {
-        balance.item_id: balance.quantity_on_hand
+        balance.item_id: balance
         for balance in (
             await session.scalars(
-                select(StockBalance).where(
+                select(StockBalance)
+                .where(
                     StockBalance.organization_id == organization.id,
                     StockBalance.branch_id == branch.id,
-                ).with_for_update()
+                )
+                .with_for_update()
             )
         ).all()
     }
@@ -136,7 +139,10 @@ async def create_stocktake(
                 organization_id=organization.id,
                 stocktake_id=stocktake_id,
                 item_id=item.id,
-                expected_quantity=balances.get(item.id, Decimal("0")),
+                expected_quantity=(
+                    balances[item.id].quantity_on_hand if item.id in balances else Decimal("0")
+                ),
+                expected_balance_version=(balances[item.id].version if item.id in balances else 0),
                 unit_code=item.base_unit_code,
             )
         )
@@ -153,7 +159,9 @@ async def create_stocktake(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(status_code=409, detail="Stocktake reference or scope conflict") from exc
+        raise HTTPException(
+            status_code=409, detail="Stocktake reference or scope conflict"
+        ) from exc
     await session.refresh(stocktake)
     return StocktakeRead(
         id=stocktake.id,
@@ -266,7 +274,9 @@ async def record_count_observation(
             or duplicate.counted_quantity != payload.counted_quantity
             or duplicate.unit_code != payload.unit_code
         ):
-            raise HTTPException(status_code=409, detail="Idempotency key was used for another count")
+            raise HTTPException(
+                status_code=409, detail="Idempotency key was used for another count"
+            )
         return duplicate
 
     stocktake = await session.scalar(
@@ -279,11 +289,13 @@ async def record_count_observation(
     if stocktake is None:
         raise HTTPException(status_code=404, detail="Open stocktake not found")
     round_record = await session.scalar(
-        select(StocktakeRound).where(
+        select(StocktakeRound)
+        .where(
             StocktakeRound.stocktake_id == stocktake.id,
             StocktakeRound.organization_id == organization.id,
             StocktakeRound.status == "open",
-        ).order_by(StocktakeRound.round_number.desc())
+        )
+        .order_by(StocktakeRound.round_number.desc())
     )
     if round_record is None:
         raise HTTPException(status_code=409, detail="No open count round")
@@ -297,7 +309,9 @@ async def record_count_observation(
     if scope is None:
         raise HTTPException(status_code=404, detail="Item is outside this stocktake scope")
     if payload.unit_code.strip().upper() != scope.unit_code.upper():
-        raise HTTPException(status_code=422, detail="Count unit does not match the frozen item unit")
+        raise HTTPException(
+            status_code=422, detail="Count unit does not match the frozen item unit"
+        )
     observation = StocktakeObservation(
         id=str(uuid4()),
         organization_id=organization.id,
@@ -314,7 +328,9 @@ async def record_count_observation(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(status_code=409, detail="This item already has a count in the active round") from exc
+        raise HTTPException(
+            status_code=409, detail="This item already has a count in the active round"
+        ) from exc
     await session.refresh(observation)
     return observation
 
@@ -335,10 +351,12 @@ async def submit_count_round(
     if stocktake is None:
         raise HTTPException(status_code=404, detail="Open stocktake not found")
     round_record = await session.scalar(
-        select(StocktakeRound).where(
+        select(StocktakeRound)
+        .where(
             StocktakeRound.stocktake_id == stocktake.id,
             StocktakeRound.status == "open",
-        ).order_by(StocktakeRound.round_number.desc())
+        )
+        .order_by(StocktakeRound.round_number.desc())
     )
     if round_record is None:
         raise HTTPException(status_code=409, detail="No open count round")
@@ -382,10 +400,19 @@ async def open_recount_round(
     )
     if stocktake is None:
         raise HTTPException(status_code=404, detail="Submitted stocktake not found")
+    approved_run = await session.scalar(
+        select(ReconciliationRun.id).where(
+            ReconciliationRun.stocktake_id == stocktake.id,
+            ReconciliationRun.organization_id == organization.id,
+            ReconciliationRun.status == "approved",
+        )
+    )
+    if approved_run is not None:
+        raise HTTPException(status_code=409, detail="Approved stocktakes are closed to recounts")
     latest = await session.scalar(
-        select(StocktakeRound).where(
-            StocktakeRound.stocktake_id == stocktake.id
-        ).order_by(StocktakeRound.round_number.desc())
+        select(StocktakeRound)
+        .where(StocktakeRound.stocktake_id == stocktake.id)
+        .order_by(StocktakeRound.round_number.desc())
     )
     if latest is None or latest.status != "submitted":
         raise HTTPException(status_code=409, detail="Previous count round must be submitted")
