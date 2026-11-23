@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -219,6 +220,10 @@ class PurchaseRequisition(Base):
             "status IN ('draft', 'submitted', 'approved', 'rejected', 'converted', 'cancelled')",
             name="ck_purchase_requisitions_status",
         ),
+        CheckConstraint(
+            "required_approvals BETWEEN 1 AND 5",
+            name="ck_purchase_requisitions_required_approvals",
+        ),
         UniqueConstraint("organization_id", "reference", name="uq_purchase_requisitions_reference"),
         UniqueConstraint(
             "organization_id", "idempotency_key", name="uq_purchase_requisitions_idempotency"
@@ -237,6 +242,12 @@ class PurchaseRequisition(Base):
     )
     reference: Mapped[str] = mapped_column(String(80), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    currency: Mapped[str] = mapped_column(
+        String(3), nullable=False, default="KES", server_default="KES"
+    )
+    required_approvals: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
     justification: Mapped[str] = mapped_column(String(1000), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     requested_by_user_id: Mapped[str] = mapped_column(
@@ -306,6 +317,35 @@ class PurchaseRequisitionDecision(Base):
         String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     reason: Mapped[str | None] = mapped_column(String(1000))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ProcurementApprovalRule(Base):
+    """Value band defining the number of independent requisition approvals."""
+
+    __tablename__ = "procurement_approval_rules"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "currency", "minimum_total", name="uq_procurement_approval_rule_band"
+        ),
+        CheckConstraint("minimum_total >= 0", name="ck_procurement_approval_rule_nonnegative"),
+        CheckConstraint(
+            "required_approvals BETWEEN 1 AND 5", name="ck_procurement_approval_rule_approvers"
+        ),
+        Index("ix_procurement_approval_rules_org_currency", "organization_id", "currency"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    minimum_total: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    required_approvals: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

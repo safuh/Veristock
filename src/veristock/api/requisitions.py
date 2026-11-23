@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -22,6 +22,7 @@ from veristock.identity.authorization_dependencies import (
 from veristock.identity.models import User
 from veristock.inventory.models import InventoryItem, Supplier
 from veristock.inventory.procurement import (
+    ProcurementApprovalRule,
     PurchaseOrder,
     PurchaseOrderLine,
     PurchaseRequisition,
@@ -44,6 +45,7 @@ class RequisitionInput(BaseModel):
     reference: str = Field(min_length=2, max_length=80)
     branch_id: str
     justification: str = Field(min_length=5, max_length=1000)
+    currency: str = Field(default="KES", pattern=r"^[A-Z]{3}$")
     idempotency_key: str = Field(min_length=8, max_length=128)
     lines: list[RequisitionLineInput] = Field(min_length=1, max_length=200)
 
@@ -59,6 +61,9 @@ def _read(record: PurchaseRequisition) -> dict[str, object]:
         "branch_id": record.branch_id,
         "status": record.status,
         "justification": record.justification,
+        "currency": record.currency,
+        "required_approvals": record.required_approvals,
+        "approvals_received": sum(decision.decision == "approved" for decision in record.decisions),
         "requested_by_user_id": record.requested_by_user_id,
         "created_at": record.created_at,
         "submitted_at": record.submitted_at,
@@ -133,6 +138,7 @@ async def create_requisition(
             prior.reference != payload.reference.strip()
             or prior.branch_id != payload.branch_id
             or prior.justification != payload.justification.strip()
+            or prior.currency != payload.currency
             or prior.requested_by_user_id != user.id
             or existing != normalized
         ):
@@ -219,6 +225,35 @@ async def submit_requisition(
         return _read(record)
     if record.status != "draft":
         raise HTTPException(status_code=409, detail="Only draft requisitions can be submitted")
+    rules_exist = await session.scalar(
+        select(ProcurementApprovalRule.id)
+        .where(
+            ProcurementApprovalRule.organization_id == organization.id,
+            ProcurementApprovalRule.currency == record.currency,
+        )
+        .limit(1)
+    )
+    if rules_exist and any(line.estimated_unit_cost is None for line in record.lines):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Estimated unit costs are required when value-based approval rules are configured"
+            ),
+        )
+    total = sum(
+        (line.quantity * (line.estimated_unit_cost or Decimal("0")) for line in record.lines),
+        Decimal("0"),
+    )
+    rule = await session.scalar(
+        select(ProcurementApprovalRule)
+        .where(
+            ProcurementApprovalRule.organization_id == organization.id,
+            ProcurementApprovalRule.currency == record.currency,
+            ProcurementApprovalRule.minimum_total <= total,
+        )
+        .order_by(ProcurementApprovalRule.minimum_total.desc())
+    )
+    record.required_approvals = rule.required_approvals if rule else 1
     record.status = "submitted"
     record.submitted_at = datetime.now(UTC)
     record.decisions.append(
@@ -253,7 +288,34 @@ async def _decide(
         raise HTTPException(status_code=409, detail="Only submitted requisitions can be decided")
     if decision == "rejected" and not payload.reason:
         raise HTTPException(status_code=422, detail="A rejection reason is required")
-    record.status = decision
+    if decision == "approved":
+        prior_approval = await session.scalar(
+            select(PurchaseRequisitionDecision).where(
+                PurchaseRequisitionDecision.requisition_id == record.id,
+                PurchaseRequisitionDecision.actor_user_id == user.id,
+                PurchaseRequisitionDecision.decision == "approved",
+            )
+        )
+        if prior_approval:
+            raise HTTPException(
+                status_code=409, detail="This user has already approved the requisition"
+            )
+        approvals_so_far = (
+            await session.scalar(
+                select(func.count())
+                .select_from(PurchaseRequisitionDecision)
+                .where(
+                    PurchaseRequisitionDecision.requisition_id == record.id,
+                    PurchaseRequisitionDecision.decision == "approved",
+                )
+            )
+            or 0
+        )
+        record.status = (
+            "approved" if approvals_so_far + 1 >= record.required_approvals else "submitted"
+        )
+    else:
+        record.status = "rejected"
     record.decisions.append(
         PurchaseRequisitionDecision(
             id=str(uuid4()),
@@ -309,6 +371,72 @@ async def requisition_decisions(
     ]
 
 
+class ApprovalRuleInput(BaseModel):
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    minimum_total: Decimal = Field(ge=0, max_digits=18, decimal_places=4)
+    required_approvals: int = Field(ge=1, le=5)
+
+
+@router.put("/approval-rules")
+async def replace_approval_rules(
+    rules: list[ApprovalRuleInput],
+    organization: Manager,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> list[dict[str, object]]:
+    keys = [(rule.currency, rule.minimum_total) for rule in rules]
+    if len(keys) != len(set(keys)):
+        raise HTTPException(status_code=422, detail="Duplicate currency and threshold band")
+    await session.execute(
+        delete(ProcurementApprovalRule).where(
+            ProcurementApprovalRule.organization_id == organization.id
+        )
+    )
+    records = [
+        ProcurementApprovalRule(
+            id=str(uuid4()),
+            organization_id=organization.id,
+            currency=rule.currency,
+            minimum_total=rule.minimum_total,
+            required_approvals=rule.required_approvals,
+            created_by_user_id=user.id,
+        )
+        for rule in rules
+    ]
+    session.add_all(records)
+    await session.commit()
+    return [
+        {
+            "currency": x.currency,
+            "minimum_total": x.minimum_total,
+            "required_approvals": x.required_approvals,
+        }
+        for x in records
+    ]
+
+
+@router.get("/approval-rules")
+async def list_approval_rules(
+    organization: Reader,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> list[dict[str, object]]:
+    records = (
+        await session.scalars(
+            select(ProcurementApprovalRule)
+            .where(ProcurementApprovalRule.organization_id == organization.id)
+            .order_by(ProcurementApprovalRule.currency, ProcurementApprovalRule.minimum_total)
+        )
+    ).all()
+    return [
+        {
+            "currency": x.currency,
+            "minimum_total": x.minimum_total,
+            "required_approvals": x.required_approvals,
+        }
+        for x in records
+    ]
+
+
 class RequisitionConversionInput(BaseModel):
     supplier_id: str
     purchase_order_reference: str = Field(min_length=2, max_length=80)
@@ -337,6 +465,14 @@ async def convert_requisition_to_purchase_order(
             status_code=403,
             detail="The requester cannot perform the purchasing conversion",
         )
+    if any(
+        decision.decision == "approved" and decision.actor_user_id == user.id
+        for decision in record.decisions
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="A requisition approver cannot perform the purchasing conversion",
+        )
     if any(line.estimated_unit_cost is None for line in record.lines):
         raise HTTPException(
             status_code=422,
@@ -351,6 +487,10 @@ async def convert_requisition_to_purchase_order(
     )
     if supplier is None:
         raise HTTPException(status_code=404, detail="Active supplier not found")
+    if supplier.default_currency != record.currency:
+        raise HTTPException(
+            status_code=422, detail="Supplier currency must match requisition currency"
+        )
     purchase_order = PurchaseOrder(
         id=str(uuid4()),
         organization_id=organization.id,

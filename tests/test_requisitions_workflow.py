@@ -28,9 +28,16 @@ def test_requisition_requires_independent_approver_and_keeps_history(tmp_path) -
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'requisitions.db'}"
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    requester_id, approver_id, org_id, branch_id, item_id, supplier_id = (
-        str(uuid4()) for _ in range(6)
-    )
+    (
+        requester_id,
+        approver_id,
+        second_approver_id,
+        purchaser_id,
+        org_id,
+        branch_id,
+        item_id,
+        supplier_id,
+    ) = (str(uuid4()) for _ in range(8))
     role_id = str(uuid4())
 
     async def seed() -> None:
@@ -41,6 +48,16 @@ def test_requisition_requires_independent_approver_and_keeps_history(tmp_path) -
                 [
                     User(id=requester_id, identifier="requester@example.test", password_hash="x"),
                     User(id=approver_id, identifier="approver@example.test", password_hash="x"),
+                    User(
+                        id=second_approver_id,
+                        identifier="approver2@example.test",
+                        password_hash="x",
+                    ),
+                    User(
+                        id=purchaser_id,
+                        identifier="purchaser@example.test",
+                        password_hash="x",
+                    ),
                     Organization(id=org_id, kind="client", legal_name="Requisition Tenant"),
                     OrganizationMembership(
                         id=str(uuid4()),
@@ -52,6 +69,18 @@ def test_requisition_requires_independent_approver_and_keeps_history(tmp_path) -
                         id=str(uuid4()),
                         organization_id=org_id,
                         user_id=approver_id,
+                        status="active",
+                    ),
+                    OrganizationMembership(
+                        id=str(uuid4()),
+                        organization_id=org_id,
+                        user_id=second_approver_id,
+                        status="active",
+                    ),
+                    OrganizationMembership(
+                        id=str(uuid4()),
+                        organization_id=org_id,
+                        user_id=purchaser_id,
                         status="active",
                     ),
                     Role(
@@ -79,7 +108,7 @@ def test_requisition_requires_independent_approver_and_keeps_history(tmp_path) -
                     ),
                 ]
             )
-            for membership in (requester_id, approver_id):
+            for membership in (requester_id, approver_id, second_approver_id, purchaser_id):
                 session.add(
                     MembershipRole(
                         membership_id=next(
@@ -100,6 +129,10 @@ def test_requisition_requires_independent_approver_and_keeps_history(tmp_path) -
     tokens = TokenService("r" * 32)
     requester_token = tokens.create(requester_id, timedelta(minutes=10), token_type="access")
     approver_token = tokens.create(approver_id, timedelta(minutes=10), token_type="access")
+    second_approver_token = tokens.create(
+        second_approver_id, timedelta(minutes=10), token_type="access"
+    )
+    purchaser_token = tokens.create(purchaser_id, timedelta(minutes=10), token_type="access")
     settings = Settings(environment=Environment.TEST, database_url=database_url)
     with TestClient(create_app(settings, access_token_service=tokens)) as client:
         requester_headers = {
@@ -108,6 +141,14 @@ def test_requisition_requires_independent_approver_and_keeps_history(tmp_path) -
         }
         approver_headers = {
             "Authorization": f"Bearer {approver_token}",
+            "X-Organization-ID": org_id,
+        }
+        second_approver_headers = {
+            "Authorization": f"Bearer {second_approver_token}",
+            "X-Organization-ID": org_id,
+        }
+        purchaser_headers = {
+            "Authorization": f"Bearer {purchaser_token}",
             "X-Organization-ID": org_id,
         }
         payload = {
@@ -131,6 +172,13 @@ def test_requisition_requires_independent_approver_and_keeps_history(tmp_path) -
         )
         assert replay.status_code == 201 and replay.json()["id"] == requisition_id
 
+        configured_rules = client.put(
+            "/api/procurement/requisitions/approval-rules",
+            headers=approver_headers,
+            json=[{"currency": "KES", "minimum_total": "10000", "required_approvals": 2}],
+        )
+        assert configured_rules.status_code == 200, configured_rules.text
+
         submitted = client.post(
             f"/api/procurement/requisitions/{requisition_id}/submit",
             headers=requester_headers,
@@ -144,10 +192,23 @@ def test_requisition_requires_independent_approver_and_keeps_history(tmp_path) -
         )
         assert self_approval.status_code == 403
 
-        approved = client.post(
+        first_approval = client.post(
             f"/api/procurement/requisitions/{requisition_id}/approve",
             headers=approver_headers,
-            json={"reason": "Within approved operating budget"},
+            json={"reason": "First independent approval"},
+        )
+        assert first_approval.status_code == 200, first_approval.text
+        assert first_approval.json()["status"] == "submitted"
+        duplicate_approval = client.post(
+            f"/api/procurement/requisitions/{requisition_id}/approve",
+            headers=approver_headers,
+            json={},
+        )
+        assert duplicate_approval.status_code == 409
+        approved = client.post(
+            f"/api/procurement/requisitions/{requisition_id}/approve",
+            headers=second_approver_headers,
+            json={"reason": "Second independent approval"},
         )
         assert approved.status_code == 200, approved.text
         assert approved.json()["status"] == "approved"
@@ -156,11 +217,21 @@ def test_requisition_requires_independent_approver_and_keeps_history(tmp_path) -
             headers=approver_headers,
         )
         assert history.status_code == 200
-        assert [entry["decision"] for entry in history.json()] == ["submitted", "approved"]
-        assert history.json()[-1]["actor_user_id"] == approver_id
+        assert [entry["decision"] for entry in history.json()] == [
+            "submitted",
+            "approved",
+            "approved",
+        ]
+        assert history.json()[-1]["actor_user_id"] == second_approver_id
+        blocked_conversion = client.post(
+            f"/api/procurement/requisitions/{requisition_id}/convert-to-purchase-order",
+            headers=second_approver_headers,
+            json={"supplier_id": supplier_id, "purchase_order_reference": "PO-BLOCKED"},
+        )
+        assert blocked_conversion.status_code == 403
         converted = client.post(
             f"/api/procurement/requisitions/{requisition_id}/convert-to-purchase-order",
-            headers=approver_headers,
+            headers=purchaser_headers,
             json={"supplier_id": supplier_id, "purchase_order_reference": "PO-FROM-REQ-001"},
         )
         assert converted.status_code == 201, converted.text
@@ -169,7 +240,7 @@ def test_requisition_requires_independent_approver_and_keeps_history(tmp_path) -
         assert converted.json()["lines"][0]["unit_cost"] == "850.0000"
         repeated_conversion = client.post(
             f"/api/procurement/requisitions/{requisition_id}/convert-to-purchase-order",
-            headers=approver_headers,
+            headers=purchaser_headers,
             json={"supplier_id": supplier_id, "purchase_order_reference": "IGNORED-RETRY"},
         )
         assert repeated_conversion.status_code == 201
@@ -179,7 +250,7 @@ def test_requisition_requires_independent_approver_and_keeps_history(tmp_path) -
         assert (
             client.post(
                 f"/api/procurement/requisitions/{requisition_id}/reject",
-                headers=approver_headers,
+                headers=second_approver_headers,
                 json={"reason": "No longer needed"},
             ).status_code
             == 409
