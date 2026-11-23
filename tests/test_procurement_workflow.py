@@ -188,6 +188,66 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
             == "received"
         )
 
+        return_payload = {
+            "reference": "RET-001",
+            "supplier_id": supplier_id,
+            "branch_id": branch_id,
+            "idempotency_key": "supplier-return-2026-001",
+            "reason": "Damaged packaging identified during inspection",
+            "lines": [
+                {
+                    "item_id": item_id,
+                    "batch_id": receipt.json()["lines"][0]["batch_id"],
+                    "quantity": "2",
+                }
+            ],
+        }
+        supplier_return = client.post(
+            "/api/procurement/supplier-returns", headers=headers, json=return_payload
+        )
+        assert supplier_return.status_code == 201, supplier_return.text
+        return_id = supplier_return.json()["id"]
+        assert (
+            client.post(
+                "/api/procurement/supplier-returns", headers=headers, json=return_payload
+            ).json()["id"]
+            == return_id
+        )
+        dispatched_return = client.post(
+            f"/api/procurement/supplier-returns/{return_id}/dispatch", headers=headers
+        )
+        assert dispatched_return.status_code == 200, dispatched_return.text
+        assert dispatched_return.json()["status"] == "dispatched"
+        assert (
+            client.post(
+                f"/api/procurement/supplier-returns/{return_id}/dispatch", headers=headers
+            ).json()["status"]
+            == "dispatched"
+        )
+
+        over_return = {
+            **return_payload,
+            "reference": "RET-002",
+            "idempotency_key": "supplier-return-2026-002",
+            "lines": [
+                {
+                    **return_payload["lines"][0],
+                    "quantity": "9",
+                }
+            ],
+        }
+        excessive = client.post(
+            "/api/procurement/supplier-returns", headers=headers, json=over_return
+        )
+        assert excessive.status_code == 201
+        assert (
+            client.post(
+                f"/api/procurement/supplier-returns/{excessive.json()['id']}/dispatch",
+                headers=headers,
+            ).status_code
+            == 409
+        )
+
         over_receipt = {
             "reference": "GRN-003",
             "idempotency_key": "grn-create-2026-003",
@@ -246,8 +306,20 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
                 and batch_balance is not None
                 and po is not None
             )
-            assert balance.quantity_on_hand == Decimal("10.0000")
-            assert batch_balance.quantity_on_hand == Decimal("10.0000")
+            assert balance.quantity_on_hand == Decimal("8.0000")
+            assert batch_balance.quantity_on_hand == Decimal("8.0000")
+            return_movements = list(
+                (
+                    await session.scalars(
+                        select(StockMovement).where(
+                            StockMovement.organization_id == org_id,
+                            StockMovement.source_type == "supplier_return",
+                        )
+                    )
+                ).all()
+            )
+            assert len(return_movements) == 1
+            assert return_movements[0].quantity_delta == Decimal("-2.0000")
             assert po.status == "received"
             assert len(movements) == 2
             assert len(receipts) == 2

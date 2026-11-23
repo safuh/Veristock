@@ -19,6 +19,7 @@ from .reports import router as reports_router
 from .sales import router as sales_router
 from .stocktake_evidence import router as stocktake_evidence_router
 from .stocktaking import router as stocktaking_router
+from .supplier_returns import router as supplier_returns_router
 from .suppliers import router as suppliers_router
 from .transfers import router as transfers_router
 from .workforce import router as workforce_router
@@ -29,6 +30,7 @@ api_router.include_router(inventory_router)
 api_router.include_router(batches_router)
 api_router.include_router(transfers_router)
 api_router.include_router(suppliers_router)
+api_router.include_router(supplier_returns_router)
 api_router.include_router(procurement_router)
 api_router.include_router(replenishment_router)
 api_router.include_router(reports_router)

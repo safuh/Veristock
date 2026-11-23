@@ -144,3 +144,69 @@ class GoodsReceiptLine(Base):
     batch_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("inventory_batches.id", ondelete="RESTRICT")
     )
+
+
+class SupplierReturn(Base):
+    __tablename__ = "supplier_returns"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'dispatched', 'cancelled')", name="ck_supplier_returns_status"
+        ),
+        UniqueConstraint("organization_id", "reference", name="uq_supplier_returns_reference"),
+        UniqueConstraint(
+            "organization_id", "idempotency_key", name="uq_supplier_returns_idempotency"
+        ),
+        Index("ix_supplier_returns_org_status", "organization_id", "status"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    supplier_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("suppliers.id", ondelete="RESTRICT"), nullable=False
+    )
+    branch_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("branches.id", ondelete="RESTRICT"), nullable=False
+    )
+    reference: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    dispatched_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lines: Mapped[list["SupplierReturnLine"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin"
+    )
+
+
+class SupplierReturnLine(Base):
+    __tablename__ = "supplier_return_lines"
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_supplier_return_lines_positive_quantity"),
+        UniqueConstraint(
+            "supplier_return_id", "item_id", "batch_id", name="uq_supplier_return_line_scope"
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    supplier_return_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("supplier_returns.id", ondelete="CASCADE"), nullable=False
+    )
+    item_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inventory_items.id", ondelete="RESTRICT"), nullable=False
+    )
+    batch_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("inventory_batches.id", ondelete="RESTRICT")
+    )
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    unit_code: Mapped[str] = mapped_column(String(24), nullable=False)

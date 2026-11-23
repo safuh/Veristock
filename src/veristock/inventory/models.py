@@ -87,7 +87,7 @@ class StockMovement(Base):
         CheckConstraint(
             "source_type IN ('opening_balance', 'sale', 'stocktake_adjustment', "
             "'reversal', 'manual_adjustment', 'batch_receipt', 'batch_issue', "
-            "'stock_transfer', 'purchase_receipt')",
+            "'stock_transfer', 'purchase_receipt', 'supplier_return')",
             name="ck_stock_movements_source_type",
         ),
         UniqueConstraint(
