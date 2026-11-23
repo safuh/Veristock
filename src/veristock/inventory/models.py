@@ -271,3 +271,73 @@ class BatchStockBalance(Base):
         String(36), ForeignKey("inventory_batches.id", ondelete="RESTRICT"), nullable=False
     )
     quantity_on_hand: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+
+
+class Supplier(Base):
+    """Tenant-owned supplier master record."""
+
+    __tablename__ = "suppliers"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "code", name="uq_suppliers_org_code"),
+        CheckConstraint("status IN ('active', 'inactive', 'blocked')", name="ck_suppliers_status"),
+        Index("ix_suppliers_org_name", "organization_id", "name"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    code: Mapped[str] = mapped_column(String(40), nullable=False)
+    name: Mapped[str] = mapped_column(String(240), nullable=False)
+    contact_name: Mapped[str | None] = mapped_column(String(160))
+    email: Mapped[str | None] = mapped_column(String(254))
+    phone: Mapped[str | None] = mapped_column(String(40))
+    website: Mapped[str | None] = mapped_column(String(300))
+    address: Mapped[str | None] = mapped_column(String(1000))
+    tax_reference: Mapped[str | None] = mapped_column(String(100))
+    payment_terms: Mapped[str | None] = mapped_column(String(240))
+    default_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="KES")
+    notes: Mapped[str | None] = mapped_column(String(1000))
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class SupplierItem(Base):
+    """Supplier-specific SKU, purchase price and lead-time for an inventory item."""
+
+    __tablename__ = "supplier_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "supplier_id", "item_id", name="uq_supplier_items_scope"
+        ),
+        CheckConstraint("unit_cost >= 0", name="ck_supplier_items_nonnegative_cost"),
+        CheckConstraint("minimum_order_quantity > 0", name="ck_supplier_items_positive_moq"),
+        CheckConstraint("lead_time_days >= 0", name="ck_supplier_items_nonnegative_lead_time"),
+        Index("ix_supplier_items_org_item", "organization_id", "item_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    supplier_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=False
+    )
+    item_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inventory_items.id", ondelete="RESTRICT"), nullable=False
+    )
+    supplier_sku: Mapped[str | None] = mapped_column(String(100))
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="KES")
+    minimum_order_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(18, 4), nullable=False, default=Decimal("1")
+    )
+    lead_time_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_preferred: Mapped[bool] = mapped_column(nullable=False, default=False)
+    is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
