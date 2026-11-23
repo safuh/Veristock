@@ -9,10 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from veristock.identity.authorization import Organization
 from veristock.identity.authorization_dependencies import get_db_session, require_permission
 from veristock.inventory.models import InventoryItem, Supplier, SupplierItem
+from veristock.inventory.procurement import PurchaseOrder, SupplierReturn
 
 router = APIRouter(prefix="/suppliers", tags=["suppliers"])
 SupplierManager = Annotated[Organization, Depends(require_permission("inventory.manage"))]
@@ -221,3 +223,129 @@ async def list_supplier_items(
             )
         ).all()
     )
+
+
+@router.get("/{supplier_id}/performance")
+async def supplier_performance(
+    supplier_id: str,
+    organization: SupplierReader,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, object]:
+    """Return tenant-scoped purchasing, fulfilment and supplier-return metrics."""
+    supplier = await session.scalar(
+        select(Supplier).where(
+            Supplier.id == supplier_id,
+            Supplier.organization_id == organization.id,
+        )
+    )
+    if supplier is None:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+
+    orders = list(
+        (
+            await session.scalars(
+                select(PurchaseOrder)
+                .where(
+                    PurchaseOrder.organization_id == organization.id,
+                    PurchaseOrder.supplier_id == supplier.id,
+                )
+                .options(selectinload(PurchaseOrder.lines))
+            )
+        ).all()
+    )
+    returns = list(
+        (
+            await session.scalars(
+                select(SupplierReturn)
+                .where(
+                    SupplierReturn.organization_id == organization.id,
+                    SupplierReturn.supplier_id == supplier.id,
+                )
+                .options(selectinload(SupplierReturn.lines))
+            )
+        ).all()
+    )
+
+    from collections import defaultdict
+
+    values: dict[str, dict[str, Decimal]] = defaultdict(
+        lambda: {"ordered": Decimal("0"), "received": Decimal("0")}
+    )
+    quantities: dict[str, dict[str, Decimal]] = defaultdict(
+        lambda: {
+            "ordered": Decimal("0"),
+            "received": Decimal("0"),
+            "returned": Decimal("0"),
+        }
+    )
+    for order in orders:
+        for line in order.lines:
+            values[order.currency]["ordered"] += line.ordered_quantity * line.unit_cost
+            values[order.currency]["received"] += line.received_quantity * line.unit_cost
+            quantities[line.unit_code]["ordered"] += line.ordered_quantity
+            quantities[line.unit_code]["received"] += line.received_quantity
+
+    dispatched_returns = [record for record in returns if record.status == "dispatched"]
+    for record in dispatched_returns:
+        for return_line in record.lines:
+            quantities[return_line.unit_code]["returned"] += return_line.quantity
+
+    unit_metrics: list[dict[str, object]] = []
+    for unit_code, totals in sorted(quantities.items()):
+        received = totals["received"]
+        unit_metrics.append(
+            {
+                "unit_code": unit_code,
+                "ordered_quantity": totals["ordered"],
+                "received_quantity": received,
+                "returned_quantity": totals["returned"],
+                "fulfilment_rate_percent": (
+                    (received / totals["ordered"] * Decimal("100")).quantize(Decimal("0.01"))
+                    if totals["ordered"]
+                    else None
+                ),
+                "return_rate_percent": (
+                    (totals["returned"] / received * Decimal("100")).quantize(Decimal("0.01"))
+                    if received
+                    else None
+                ),
+            }
+        )
+
+    currency_metrics = [
+        {
+            "currency": currency,
+            "ordered_value": totals["ordered"],
+            "received_value": totals["received"],
+            "outstanding_value": totals["ordered"] - totals["received"],
+        }
+        for currency, totals in sorted(values.items())
+    ]
+    return {
+        "supplier": {"id": supplier.id, "code": supplier.code, "name": supplier.name},
+        "period": "all_time",
+        "purchase_order_count": len(orders),
+        "issued_purchase_order_count": sum(
+            order.status not in {"draft", "cancelled"} for order in orders
+        ),
+        "fully_received_purchase_order_count": sum(
+            order.status == "received" for order in orders
+        ),
+        "open_purchase_order_count": sum(
+            order.status in {"issued", "partially_received"} for order in orders
+        ),
+        "supplier_return_count": len(returns),
+        "dispatched_supplier_return_count": len(dispatched_returns),
+        "currency_metrics": currency_metrics,
+        "unit_metrics": unit_metrics,
+        "limitations": [
+            (
+                "Delivery punctuality is not scored because purchase orders do not yet "
+                "store promised delivery dates."
+            ),
+            (
+                "Return rates are reported by unit of measure; quantities across "
+                "different units are not combined."
+            ),
+        ],
+    }

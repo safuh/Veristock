@@ -225,6 +225,32 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
             == "dispatched"
         )
 
+        performance = client.get(
+            f"/api/suppliers/{supplier_id}/performance", headers=headers
+        )
+        assert performance.status_code == 200, performance.text
+        metrics = performance.json()
+        assert metrics["purchase_order_count"] == 1
+        assert metrics["fully_received_purchase_order_count"] == 1
+        assert metrics["currency_metrics"] == [
+            {
+                "currency": "KES",
+                "ordered_value": "1255.00000000",
+                "received_value": "1255.00000000",
+                "outstanding_value": "0E-8",
+            }
+        ]
+        assert metrics["unit_metrics"] == [
+            {
+                "unit_code": "KG",
+                "ordered_quantity": "10.0000",
+                "received_quantity": "10.0000",
+                "returned_quantity": "2.0000",
+                "fulfilment_rate_percent": "100.00",
+                "return_rate_percent": "20.00",
+            }
+        ]
+
         over_return = {
             **return_payload,
             "reference": "RET-002",
