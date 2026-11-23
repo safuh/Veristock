@@ -12,6 +12,7 @@ from .invitations import router as invitations_router
 from .memberships import router as memberships_router
 from .organization_enrollments import router as organization_enrollments_router
 from .organizations import router as organizations_router
+from .procurement import router as procurement_router
 from .reconciliation import router as reconciliation_router
 from .replenishment import router as replenishment_router
 from .reports import router as reports_router
@@ -28,6 +29,7 @@ api_router.include_router(inventory_router)
 api_router.include_router(batches_router)
 api_router.include_router(transfers_router)
 api_router.include_router(suppliers_router)
+api_router.include_router(procurement_router)
 api_router.include_router(replenishment_router)
 api_router.include_router(reports_router)
 api_router.include_router(sales_router)
