@@ -86,7 +86,7 @@ class StockMovement(Base):
         CheckConstraint("quantity_delta != 0", name="ck_stock_movements_nonzero"),
         CheckConstraint(
             "source_type IN ('opening_balance', 'sale', 'stocktake_adjustment', "
-            "'reversal', 'manual_adjustment', 'batch_receipt', 'batch_issue')",
+            "'reversal', 'manual_adjustment', 'batch_receipt', 'batch_issue', 'stock_transfer')",
             name="ck_stock_movements_source_type",
         ),
         UniqueConstraint(
