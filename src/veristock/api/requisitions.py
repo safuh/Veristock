@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -19,8 +20,10 @@ from veristock.identity.authorization_dependencies import (
     require_permission,
 )
 from veristock.identity.models import User
-from veristock.inventory.models import InventoryItem
+from veristock.inventory.models import InventoryItem, Supplier
 from veristock.inventory.procurement import (
+    PurchaseOrder,
+    PurchaseOrderLine,
     PurchaseRequisition,
     PurchaseRequisitionDecision,
     PurchaseRequisitionLine,
@@ -59,6 +62,7 @@ def _read(record: PurchaseRequisition) -> dict[str, object]:
         "requested_by_user_id": record.requested_by_user_id,
         "created_at": record.created_at,
         "submitted_at": record.submitted_at,
+        "converted_purchase_order_id": record.converted_purchase_order_id,
         "lines": [
             {
                 "id": line.id,
@@ -303,3 +307,101 @@ async def requisition_decisions(
         }
         for x in record.decisions
     ]
+
+
+class RequisitionConversionInput(BaseModel):
+    supplier_id: str
+    purchase_order_reference: str = Field(min_length=2, max_length=80)
+
+
+@router.post("/{requisition_id}/convert-to-purchase-order", status_code=201)
+async def convert_requisition_to_purchase_order(
+    requisition_id: str,
+    payload: RequisitionConversionInput,
+    organization: Manager,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, object]:
+    record = await _load(session, organization.id, requisition_id, lock=True)
+    await require_branch_assignment(session, user, organization, record.branch_id)
+    if record.converted_purchase_order_id:
+        return {
+            "requisition_id": record.id,
+            "requisition_status": record.status,
+            "purchase_order_id": record.converted_purchase_order_id,
+        }
+    if record.status != "approved":
+        raise HTTPException(status_code=409, detail="Only approved requisitions can be converted")
+    if record.requested_by_user_id == user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="The requester cannot perform the purchasing conversion",
+        )
+    if any(line.estimated_unit_cost is None for line in record.lines):
+        raise HTTPException(
+            status_code=422,
+            detail="Every requisition line needs an estimated unit cost before conversion",
+        )
+    supplier = await session.scalar(
+        select(Supplier).where(
+            Supplier.id == payload.supplier_id,
+            Supplier.organization_id == organization.id,
+            Supplier.status == "active",
+        )
+    )
+    if supplier is None:
+        raise HTTPException(status_code=404, detail="Active supplier not found")
+    purchase_order = PurchaseOrder(
+        id=str(uuid4()),
+        organization_id=organization.id,
+        supplier_id=supplier.id,
+        branch_id=record.branch_id,
+        reference=payload.purchase_order_reference.strip(),
+        status="draft",
+        currency=supplier.default_currency,
+        notes=f"Generated from requisition {record.reference}",
+        idempotency_key=f"requisition:{record.id}",
+        created_by_user_id=user.id,
+    )
+    for line in record.lines:
+        purchase_order.lines.append(
+            PurchaseOrderLine(
+                id=str(uuid4()),
+                organization_id=organization.id,
+                item_id=line.item_id,
+                ordered_quantity=line.quantity,
+                received_quantity=Decimal("0"),
+                unit_code=line.unit_code,
+                unit_cost=line.estimated_unit_cost,
+            )
+        )
+    session.add(purchase_order)
+    record.status = "converted"
+    record.converted_purchase_order_id = purchase_order.id
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Purchase order reference already exists or requisition was converted",
+        ) from exc
+    return {
+        "requisition_id": record.id,
+        "requisition_status": record.status,
+        "purchase_order_id": purchase_order.id,
+        "purchase_order_reference": purchase_order.reference,
+        "purchase_order_status": purchase_order.status,
+        "supplier_id": purchase_order.supplier_id,
+        "branch_id": purchase_order.branch_id,
+        "currency": purchase_order.currency,
+        "lines": [
+            {
+                "item_id": line.item_id,
+                "quantity": line.ordered_quantity,
+                "unit_cost": line.unit_cost,
+                "unit_code": line.unit_code,
+            }
+            for line in purchase_order.lines
+        ],
+    }

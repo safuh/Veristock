@@ -223,6 +223,9 @@ class PurchaseRequisition(Base):
         UniqueConstraint(
             "organization_id", "idempotency_key", name="uq_purchase_requisitions_idempotency"
         ),
+        UniqueConstraint(
+            "converted_purchase_order_id", name="uq_purchase_requisitions_purchase_order"
+        ),
         Index("ix_purchase_requisitions_org_status", "organization_id", "status"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -240,6 +243,14 @@ class PurchaseRequisition(Base):
         String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    converted_purchase_order_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "purchase_orders.id",
+            ondelete="RESTRICT",
+            name="fk_purchase_requisitions_converted_purchase_order",
+        ),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
