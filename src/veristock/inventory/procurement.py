@@ -210,3 +210,91 @@ class SupplierReturnLine(Base):
     )
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     unit_code: Mapped[str] = mapped_column(String(24), nullable=False)
+
+
+class PurchaseRequisition(Base):
+    __tablename__ = "purchase_requisitions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'submitted', 'approved', 'rejected', 'converted', 'cancelled')",
+            name="ck_purchase_requisitions_status",
+        ),
+        UniqueConstraint("organization_id", "reference", name="uq_purchase_requisitions_reference"),
+        UniqueConstraint(
+            "organization_id", "idempotency_key", name="uq_purchase_requisitions_idempotency"
+        ),
+        Index("ix_purchase_requisitions_org_status", "organization_id", "status"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    branch_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("branches.id", ondelete="RESTRICT"), nullable=False
+    )
+    reference: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    justification: Mapped[str] = mapped_column(String(1000), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    requested_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    lines: Mapped[list["PurchaseRequisitionLine"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin"
+    )
+    decisions: Mapped[list["PurchaseRequisitionDecision"]] = relationship(
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="PurchaseRequisitionDecision.created_at",
+    )
+
+
+class PurchaseRequisitionLine(Base):
+    __tablename__ = "purchase_requisition_lines"
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_purchase_requisition_lines_positive_quantity"),
+        UniqueConstraint("requisition_id", "item_id", name="uq_purchase_requisition_line_item"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    requisition_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("purchase_requisitions.id", ondelete="CASCADE"), nullable=False
+    )
+    item_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inventory_items.id", ondelete="RESTRICT"), nullable=False
+    )
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    unit_code: Mapped[str] = mapped_column(String(24), nullable=False)
+    estimated_unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+
+
+class PurchaseRequisitionDecision(Base):
+    __tablename__ = "purchase_requisition_decisions"
+    __table_args__ = (
+        CheckConstraint(
+            "decision IN ('submitted', 'approved', 'rejected')",
+            name="ck_purchase_requisition_decisions_decision",
+        ),
+        Index("ix_purchase_requisition_decisions_org_req", "organization_id", "requisition_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    requisition_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("purchase_requisitions.id", ondelete="CASCADE"), nullable=False
+    )
+    decision: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    reason: Mapped[str | None] = mapped_column(String(1000))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

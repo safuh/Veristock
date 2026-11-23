@@ -16,6 +16,7 @@ from .procurement import router as procurement_router
 from .reconciliation import router as reconciliation_router
 from .replenishment import router as replenishment_router
 from .reports import router as reports_router
+from .requisitions import router as requisitions_router
 from .sales import router as sales_router
 from .stocktake_evidence import router as stocktake_evidence_router
 from .stocktaking import router as stocktaking_router
@@ -32,6 +33,7 @@ api_router.include_router(transfers_router)
 api_router.include_router(suppliers_router)
 api_router.include_router(supplier_returns_router)
 api_router.include_router(procurement_router)
+api_router.include_router(requisitions_router)
 api_router.include_router(replenishment_router)
 api_router.include_router(reports_router)
 api_router.include_router(sales_router)
