@@ -1,13 +1,14 @@
 # ruff: noqa: E501
 """Physical stocktake plans, frozen expected quantities and immutable count rounds."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -280,5 +281,48 @@ class ReconciliationApproval(Base):
     )
     note: Mapped[str | None] = mapped_column(String(1000))
     decided_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class StocktakeBatchObservation(Base):
+    """Physical count and condition evidence for one lot in a stocktake round."""
+
+    __tablename__ = "stocktake_batch_observations"
+    __table_args__ = (
+        UniqueConstraint("round_id", "batch_id", name="uq_stocktake_batch_observation_round"),
+        UniqueConstraint(
+            "organization_id", "idempotency_key", name="uq_stocktake_batch_observation_idempotency"
+        ),
+        CheckConstraint("counted_quantity >= 0", name="ck_stocktake_batch_count_nonnegative"),
+        CheckConstraint(
+            "observed_condition IN ('good', 'damaged', 'quarantined')",
+            name="ck_stocktake_batch_condition",
+        ),
+        Index("ix_stocktake_batch_observations_org_batch", "organization_id", "batch_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    stocktake_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("stocktakes.id", ondelete="CASCADE"), nullable=False
+    )
+    round_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("stocktake_rounds.id", ondelete="CASCADE"), nullable=False
+    )
+    batch_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inventory_batches.id", ondelete="RESTRICT"), nullable=False
+    )
+    counted_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    observed_expiry_date: Mapped[date | None] = mapped_column(Date)
+    observed_condition: Mapped[str] = mapped_column(String(16), nullable=False, default="good")
+    note: Mapped[str | None] = mapped_column(String(500))
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    counted_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    counted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

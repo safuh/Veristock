@@ -22,7 +22,13 @@ from veristock.identity import (
     RolePermission,
     User,
 )
-from veristock.inventory.models import InventoryItem, StockBalance, StockMovement
+from veristock.inventory.models import (
+    BatchStockBalance,
+    InventoryBatch,
+    InventoryItem,
+    StockBalance,
+    StockMovement,
+)
 from veristock.organizations.models import Branch, BranchMembership
 from veristock.stocktaking.models import StocktakeObservation
 
@@ -128,6 +134,23 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
                             item_id=item_id,
                             quantity_on_hand=Decimal("14"),
                         ),
+                        InventoryBatch(
+                            id="batch-stocktake-test",
+                            organization_id=org_id,
+                            branch_id=branch_id,
+                            item_id=item_id,
+                            lot_code="LOT-ST-001",
+                            expiry_date=__import__("datetime").date.today(),
+                            status="active",
+                        ),
+                        BatchStockBalance(
+                            id=str(uuid4()),
+                            organization_id=org_id,
+                            branch_id=branch_id,
+                            item_id=item_id,
+                            batch_id="batch-stocktake-test",
+                            quantity_on_hand=Decimal("12"),
+                        ),
                     ]
                 )
                 for code in (
@@ -227,6 +250,28 @@ def test_blind_stocktake_capture_submit_and_recount(tmp_path) -> None:
         )
         assert replay.status_code == 201
         assert replay.json()["id"] == counted.json()["id"]
+
+        batch_count_payload = {
+            "batch_id": "batch-stocktake-test",
+            "counted_quantity": "12",
+            "observed_expiry_date": "2026-11-23",
+            "observed_condition": "good",
+            "note": "Expiry label checked during physical count",
+            "idempotency_key": "batch-count-device-0001",
+        }
+        batch_count = client.post(
+            f"/api/stocktakes/{stocktake_id}/batch-observations",
+            headers=headers,
+            json=batch_count_payload,
+        )
+        assert batch_count.status_code == 201, batch_count.text
+        batch_count_replay = client.post(
+            f"/api/stocktakes/{stocktake_id}/batch-observations",
+            headers=headers,
+            json=batch_count_payload,
+        )
+        assert batch_count_replay.status_code == 201
+        assert batch_count_replay.json()["id"] == batch_count.json()["id"]
 
         own_observations = client.get(
             f"/api/stocktakes/{stocktake_id}/my-observations",

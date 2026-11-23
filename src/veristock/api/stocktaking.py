@@ -1,7 +1,7 @@
 # ruff: noqa: E501
 """Tenant-scoped physical stocktake planning and blind count capture."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import uuid4
@@ -20,11 +20,17 @@ from veristock.identity.authorization_dependencies import (
     require_permission,
 )
 from veristock.identity.models import User
-from veristock.inventory.models import InventoryItem, StockBalance, StockMovement
+from veristock.inventory.models import (
+    InventoryBatch,
+    InventoryItem,
+    StockBalance,
+    StockMovement,
+)
 from veristock.organizations.models import Branch
 from veristock.stocktaking.models import (
     ReconciliationRun,
     Stocktake,
+    StocktakeBatchObservation,
     StocktakeDecision,
     StocktakeObservation,
     StocktakeRound,
@@ -441,6 +447,32 @@ async def submit_count_round(
             status_code=409,
             detail=f"Count incomplete: {observed_count or 0} of {expected_count or 0} items recorded",
         )
+    batch_counts = (
+        await session.execute(
+            select(
+                InventoryBatch.item_id,
+                func.sum(StocktakeBatchObservation.counted_quantity),
+            )
+            .join(
+                StocktakeBatchObservation,
+                StocktakeBatchObservation.batch_id == InventoryBatch.id,
+            )
+            .where(StocktakeBatchObservation.round_id == round_record.id)
+            .group_by(InventoryBatch.item_id)
+        )
+    ).all()
+    for item_id, batch_quantity in batch_counts:
+        item_observation = await session.scalar(
+            select(StocktakeObservation).where(
+                StocktakeObservation.round_id == round_record.id,
+                StocktakeObservation.item_id == item_id,
+            )
+        )
+        if item_observation is None or Decimal(batch_quantity) != item_observation.counted_quantity:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Batch counts for item {item_id} must equal its total physical count",
+            )
     round_record.status = "submitted"
     round_record.submitted_at = datetime.now(UTC)
     stocktake.status = "submitted"
@@ -1108,3 +1140,120 @@ async def approve_stocktake(
         total_quantity_delta=total_delta,
         completed_at=completed_at,
     )
+
+
+class BatchCountObservationCreate(BaseModel):
+    batch_id: str
+    counted_quantity: Decimal = Field(ge=0, max_digits=18, decimal_places=4)
+    observed_expiry_date: date | None = None
+    observed_condition: Literal["good", "damaged", "quarantined"] = "good"
+    note: str | None = Field(default=None, max_length=500)
+    idempotency_key: str = Field(min_length=8, max_length=128)
+
+
+class BatchCountObservationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    stocktake_id: str
+    round_id: str
+    batch_id: str
+    counted_quantity: Decimal
+    observed_expiry_date: date | None
+    observed_condition: str
+    note: str | None
+    counted_at: datetime
+
+
+@router.post(
+    "/{stocktake_id}/batch-observations",
+    response_model=BatchCountObservationRead,
+    status_code=201,
+)
+async def record_batch_count_observation(
+    stocktake_id: str,
+    payload: BatchCountObservationCreate,
+    organization: StocktakeCounter,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> StocktakeBatchObservation:
+    duplicate = await session.scalar(
+        select(StocktakeBatchObservation).where(
+            StocktakeBatchObservation.organization_id == organization.id,
+            StocktakeBatchObservation.idempotency_key == payload.idempotency_key,
+        )
+    )
+    if duplicate is not None:
+        if (
+            duplicate.stocktake_id != stocktake_id
+            or duplicate.batch_id != payload.batch_id
+            or duplicate.counted_quantity != payload.counted_quantity
+            or duplicate.observed_expiry_date != payload.observed_expiry_date
+            or duplicate.observed_condition != payload.observed_condition
+            or duplicate.note != payload.note
+        ):
+            raise HTTPException(status_code=409, detail="Idempotency key belongs to another count")
+        return duplicate
+
+    stocktake = await session.scalar(
+        select(Stocktake).where(
+            Stocktake.id == stocktake_id,
+            Stocktake.organization_id == organization.id,
+            Stocktake.status == "open",
+        )
+    )
+    if stocktake is None:
+        raise HTTPException(status_code=404, detail="Open stocktake not found")
+    await require_branch_assignment(session, user, organization, stocktake.branch_id)
+    round_record = await session.scalar(
+        select(StocktakeRound)
+        .where(
+            StocktakeRound.stocktake_id == stocktake.id,
+            StocktakeRound.organization_id == organization.id,
+            StocktakeRound.status == "open",
+        )
+        .order_by(StocktakeRound.round_number.desc())
+    )
+    if round_record is None:
+        raise HTTPException(status_code=409, detail="No open count round")
+    batch = await session.scalar(
+        select(InventoryBatch).where(
+            InventoryBatch.id == payload.batch_id,
+            InventoryBatch.organization_id == organization.id,
+            InventoryBatch.branch_id == stocktake.branch_id,
+        )
+    )
+    if batch is None:
+        raise HTTPException(status_code=404, detail="Batch not found in this stocktake branch")
+    scope = await session.scalar(
+        select(StocktakeScopeItem).where(
+            StocktakeScopeItem.stocktake_id == stocktake.id,
+            StocktakeScopeItem.organization_id == organization.id,
+            StocktakeScopeItem.item_id == batch.item_id,
+        )
+    )
+    if scope is None:
+        raise HTTPException(status_code=409, detail="Batch item is outside this stocktake scope")
+    observation = StocktakeBatchObservation(
+        id=str(uuid4()),
+        organization_id=organization.id,
+        stocktake_id=stocktake.id,
+        round_id=round_record.id,
+        batch_id=batch.id,
+        counted_quantity=payload.counted_quantity,
+        observed_expiry_date=payload.observed_expiry_date,
+        observed_condition=payload.observed_condition,
+        note=payload.note.strip() if payload.note else None,
+        idempotency_key=payload.idempotency_key,
+        counted_by_user_id=user.id,
+    )
+    session.add(observation)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=409, detail="This batch already has a count in the active round"
+        ) from exc
+    await session.refresh(observation)
+    return observation
