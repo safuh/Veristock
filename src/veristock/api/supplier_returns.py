@@ -20,6 +20,7 @@ from veristock.identity.authorization_dependencies import (
     require_permission,
 )
 from veristock.identity.models import User
+from veristock.inventory.costing import allocate_fifo_cost
 from veristock.inventory.models import (
     BatchStockBalance,
     InventoryBatch,
@@ -263,21 +264,21 @@ async def dispatch_supplier_return(
             batch_balance.quantity_on_hand -= line.quantity
         balance.quantity_on_hand -= line.quantity
         balance.version += 1
-        session.add(
-            StockMovement(
-                organization_id=organization.id,
-                branch_id=record.branch_id,
-                item_id=line.item_id,
-                batch_id=line.batch_id,
-                quantity_delta=-line.quantity,
-                unit_code=line.unit_code,
-                source_type="supplier_return",
-                source_id=record.id,
-                reason=record.reason,
-                idempotency_key=f"supplier-return:{record.id}:{line.id}",
-                actor_user_id=user.id,
-            )
+        movement = StockMovement(
+            organization_id=organization.id,
+            branch_id=record.branch_id,
+            item_id=line.item_id,
+            batch_id=line.batch_id,
+            quantity_delta=-line.quantity,
+            unit_code=line.unit_code,
+            source_type="supplier_return",
+            source_id=record.id,
+            reason=record.reason,
+            idempotency_key=f"supplier-return:{record.id}:{line.id}",
+            actor_user_id=user.id,
         )
+        session.add(movement)
+        await allocate_fifo_cost(session, movement)
     record.status = "dispatched"
     record.dispatched_by_user_id = user.id
     record.dispatched_at = datetime.now(UTC)

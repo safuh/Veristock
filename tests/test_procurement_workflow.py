@@ -397,7 +397,7 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
             assert len(receipts) == 2
             assert len(cost_layers) == 2
             assert sum(layer.received_quantity for layer in cost_layers) == Decimal("10.0000")
-            assert sum(layer.remaining_quantity for layer in cost_layers) == Decimal("7.0000")
+            assert sum(layer.remaining_quantity for layer in cost_layers) == Decimal("5.0000")
             allocations = list(
                 (
                     await session.scalars(
@@ -407,11 +407,11 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
                     )
                 ).all()
             )
-            assert len(allocations) == 1
-            assert allocations[0].quantity == Decimal("3.0000")
-            assert allocations[0].unit_cost == Decimal("125.5000")
-            assert allocations[0].extended_cost == Decimal("376.5000")
-            assert allocations[0].currency == "KES"
+            assert len(allocations) == 3
+            assert sum(row.quantity for row in allocations) == Decimal("5.0000")
+            assert sum(row.extended_cost for row in allocations) == Decimal("627.5000")
+            assert all(row.unit_cost == Decimal("125.5000") for row in allocations)
+            assert all(row.currency == "KES" for row in allocations)
 
     asyncio.run(verify_ledger())
     asyncio.run(engine.dispose())
