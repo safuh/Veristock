@@ -96,6 +96,7 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
             "supplier_id": supplier_id,
             "branch_id": branch_id,
             "currency": "KES",
+            "expected_delivery_date": "2099-12-31",
             "idempotency_key": "po-create-2026-001",
             "lines": [{"item_id": item_id, "quantity": "10", "unit_cost": "125.50"}],
         }
@@ -183,6 +184,11 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
             json=second_receipt,
         )
         assert completed.status_code == 201, completed.text
+        completed_po = client.get(
+            "/api/procurement/purchase-orders", headers=headers
+        ).json()[0]
+        assert completed_po["delivery_status"] == "on_time"
+        assert completed_po["completed_at"] is not None
         assert (
             client.get("/api/procurement/purchase-orders", headers=headers).json()[0]["status"]
             == "received"
@@ -232,6 +238,9 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
         metrics = performance.json()
         assert metrics["purchase_order_count"] == 1
         assert metrics["fully_received_purchase_order_count"] == 1
+        assert metrics["completed_on_time_order_count"] == 1
+        assert metrics["completed_late_order_count"] == 0
+        assert metrics["on_time_delivery_rate_percent"] == "100.00"
         assert metrics["currency_metrics"] == [
             {
                 "currency": "KES",

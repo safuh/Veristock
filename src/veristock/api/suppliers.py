@@ -336,13 +336,49 @@ async def supplier_performance(
         ),
         "supplier_return_count": len(returns),
         "dispatched_supplier_return_count": len(dispatched_returns),
+        "scheduled_delivery_order_count": sum(
+            order.expected_delivery_date is not None and order.status != "draft"
+            for order in orders
+        ),
+        "completed_on_time_order_count": sum(
+            order.completed_at is not None
+            and order.expected_delivery_date is not None
+            and order.completed_at.date() <= order.expected_delivery_date
+            for order in orders
+        ),
+        "completed_late_order_count": sum(
+            order.completed_at is not None
+            and order.expected_delivery_date is not None
+            and order.completed_at.date() > order.expected_delivery_date
+            for order in orders
+        ),
+        "on_time_delivery_rate_percent": (
+            (
+                Decimal(
+                    sum(
+                        order.completed_at is not None
+                        and order.expected_delivery_date is not None
+                        and order.completed_at.date() <= order.expected_delivery_date
+                        for order in orders
+                    )
+                )
+                / Decimal(
+                    sum(
+                        order.completed_at is not None and order.expected_delivery_date is not None
+                        for order in orders
+                    )
+                )
+                * Decimal("100")
+            ).quantize(Decimal("0.01"))
+            if any(
+                order.completed_at is not None and order.expected_delivery_date is not None
+                for order in orders
+            )
+            else None
+        ),
         "currency_metrics": currency_metrics,
         "unit_metrics": unit_metrics,
         "limitations": [
-            (
-                "Delivery punctuality is not scored because purchase orders do not yet "
-                "store promised delivery dates."
-            ),
             (
                 "Return rates are reported by unit of measure; quantities across "
                 "different units are not combined."

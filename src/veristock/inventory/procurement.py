@@ -1,11 +1,12 @@
 """Purchase orders and immutable goods-received-note persistence."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy import (
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -47,6 +48,8 @@ class PurchaseOrder(Base):
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     notes: Mapped[str | None] = mapped_column(String(1000))
+    expected_delivery_date: Mapped[date | None] = mapped_column(Date)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     created_by_user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False

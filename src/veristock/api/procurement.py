@@ -54,6 +54,7 @@ class PurchaseOrderInput(BaseModel):
     currency: str = Field(default="KES", min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
     idempotency_key: str = Field(min_length=8, max_length=128)
     notes: str | None = Field(default=None, max_length=1000)
+    expected_delivery_date: date | None = None
     lines: list[PurchaseLineInput] = Field(min_length=1, max_length=200)
 
 
@@ -83,6 +84,13 @@ def _po_read(po: PurchaseOrder) -> dict[str, object]:
         "notes": po.notes,
         "created_at": po.created_at,
         "issued_at": po.issued_at,
+        "expected_delivery_date": po.expected_delivery_date,
+        "completed_at": po.completed_at,
+        "delivery_status": (
+            "not_scheduled" if po.expected_delivery_date is None else
+            "pending" if po.completed_at is None else
+            "on_time" if po.completed_at.date() <= po.expected_delivery_date else "late"
+        ),
         "lines": [
             {
                 "id": line.id,
@@ -123,6 +131,7 @@ async def create_purchase_order(
             or prior.branch_id != payload.branch_id
             or prior.currency != payload.currency
             or prior.notes != payload.notes
+            or prior.expected_delivery_date != payload.expected_delivery_date
             or existing != normalized
         ):
             raise HTTPException(
@@ -158,6 +167,7 @@ async def create_purchase_order(
         status="draft",
         currency=payload.currency,
         notes=payload.notes,
+        expected_delivery_date=payload.expected_delivery_date,
         idempotency_key=payload.idempotency_key,
         created_by_user_id=user.id,
     )
@@ -479,6 +489,8 @@ async def receive_purchase_order(
         if all(x.received_quantity == x.ordered_quantity for x in po.lines)
         else "partially_received"
     )
+    if po.status == "received" and po.completed_at is None:
+        po.completed_at = datetime.now(UTC)
     session.add(receipt)
     try:
         await session.commit()
