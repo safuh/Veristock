@@ -345,6 +345,19 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
         assert sale_costs.status_code == 200, sale_costs.text
         assert sale_costs.json()["summary"][0]["consumed_quantity"] == "3.0000"
         assert sale_costs.json()["summary"][0]["consumed_cost"] == "376.5000"
+        financials = client.get(
+            "/api/procurement/valuation/cogs",
+            headers=headers,
+            params={"branch_id": branch_id, "item_id": item_id},
+        )
+        assert financials.status_code == 200, financials.text
+        financial_row = financials.json()["items"][0]
+        assert financial_row["currency"] == "KES"
+        assert Decimal(financial_row["revenue"]) == Decimal("450.0000")
+        assert Decimal(financial_row["cogs"]) == Decimal("376.5000")
+        assert Decimal(financial_row["gross_profit"]) == Decimal("73.5000")
+        assert financial_row["profit_comparable"] is True
+        assert financials.json()["incomplete_line_count"] == 0
         invalid_period = client.get(
             "/api/procurement/valuation/movement-costs",
             headers=headers,

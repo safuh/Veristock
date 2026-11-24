@@ -24,6 +24,8 @@ from veristock.inventory.models import (
     BatchStockBalance,
     InventoryBatch,
     InventoryItem,
+    Sale,
+    SaleLine,
     StockBalance,
     StockMovement,
     Supplier,
@@ -408,6 +410,212 @@ async def get_on_hand_inventory_valuation(
         "valuation_method": "fifo_receipt_cost_layers",
         "valuation_status": "partial" if has_uncosted_stock else "costed_stock_only",
         "currency_aggregation": "separate_currency_buckets_no_conversion",
+    }
+
+
+@router.get("/valuation/cogs")
+async def get_sales_cogs(
+    organization: Reader,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    branch_id: str | None = None,
+    item_id: str | None = None,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    limit: int = Query(default=500, ge=1, le=2000),
+) -> dict[str, object]:
+    """Report posted-sale revenue and FIFO COGS without mixing currencies."""
+    from sqlalchemy.orm import selectinload
+
+    if from_date and to_date and from_date > to_date:
+        raise HTTPException(status_code=422, detail="from_date must not follow to_date")
+    sales_query = (
+        select(Sale)
+        .options(selectinload(Sale.lines))
+        .where(
+            Sale.organization_id == organization.id,
+            Sale.status == "posted",
+        )
+    )
+    if branch_id is not None:
+        await require_branch_assignment(session, user, organization, branch_id)
+        sales_query = sales_query.where(Sale.branch_id == branch_id)
+    if item_id is not None:
+        sales_query = sales_query.where(Sale.lines.any(SaleLine.item_id == item_id))
+    if from_date is not None:
+        sales_query = sales_query.where(
+            Sale.posted_at >= datetime.combine(from_date, time.min, tzinfo=UTC)
+        )
+    if to_date is not None:
+        sales_query = sales_query.where(
+            Sale.posted_at < datetime.combine(to_date + timedelta(days=1), time.min, tzinfo=UTC)
+        )
+    sales = list(
+        (await session.scalars(sales_query.order_by(Sale.posted_at.desc()).limit(limit))).all()
+    )
+    sale_ids = [sale.id for sale in sales]
+    line_rows = [
+        line for sale in sales for line in sale.lines if item_id is None or line.item_id == item_id
+    ]
+    allocations_by_sale_item: dict[tuple[str, str, str, str], tuple[Decimal, Decimal]] = {}
+    if sale_ids and line_rows:
+        allocation_rows = (
+            await session.execute(
+                select(
+                    StockMovement.source_id,
+                    StockMovement.item_id,
+                    StockMovement.unit_code,
+                    InventoryCostAllocation.quantity,
+                    InventoryCostAllocation.extended_cost,
+                    InventoryCostAllocation.currency,
+                )
+                .join(
+                    InventoryCostAllocation,
+                    InventoryCostAllocation.stock_movement_id == StockMovement.id,
+                )
+                .where(
+                    StockMovement.organization_id == organization.id,
+                    StockMovement.source_type == "sale",
+                    StockMovement.source_id.in_(sale_ids),
+                )
+            )
+        ).all()
+        for (
+            sale_id,
+            movement_item_id,
+            unit_code,
+            quantity,
+            extended_cost,
+            currency,
+        ) in allocation_rows:
+            key = (sale_id, movement_item_id, unit_code, currency)
+            prior_quantity, prior_cost = allocations_by_sale_item.get(key, (Decimal(0), Decimal(0)))
+            allocations_by_sale_item[key] = (prior_quantity + quantity, prior_cost + extended_cost)
+
+    buckets: dict[tuple[str, str, str, str], dict[str, Decimal | int]] = {}
+    incomplete_lines: list[dict[str, object]] = []
+    for sale in sales:
+        for line in sale.lines:
+            if item_id is not None and line.item_id != item_id:
+                continue
+            if line.unit_price is None or line.currency is None:
+                incomplete_lines.append(
+                    {
+                        "sale_id": sale.id,
+                        "sale_reference": sale.reference,
+                        "item_id": line.item_id,
+                        "reason": "selling_price_or_currency_missing",
+                    }
+                )
+            else:
+                key = (sale.branch_id, line.item_id, line.unit_code, line.currency)
+                bucket = buckets.setdefault(
+                    key,
+                    {
+                        "revenue": Decimal(0),
+                        "cogs": Decimal(0),
+                        "revenue_line_count": 0,
+                        "costed_line_count": 0,
+                        "costed_quantity": Decimal(0),
+                        "incomplete_line_count": 0,
+                    },
+                )
+                bucket["revenue"] += line.quantity * line.unit_price
+                bucket["revenue_line_count"] += 1
+            cost_by_currency = [
+                (currency, quantity, amount)
+                for (sid, iid, unit, currency), (
+                    quantity,
+                    amount,
+                ) in allocations_by_sale_item.items()
+                if sid == sale.id and iid == line.item_id and unit == line.unit_code
+            ]
+            costed_quantity = sum((quantity for _, quantity, _ in cost_by_currency), Decimal(0))
+            for currency, allocated_quantity, amount in cost_by_currency:
+                key = (sale.branch_id, line.item_id, line.unit_code, currency)
+                bucket = buckets.setdefault(
+                    key,
+                    {
+                        "revenue": Decimal(0),
+                        "cogs": Decimal(0),
+                        "revenue_line_count": 0,
+                        "costed_line_count": 0,
+                        "costed_quantity": Decimal(0),
+                        "incomplete_line_count": 0,
+                    },
+                )
+                bucket["cogs"] += amount
+                bucket["costed_line_count"] += 1
+                bucket["costed_quantity"] += allocated_quantity
+                if allocated_quantity != line.quantity:
+                    bucket["incomplete_line_count"] += 1
+            if line.unit_price is not None and line.currency is not None:
+                revenue_key = (sale.branch_id, line.item_id, line.unit_code, line.currency)
+                matching_currency_quantity = sum(
+                    (
+                        quantity
+                        for currency, quantity, _ in cost_by_currency
+                        if currency == line.currency
+                    ),
+                    Decimal(0),
+                )
+                if matching_currency_quantity != line.quantity:
+                    buckets[revenue_key]["incomplete_line_count"] += 1
+            if costed_quantity < line.quantity:
+                incomplete_lines.append(
+                    {
+                        "sale_id": sale.id,
+                        "sale_reference": sale.reference,
+                        "item_id": line.item_id,
+                        "reason": "fifo_cost_allocation_missing_or_partial",
+                        "quantity": line.quantity,
+                        "costed_quantity": costed_quantity,
+                    }
+                )
+
+    summaries = []
+    for (row_branch, row_item, unit, currency), values in sorted(buckets.items()):
+        revenue = Decimal(str(values["revenue"]))
+        cogs = Decimal(str(values["cogs"]))
+        summaries.append(
+            {
+                "branch_id": row_branch,
+                "item_id": row_item,
+                "unit_code": unit,
+                "currency": currency,
+                "revenue": revenue,
+                "cogs": cogs,
+                "gross_profit": revenue - cogs
+                if values["revenue_line_count"] > 0
+                and values["costed_line_count"] > 0
+                and values["incomplete_line_count"] == 0
+                else None,
+                "gross_margin_percent": ((revenue - cogs) / revenue * Decimal(100))
+                if revenue > 0
+                and values["costed_line_count"] > 0
+                and values["incomplete_line_count"] == 0
+                else None,
+                "revenue_line_count": values["revenue_line_count"],
+                "costed_line_count": values["costed_line_count"],
+                "costed_quantity": values["costed_quantity"],
+                "incomplete_line_count": values["incomplete_line_count"],
+                "profit_comparable": values["revenue_line_count"] > 0
+                and values["costed_line_count"] > 0
+                and values["incomplete_line_count"] == 0,
+            }
+        )
+    return {
+        "items": summaries,
+        "count": len(summaries),
+        "incomplete_lines": incomplete_lines,
+        "incomplete_line_count": len(incomplete_lines),
+        "currency_aggregation": "separate_currency_buckets_no_conversion",
+        "valuation_method": "fifo_cost_allocations",
+        "scope_note": (
+            "Only posted sales are included. Reversed sales are excluded; rows with missing "
+            "price or FIFO cost are flagged. Gross profit is only comparable when revenue "
+            "and COGS share a currency bucket."
+        ),
     }
 
 
