@@ -358,6 +358,31 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
         assert Decimal(financial_row["gross_profit"]) == Decimal("73.5000")
         assert financial_row["profit_comparable"] is True
         assert financials.json()["incomplete_line_count"] == 0
+        snapshot_payload = {"idempotency_key": "valuation-snapshot-2026-001"}
+        snapshot = client.post(
+            "/api/procurement/valuation/snapshots", headers=headers, json=snapshot_payload
+        )
+        assert snapshot.status_code == 201, snapshot.text
+        snapshot_id = snapshot.json()["id"]
+        assert snapshot.json()["immutable"] is True
+        assert snapshot.json()["line_count"] == 1
+        replayed_snapshot = client.post(
+            "/api/procurement/valuation/snapshots", headers=headers, json=snapshot_payload
+        )
+        assert replayed_snapshot.status_code == 201
+        assert replayed_snapshot.json()["id"] == snapshot_id
+        snapshot_history = client.get("/api/procurement/valuation/snapshots", headers=headers)
+        assert snapshot_history.status_code == 200
+        assert snapshot_history.json()["count"] == 1
+        ageing = client.get(
+            "/api/procurement/valuation/ageing",
+            headers=headers,
+            params={"branch_id": branch_id, "item_id": item_id, "as_of_date": "2026-11-24"},
+        )
+        assert ageing.status_code == 200, ageing.text
+        assert ageing.json()["costed_stock_only"] is True
+        assert ageing.json()["count"] == 1
+        assert ageing.json()["items"][0]["total_quantity"] == "5.0000"
         invalid_period = client.get(
             "/api/procurement/valuation/movement-costs",
             headers=headers,

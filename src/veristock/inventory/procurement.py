@@ -5,6 +5,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     Date,
     DateTime,
@@ -485,3 +486,28 @@ class ProcurementApprovalRule(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class InventoryValuationSnapshot(Base):
+    """Immutable point-in-time inventory valuation report for audit and comparison."""
+
+    __tablename__ = "inventory_valuation_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "idempotency_key", name="uq_valuation_snapshot_idempotency"
+        ),
+        Index("ix_valuation_snapshots_org_captured", "organization_id", "captured_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    captured_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    line_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    valuation_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    snapshot_data: Mapped[list[dict[str, object]]] = mapped_column(JSON, nullable=False)

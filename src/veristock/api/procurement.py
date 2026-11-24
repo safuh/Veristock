@@ -36,6 +36,7 @@ from veristock.inventory.procurement import (
     InventoryCostAllocation,
     InventoryCostLayer,
     InventoryCostRestoration,
+    InventoryValuationSnapshot,
     PurchaseOrder,
     PurchaseOrderLine,
 )
@@ -615,6 +616,261 @@ async def get_sales_cogs(
             "Only posted sales are included. Reversed sales are excluded; rows with missing "
             "price or FIFO cost are flagged. Gross profit is only comparable when revenue "
             "and COGS share a currency bucket."
+        ),
+    }
+
+
+class ValuationSnapshotInput(BaseModel):
+    idempotency_key: str = Field(min_length=8, max_length=128)
+
+
+@router.post("/valuation/snapshots", status_code=201)
+async def create_valuation_snapshot(
+    organization: Manager,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    payload: ValuationSnapshotInput,
+) -> dict[str, object]:
+    """Capture an immutable on-hand valuation snapshot; retries return the original."""
+    existing = await session.scalar(
+        select(InventoryValuationSnapshot).where(
+            InventoryValuationSnapshot.organization_id == organization.id,
+            InventoryValuationSnapshot.idempotency_key == payload.idempotency_key,
+        )
+    )
+    if existing is not None:
+        return _snapshot_read(existing)
+
+    balances = (
+        await session.execute(
+            select(
+                StockBalance.branch_id,
+                StockBalance.item_id,
+                InventoryItem.sku,
+                InventoryItem.name,
+                InventoryItem.base_unit_code,
+                StockBalance.quantity_on_hand,
+            )
+            .join(InventoryItem, InventoryItem.id == StockBalance.item_id)
+            .where(StockBalance.organization_id == organization.id)
+        )
+    ).all()
+    layer_rows = (
+        await session.execute(
+            select(
+                InventoryCostLayer.branch_id,
+                InventoryCostLayer.item_id,
+                InventoryCostLayer.unit_code,
+                InventoryCostLayer.currency,
+                InventoryCostLayer.remaining_quantity,
+                InventoryCostLayer.unit_cost,
+                InventoryCostLayer.received_at,
+                InventoryCostLayer.batch_id,
+            )
+            .where(
+                InventoryCostLayer.organization_id == organization.id,
+                InventoryCostLayer.remaining_quantity > 0,
+            )
+            .order_by(InventoryCostLayer.received_at, InventoryCostLayer.id)
+        )
+    ).all()
+    grouped: dict[tuple[str, str], list[dict[str, object]]] = {}
+    costed: dict[tuple[str, str], Decimal] = {}
+    for branch, item, unit, currency, qty, unit_cost, received_at, batch_id in layer_rows:
+        key = (branch, item)
+        quantity = Decimal(qty)
+        grouped.setdefault(key, []).append(
+            {
+                "unit_code": unit,
+                "currency": currency,
+                "remaining_quantity": str(quantity),
+                "unit_cost": str(Decimal(unit_cost)),
+                "carrying_value": str(quantity * Decimal(unit_cost)),
+                "received_at": received_at.isoformat(),
+                "batch_id": batch_id,
+            }
+        )
+        costed[key] = costed.get(key, Decimal(0)) + quantity
+    snapshot_data: list[dict[str, object]] = []
+    incomplete = False
+    for branch, item, sku, name, unit, raw_quantity in balances:
+        on_hand = Decimal(raw_quantity or 0)
+        costed_quantity = costed.get((branch, item), Decimal(0))
+        uncosted = max(on_hand - costed_quantity, Decimal(0))
+        incomplete = incomplete or uncosted > 0
+        snapshot_data.append(
+            {
+                "branch_id": branch,
+                "item_id": item,
+                "sku": sku,
+                "name": name,
+                "unit_code": unit,
+                "quantity_on_hand": str(on_hand),
+                "costed_quantity": str(costed_quantity),
+                "uncosted_quantity": str(uncosted),
+                "cost_layers": grouped.get((branch, item), []),
+                "valuation_complete": uncosted == 0,
+            }
+        )
+    captured_at = datetime.now(UTC)
+    snapshot = InventoryValuationSnapshot(
+        organization_id=organization.id,
+        captured_by_user_id=user.id,
+        idempotency_key=payload.idempotency_key,
+        captured_at=captured_at,
+        line_count=len(snapshot_data),
+        valuation_status="partial" if incomplete else "costed_stock_only",
+        snapshot_data=snapshot_data,
+    )
+    session.add(snapshot)
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        existing = await session.scalar(
+            select(InventoryValuationSnapshot).where(
+                InventoryValuationSnapshot.organization_id == organization.id,
+                InventoryValuationSnapshot.idempotency_key == payload.idempotency_key,
+            )
+        )
+        if existing is None:
+            raise HTTPException(status_code=409, detail="Snapshot idempotency conflict") from None
+        return _snapshot_read(existing)
+    await session.refresh(snapshot)
+    return _snapshot_read(snapshot)
+
+
+def _snapshot_read(snapshot: InventoryValuationSnapshot) -> dict[str, object]:
+    return {
+        "id": snapshot.id,
+        "captured_at": snapshot.captured_at,
+        "line_count": snapshot.line_count,
+        "valuation_status": snapshot.valuation_status,
+        "items": snapshot.snapshot_data,
+        "currency_aggregation": "separate_currency_buckets_no_conversion",
+        "immutable": True,
+    }
+
+
+@router.get("/valuation/snapshots")
+async def list_valuation_snapshots(
+    organization: Reader,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict[str, object]:
+    rows = (
+        await session.scalars(
+            select(InventoryValuationSnapshot)
+            .where(InventoryValuationSnapshot.organization_id == organization.id)
+            .order_by(InventoryValuationSnapshot.captured_at.desc())
+            .limit(limit)
+        )
+    ).all()
+    return {"items": [_snapshot_read(row) for row in rows], "count": len(rows)}
+
+
+@router.get("/valuation/ageing")
+async def get_inventory_ageing(
+    organization: Reader,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    branch_id: str | None = None,
+    item_id: str | None = None,
+    as_of_date: date | None = None,
+) -> dict[str, object]:
+    """Age remaining FIFO cost layers by receipt date, without mixing currencies."""
+    as_of = as_of_date or datetime.now(UTC).date()
+    statement = (
+        select(
+            InventoryCostLayer.branch_id,
+            InventoryCostLayer.item_id,
+            InventoryItem.sku,
+            InventoryItem.name,
+            InventoryCostLayer.unit_code,
+            InventoryCostLayer.currency,
+            InventoryCostLayer.batch_id,
+            InventoryCostLayer.received_at,
+            InventoryCostLayer.remaining_quantity,
+            InventoryCostLayer.unit_cost,
+        )
+        .join(InventoryItem, InventoryItem.id == InventoryCostLayer.item_id)
+        .where(
+            InventoryCostLayer.organization_id == organization.id,
+            InventoryCostLayer.remaining_quantity > 0,
+        )
+    )
+    if branch_id is not None:
+        await require_branch_assignment(session, user, organization, branch_id)
+        statement = statement.where(InventoryCostLayer.branch_id == branch_id)
+    if item_id is not None:
+        statement = statement.where(InventoryCostLayer.item_id == item_id)
+    rows = (await session.execute(statement.order_by(InventoryCostLayer.received_at))).all()
+    buckets: dict[tuple[str, str, str, str], dict[str, Decimal | int]] = {}
+    layer_details = []
+    for branch, item, sku, name, unit, currency, batch_id, received_at, raw_qty, raw_cost in rows:
+        age_days = max((as_of - received_at.date()).days, 0)
+        bucket_name = (
+            "0_30_days"
+            if age_days <= 30
+            else "31_60_days"
+            if age_days <= 60
+            else "61_90_days"
+            if age_days <= 90
+            else "91_180_days"
+            if age_days <= 180
+            else "over_180_days"
+        )
+        quantity, unit_cost = Decimal(raw_qty), Decimal(raw_cost)
+        value = quantity * unit_cost
+        key = (branch, item, unit, currency)
+        bucket = buckets.setdefault(
+            key,
+            {
+                name: Decimal(0)
+                for name in (
+                    "0_30_days",
+                    "31_60_days",
+                    "61_90_days",
+                    "91_180_days",
+                    "over_180_days",
+                    "total_quantity",
+                    "total_value",
+                )
+            },
+        )
+        bucket[bucket_name] += quantity
+        bucket["total_quantity"] += quantity
+        bucket["total_value"] += value
+        layer_details.append(
+            {
+                "branch_id": branch,
+                "item_id": item,
+                "sku": sku,
+                "name": name,
+                "unit_code": unit,
+                "currency": currency,
+                "batch_id": batch_id,
+                "received_at": received_at,
+                "age_days": age_days,
+                "age_bucket": bucket_name,
+                "quantity": quantity,
+                "unit_cost": unit_cost,
+                "carrying_value": value,
+            }
+        )
+    summary = [
+        {"branch_id": key[0], "item_id": key[1], "unit_code": key[2], "currency": key[3], **values}
+        for key, values in sorted(buckets.items())
+    ]
+    return {
+        "as_of_date": as_of,
+        "items": summary,
+        "layers": layer_details,
+        "count": len(summary),
+        "costed_stock_only": True,
+        "note": (
+            "Ageing is based on original FIFO receipt-layer dates. Uncosted stock is excluded "
+            "and remains visible in the on-hand valuation report."
         ),
     }
 
