@@ -35,6 +35,7 @@ from veristock.inventory.models import (
     StockBalance,
     StockMovement,
 )
+from veristock.inventory.procurement import InventoryCostAllocation, InventoryCostLayer
 from veristock.organizations.models import Branch
 
 router = APIRouter(tags=["sales"])
@@ -472,6 +473,10 @@ async def record_stock_adjustment(
     balance.quantity_on_hand = adjusted_quantity
     balance.version += 1
     session.add(movement)
+    if movement.quantity_delta < 0:
+        await allocate_fifo_cost(session, movement)
+    # Positive manual adjustments deliberately have no cost layer: the
+    # operator has supplied a quantity correction, not a substantiated cost.
     try:
         await session.commit()
     except IntegrityError as exc:
@@ -606,6 +611,35 @@ async def reverse_manual_stock_adjustment(
     balance.quantity_on_hand = resulting_quantity
     balance.version += 1
     session.add(reversal)
+
+    # Reversing a shortage restores the exact FIFO layers consumed by the
+    # original adjustment. It does not create a new layer or reprice the stock.
+    # A positive adjustment had no cost layer, so reversing it remains uncosted.
+    if original.quantity_delta < 0:
+        allocations = list(
+            (
+                await session.scalars(
+                    select(InventoryCostAllocation).where(
+                        InventoryCostAllocation.stock_movement_id == original.id
+                    )
+                )
+            ).all()
+        )
+        for allocation in allocations:
+            layer = await session.scalar(
+                select(InventoryCostLayer)
+                .where(InventoryCostLayer.id == allocation.cost_layer_id)
+                .with_for_update()
+            )
+            if layer is None or (
+                layer.remaining_quantity + allocation.quantity > layer.received_quantity
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Original FIFO cost layer cannot be restored safely",
+                )
+            layer.remaining_quantity += allocation.quantity
+
     try:
         await session.commit()
     except IntegrityError as exc:

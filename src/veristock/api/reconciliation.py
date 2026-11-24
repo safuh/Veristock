@@ -17,6 +17,7 @@ from veristock.identity.authorization_dependencies import (
     require_permission,
 )
 from veristock.identity.models import User
+from veristock.inventory.costing import allocate_fifo_cost
 from veristock.inventory.models import InventoryItem, StockBalance, StockMovement
 from veristock.stocktaking.models import (
     ReconciliationApproval,
@@ -387,20 +388,23 @@ async def approve_reconciliation(
         else:
             balance.quantity_on_hand += delta
             balance.version += 1
-        session.add(
-            StockMovement(
-                id=str(uuid4()),
-                organization_id=organization.id,
-                branch_id=stocktake.branch_id,
-                item_id=line.item_id,
-                quantity_delta=delta,
-                unit_code=line.unit_code,
-                source_type="stocktake_adjustment",
-                source_id=run.id,
-                idempotency_key=f"reconciliation:{run.id}:{line.item_id}",
-                actor_user_id=user.id,
-            )
+        movement = StockMovement(
+            id=str(uuid4()),
+            organization_id=organization.id,
+            branch_id=stocktake.branch_id,
+            item_id=line.item_id,
+            quantity_delta=delta,
+            unit_code=line.unit_code,
+            source_type="stocktake_adjustment",
+            source_id=run.id,
+            idempotency_key=f"reconciliation:{run.id}:{line.item_id}",
+            actor_user_id=user.id,
         )
+        session.add(movement)
+        # Shortages consume FIFO cost. Surpluses remain uncosted until an
+        # explicitly approved valuation basis is supplied.
+        if delta < 0:
+            await allocate_fifo_cost(session, movement)
 
     run.status = "approved"
     run.decided_by_user_id = user.id

@@ -20,6 +20,7 @@ from veristock.identity.authorization_dependencies import (
     require_permission,
 )
 from veristock.identity.models import User
+from veristock.inventory.costing import allocate_fifo_cost
 from veristock.inventory.models import (
     InventoryBatch,
     InventoryItem,
@@ -1089,22 +1090,23 @@ async def approve_stocktake(
             else:
                 balance.quantity_on_hand = target_quantity
                 balance.version += 1
-            session.add(
-                StockMovement(
-                    id=str(uuid4()),
-                    organization_id=organization.id,
-                    branch_id=stocktake.branch_id,
-                    item_id=observation.item_id,
-                    quantity_delta=quantity_delta,
-                    unit_code=observation.unit_code,
-                    source_type="stocktake_adjustment",
-                    source_id=stocktake.id,
-                    idempotency_key=(
-                        f"stocktake:{stocktake.id}:{round_record.id}:{observation.item_id}"
-                    ),
-                    actor_user_id=user.id,
-                )
+            movement = StockMovement(
+                id=str(uuid4()),
+                organization_id=organization.id,
+                branch_id=stocktake.branch_id,
+                item_id=observation.item_id,
+                quantity_delta=quantity_delta,
+                unit_code=observation.unit_code,
+                source_type="stocktake_adjustment",
+                source_id=stocktake.id,
+                idempotency_key=(
+                    f"stocktake:{stocktake.id}:{round_record.id}:{observation.item_id}"
+                ),
+                actor_user_id=user.id,
             )
+            session.add(movement)
+            if quantity_delta < 0:
+                await allocate_fifo_cost(session, movement)
             adjustment_count += 1
             total_delta += quantity_delta
 
