@@ -324,6 +324,19 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
             },
         )
         assert sale.status_code == 201, sale.text
+        valuation = client.get(
+            "/api/procurement/valuation/on-hand",
+            headers=headers,
+            params={"branch_id": branch_id, "item_id": item_id},
+        )
+        assert valuation.status_code == 200, valuation.text
+        valuation_item = valuation.json()["items"][0]
+        assert valuation_item["quantity_on_hand"] == "5.0000"
+        assert valuation_item["costed_quantity"] == "5.0000"
+        assert valuation_item["uncosted_quantity"] == "0.0000"
+        assert valuation_item["valuation_complete"] is True
+        assert valuation_item["cost_layers"][0]["currency"] == "KES"
+        assert valuation_item["cost_layers"][0]["carrying_value"] == "627.5000"
 
     async def verify_ledger() -> None:
         async with factory() as session:

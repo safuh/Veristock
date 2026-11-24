@@ -161,7 +161,19 @@ class InventoryCostLayer(Base):
             name="ck_cost_layers_remaining_range",
         ),
         CheckConstraint("unit_cost >= 0", name="ck_cost_layers_unit_cost_nonnegative"),
+        CheckConstraint(
+            "(goods_receipt_line_id IS NOT NULL AND purchase_order_line_id IS NOT NULL "
+            "AND source_transfer_line_id IS NULL AND source_cost_layer_id IS NULL) "
+            "OR (goods_receipt_line_id IS NULL AND purchase_order_line_id IS NULL "
+            "AND source_transfer_line_id IS NOT NULL AND source_cost_layer_id IS NOT NULL)",
+            name="ck_cost_layers_single_origin",
+        ),
         UniqueConstraint("goods_receipt_line_id", name="uq_cost_layers_receipt_line"),
+        UniqueConstraint(
+            "source_transfer_line_id",
+            "source_cost_layer_id",
+            name="uq_cost_layers_transfer_source",
+        ),
         Index("ix_cost_layers_scope", "organization_id", "branch_id", "item_id"),
     )
 
@@ -178,11 +190,17 @@ class InventoryCostLayer(Base):
     batch_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("inventory_batches.id", ondelete="RESTRICT")
     )
-    goods_receipt_line_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("goods_receipt_lines.id", ondelete="RESTRICT"), nullable=False
+    goods_receipt_line_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("goods_receipt_lines.id", ondelete="RESTRICT")
     )
-    purchase_order_line_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("purchase_order_lines.id", ondelete="RESTRICT"), nullable=False
+    purchase_order_line_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("purchase_order_lines.id", ondelete="RESTRICT")
+    )
+    source_transfer_line_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("stock_transfer_lines.id", ondelete="RESTRICT")
+    )
+    source_cost_layer_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("inventory_cost_layers.id", ondelete="RESTRICT")
     )
     received_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     remaining_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)

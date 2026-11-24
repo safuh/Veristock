@@ -308,6 +308,107 @@ async def list_inventory_cost_layers(
     }
 
 
+@router.get("/valuation/on-hand")
+async def get_on_hand_inventory_valuation(
+    organization: Reader,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    branch_id: str | None = None,
+    item_id: str | None = None,
+) -> dict[str, object]:
+    """Report carrying cost by unit/currency and explicitly identify uncosted stock."""
+    from sqlalchemy import func
+
+    balance_statement = (
+        select(
+            StockBalance.branch_id,
+            StockBalance.item_id,
+            InventoryItem.name,
+            InventoryItem.sku,
+            StockBalance.quantity_on_hand,
+            InventoryItem.base_unit_code,
+        )
+        .join(
+            InventoryItem,
+            (InventoryItem.id == StockBalance.item_id)
+            & (InventoryItem.organization_id == StockBalance.organization_id),
+        )
+        .where(StockBalance.organization_id == organization.id)
+    )
+    if branch_id is not None:
+        await require_branch_assignment(session, user, organization, branch_id)
+        balance_statement = balance_statement.where(StockBalance.branch_id == branch_id)
+    if item_id is not None:
+        balance_statement = balance_statement.where(StockBalance.item_id == item_id)
+    balances = (await session.execute(balance_statement)).all()
+
+    layer_statement = select(
+        InventoryCostLayer.branch_id,
+        InventoryCostLayer.item_id,
+        InventoryCostLayer.unit_code,
+        InventoryCostLayer.currency,
+        func.sum(InventoryCostLayer.remaining_quantity),
+        func.sum(InventoryCostLayer.remaining_quantity * InventoryCostLayer.unit_cost),
+    ).where(
+        InventoryCostLayer.organization_id == organization.id,
+        InventoryCostLayer.remaining_quantity > 0,
+    )
+    if branch_id is not None:
+        layer_statement = layer_statement.where(InventoryCostLayer.branch_id == branch_id)
+    if item_id is not None:
+        layer_statement = layer_statement.where(InventoryCostLayer.item_id == item_id)
+    layer_statement = layer_statement.group_by(
+        InventoryCostLayer.branch_id,
+        InventoryCostLayer.item_id,
+        InventoryCostLayer.unit_code,
+        InventoryCostLayer.currency,
+    )
+    layer_rows = (await session.execute(layer_statement)).all()
+    layers_by_scope: dict[tuple[str, str], list[dict[str, object]]] = {}
+    costed_by_scope: dict[tuple[str, str], Decimal] = {}
+    for row_branch, row_item, unit, currency, quantity, value in layer_rows:
+        key = (row_branch, row_item)
+        quantity_value = Decimal(quantity or 0)
+        layers_by_scope.setdefault(key, []).append(
+            {
+                "unit_code": unit,
+                "currency": currency,
+                "costed_quantity": quantity_value,
+                "carrying_value": Decimal(value or 0),
+            }
+        )
+        costed_by_scope[key] = costed_by_scope.get(key, Decimal("0")) + quantity_value
+
+    items: list[dict[str, object]] = []
+    has_uncosted_stock = False
+    for row_branch, row_item, name, sku, raw_on_hand, unit in balances:
+        on_hand = Decimal(raw_on_hand or 0)
+        costed = costed_by_scope.get((row_branch, row_item), Decimal("0"))
+        uncosted = max(on_hand - costed, Decimal("0"))
+        has_uncosted_stock = has_uncosted_stock or uncosted > 0
+        items.append(
+            {
+                "branch_id": row_branch,
+                "item_id": row_item,
+                "sku": sku,
+                "name": name,
+                "unit_code": unit,
+                "quantity_on_hand": on_hand,
+                "costed_quantity": costed,
+                "uncosted_quantity": uncosted,
+                "cost_layers": layers_by_scope.get((row_branch, row_item), []),
+                "valuation_complete": uncosted == 0,
+            }
+        )
+    return {
+        "items": items,
+        "count": len(items),
+        "valuation_method": "fifo_receipt_cost_layers",
+        "valuation_status": "partial" if has_uncosted_stock else "costed_stock_only",
+        "currency_aggregation": "separate_currency_buckets_no_conversion",
+    }
+
+
 @router.post("/purchase-orders/{purchase_order_id}/receipts", status_code=201)
 async def receive_purchase_order(
     purchase_order_id: str,
@@ -547,6 +648,7 @@ async def receive_purchase_order(
                 unit_code=po_line.unit_code,
                 unit_cost=po_line.unit_cost,
                 currency=po.currency,
+                received_at=datetime.now(UTC),
             )
         )
     po.status = (

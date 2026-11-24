@@ -19,6 +19,7 @@ from veristock.identity.authorization_dependencies import (
     require_permission,
 )
 from veristock.identity.models import User
+from veristock.inventory.costing import allocate_fifo_cost
 from veristock.inventory.models import (
     BatchStockBalance,
     InventoryBatch,
@@ -26,6 +27,7 @@ from veristock.inventory.models import (
     StockBalance,
     StockMovement,
 )
+from veristock.inventory.procurement import InventoryCostAllocation, InventoryCostLayer
 from veristock.inventory.transfers import StockTransfer, StockTransferLine
 from veristock.organizations.models import Branch
 
@@ -334,22 +336,23 @@ async def dispatch_transfer(
             batch_balance.quantity_on_hand -= line.quantity
         balance.quantity_on_hand -= line.quantity
         balance.version += 1
-        session.add(
-            StockMovement(
-                id=str(uuid4()),
-                organization_id=organization.id,
-                branch_id=transfer.source_branch_id,
-                item_id=line.item_id,
-                batch_id=line.batch_id,
-                quantity_delta=-line.quantity,
-                unit_code=line.unit_code,
-                source_type="stock_transfer",
-                source_id=transfer.id,
-                reason=f"Transfer {transfer.reference} dispatched",
-                idempotency_key=f"transfer:{transfer.id}:dispatch:{line.id}",
-                actor_user_id=user.id,
-            )
+        movement = StockMovement(
+            id=str(uuid4()),
+            organization_id=organization.id,
+            branch_id=transfer.source_branch_id,
+            item_id=line.item_id,
+            batch_id=line.batch_id,
+            quantity_delta=-line.quantity,
+            unit_code=line.unit_code,
+            source_type="stock_transfer",
+            source_id=transfer.id,
+            reason=f"Transfer {transfer.reference} dispatched",
+            idempotency_key=f"transfer:{transfer.id}:dispatch:{line.id}",
+            actor_user_id=user.id,
         )
+        session.add(movement)
+        await session.flush()
+        await allocate_fifo_cost(session, movement)
     transfer.status = "dispatched"
     transfer.dispatched_by_user_id = user.id
     transfer.dispatched_at = datetime.now(UTC)
@@ -461,6 +464,46 @@ async def receive_transfer(
                 )
                 session.add(destination_batch_balance)
             destination_batch_balance.quantity_on_hand += line.quantity
+        source_movement = await session.scalar(
+            select(StockMovement).where(
+                StockMovement.organization_id == organization.id,
+                StockMovement.source_type == "stock_transfer",
+                StockMovement.source_id == transfer.id,
+                StockMovement.idempotency_key == f"transfer:{transfer.id}:dispatch:{line.id}",
+            )
+        )
+        if source_movement is None:
+            raise HTTPException(status_code=409, detail="Transfer dispatch ledger entry is missing")
+        source_allocations = list(
+            (
+                await session.scalars(
+                    select(InventoryCostAllocation)
+                    .where(InventoryCostAllocation.stock_movement_id == source_movement.id)
+                    .order_by(InventoryCostAllocation.id)
+                )
+            ).all()
+        )
+        for allocation in source_allocations:
+            source_layer = await session.get(InventoryCostLayer, allocation.cost_layer_id)
+            if source_layer is None:
+                raise HTTPException(status_code=409, detail="Transfer source cost layer is missing")
+            session.add(
+                InventoryCostLayer(
+                    organization_id=organization.id,
+                    branch_id=transfer.destination_branch_id,
+                    item_id=line.item_id,
+                    batch_id=destination_batch_id,
+                    goods_receipt_line_id=None,
+                    purchase_order_line_id=None,
+                    source_transfer_line_id=line.id,
+                    source_cost_layer_id=source_layer.id,
+                    received_quantity=allocation.quantity,
+                    remaining_quantity=allocation.quantity,
+                    unit_code=source_layer.unit_code,
+                    unit_cost=allocation.unit_cost,
+                    currency=allocation.currency,
+                )
+            )
         session.add(
             StockMovement(
                 id=str(uuid4()),

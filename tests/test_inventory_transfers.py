@@ -191,6 +191,16 @@ def test_transfer_dispatch_receive_is_idempotent_and_moves_batches(tmp_path) -> 
             ).status_code
             == 200
         )
+        valuation = client.get(
+            "/api/procurement/valuation/on-hand",
+            headers=headers,
+            params={"branch_id": destination_id},
+        )
+        assert valuation.status_code == 200, valuation.text
+        valuation_items = {entry["item_id"]: entry for entry in valuation.json()["items"]}
+        assert valuation_items[item_batch_id]["uncosted_quantity"] == "2.0000"
+        assert valuation_items[item_bulk_id]["uncosted_quantity"] == "3.0000"
+        assert valuation.json()["valuation_status"] == "partial"
 
         async def verify_destination() -> tuple[Decimal, Decimal, int]:
             async with factory() as session:
