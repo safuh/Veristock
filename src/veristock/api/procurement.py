@@ -31,6 +31,7 @@ from veristock.inventory.models import (
 from veristock.inventory.procurement import (
     GoodsReceipt,
     GoodsReceiptLine,
+    InventoryCostLayer,
     PurchaseOrder,
     PurchaseOrderLine,
 )
@@ -87,9 +88,13 @@ def _po_read(po: PurchaseOrder) -> dict[str, object]:
         "expected_delivery_date": po.expected_delivery_date,
         "completed_at": po.completed_at,
         "delivery_status": (
-            "not_scheduled" if po.expected_delivery_date is None else
-            "pending" if po.completed_at is None else
-            "on_time" if po.completed_at.date() <= po.expected_delivery_date else "late"
+            "not_scheduled"
+            if po.expected_delivery_date is None
+            else "pending"
+            if po.completed_at is None
+            else "on_time"
+            if po.completed_at.date() <= po.expected_delivery_date
+            else "late"
         ),
         "lines": [
             {
@@ -255,6 +260,52 @@ async def issue_purchase_order(
     await session.commit()
     await session.refresh(po, attribute_names=["lines"])
     return _po_read(po)
+
+
+@router.get("/valuation/cost-layers")
+async def list_inventory_cost_layers(
+    organization: Reader,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    branch_id: str | None = None,
+    item_id: str | None = None,
+    limit: int = 100,
+) -> dict[str, object]:
+    """List known receipt cost bases, not a complete on-hand valuation."""
+    statement = select(InventoryCostLayer).where(
+        InventoryCostLayer.organization_id == organization.id
+    )
+    if branch_id is not None:
+        await require_branch_assignment(session, user, organization, branch_id)
+        statement = statement.where(InventoryCostLayer.branch_id == branch_id)
+    if item_id is not None:
+        statement = statement.where(InventoryCostLayer.item_id == item_id)
+    statement = statement.order_by(InventoryCostLayer.received_at.desc()).limit(
+        min(max(limit, 1), 500)
+    )
+    layers = list((await session.scalars(statement)).all())
+    return {
+        "items": [
+            {
+                "id": layer.id,
+                "branch_id": layer.branch_id,
+                "item_id": layer.item_id,
+                "batch_id": layer.batch_id,
+                "goods_receipt_line_id": layer.goods_receipt_line_id,
+                "purchase_order_line_id": layer.purchase_order_line_id,
+                "received_quantity": layer.received_quantity,
+                "remaining_quantity": layer.remaining_quantity,
+                "unit_code": layer.unit_code,
+                "unit_cost": layer.unit_cost,
+                "currency": layer.currency,
+                "received_at": layer.received_at,
+                "remaining_cost": layer.remaining_quantity * layer.unit_cost,
+            }
+            for layer in layers
+        ],
+        "count": len(layers),
+        "valuation_status": "receipt_cost_layers_only",
+    }
 
 
 @router.post("/purchase-orders/{purchase_order_id}/receipts", status_code=201)
@@ -474,14 +525,28 @@ async def receive_purchase_order(
             )
         )
         po_line.received_quantity += input_line.quantity
-        receipt.lines.append(
-            GoodsReceiptLine(
-                id=str(uuid4()),
+        receipt_line = GoodsReceiptLine(
+            id=str(uuid4()),
+            organization_id=organization.id,
+            purchase_order_line_id=po_line.id,
+            item_id=item.id,
+            quantity=input_line.quantity,
+            batch_id=batch_id,
+        )
+        receipt.lines.append(receipt_line)
+        session.add(
+            InventoryCostLayer(
                 organization_id=organization.id,
-                purchase_order_line_id=po_line.id,
+                branch_id=po.branch_id,
                 item_id=item.id,
-                quantity=input_line.quantity,
                 batch_id=batch_id,
+                goods_receipt_line_id=receipt_line.id,
+                purchase_order_line_id=po_line.id,
+                received_quantity=input_line.quantity,
+                remaining_quantity=input_line.quantity,
+                unit_code=po_line.unit_code,
+                unit_cost=po_line.unit_cost,
+                currency=po.currency,
             )
         )
     po.status = (

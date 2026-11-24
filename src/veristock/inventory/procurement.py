@@ -150,6 +150,50 @@ class GoodsReceiptLine(Base):
     )
 
 
+class InventoryCostLayer(Base):
+    """Immutable receipt cost basis with a separately maintained unconsumed quantity."""
+
+    __tablename__ = "inventory_cost_layers"
+    __table_args__ = (
+        CheckConstraint("received_quantity > 0", name="ck_cost_layers_received_positive"),
+        CheckConstraint(
+            "remaining_quantity >= 0 AND remaining_quantity <= received_quantity",
+            name="ck_cost_layers_remaining_range",
+        ),
+        CheckConstraint("unit_cost >= 0", name="ck_cost_layers_unit_cost_nonnegative"),
+        UniqueConstraint("goods_receipt_line_id", name="uq_cost_layers_receipt_line"),
+        Index("ix_cost_layers_scope", "organization_id", "branch_id", "item_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    branch_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("branches.id", ondelete="RESTRICT"), nullable=False
+    )
+    item_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inventory_items.id", ondelete="RESTRICT"), nullable=False
+    )
+    batch_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("inventory_batches.id", ondelete="RESTRICT")
+    )
+    goods_receipt_line_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("goods_receipt_lines.id", ondelete="RESTRICT"), nullable=False
+    )
+    purchase_order_line_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("purchase_order_lines.id", ondelete="RESTRICT"), nullable=False
+    )
+    received_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    remaining_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    unit_code: Mapped[str] = mapped_column(String(24), nullable=False)
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class SupplierReturn(Base):
     __tablename__ = "supplier_returns"
     __table_args__ = (

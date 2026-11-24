@@ -30,7 +30,11 @@ from veristock.inventory.models import (
     StockMovement,
     Supplier,
 )
-from veristock.inventory.procurement import GoodsReceipt, PurchaseOrder
+from veristock.inventory.procurement import (
+    GoodsReceipt,
+    InventoryCostLayer,
+    PurchaseOrder,
+)
 from veristock.organizations.models import Branch
 
 
@@ -184,15 +188,20 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
             json=second_receipt,
         )
         assert completed.status_code == 201, completed.text
-        completed_po = client.get(
-            "/api/procurement/purchase-orders", headers=headers
-        ).json()[0]
+        completed_po = client.get("/api/procurement/purchase-orders", headers=headers).json()[0]
         assert completed_po["delivery_status"] == "on_time"
         assert completed_po["completed_at"] is not None
         assert (
             client.get("/api/procurement/purchase-orders", headers=headers).json()[0]["status"]
             == "received"
         )
+        cost_layers = client.get("/api/procurement/valuation/cost-layers", headers=headers)
+        assert cost_layers.status_code == 200, cost_layers.text
+        assert cost_layers.json()["valuation_status"] == "receipt_cost_layers_only"
+        assert len(cost_layers.json()["items"]) == 2
+        assert sum(
+            Decimal(str(layer["received_quantity"])) for layer in cost_layers.json()["items"]
+        ) == Decimal("10.0000")
 
         return_payload = {
             "reference": "RET-001",
@@ -231,9 +240,7 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
             == "dispatched"
         )
 
-        performance = client.get(
-            f"/api/suppliers/{supplier_id}/performance", headers=headers
-        )
+        performance = client.get(f"/api/suppliers/{supplier_id}/performance", headers=headers)
         assert performance.status_code == 200, performance.text
         metrics = performance.json()
         assert metrics["purchase_order_count"] == 1
@@ -335,6 +342,15 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
                     )
                 ).all()
             )
+            cost_layers = list(
+                (
+                    await session.scalars(
+                        select(InventoryCostLayer).where(
+                            InventoryCostLayer.organization_id == org_id
+                        )
+                    )
+                ).all()
+            )
             assert (
                 balance is not None
                 and batch is not None
@@ -358,6 +374,9 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
             assert po.status == "received"
             assert len(movements) == 2
             assert len(receipts) == 2
+            assert len(cost_layers) == 2
+            assert sum(layer.received_quantity for layer in cost_layers) == Decimal("10.0000")
+            assert all(layer.remaining_quantity == layer.received_quantity for layer in cost_layers)
 
     asyncio.run(verify_ledger())
     asyncio.run(engine.dispose())
