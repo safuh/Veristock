@@ -324,6 +324,34 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
             },
         )
         assert sale.status_code == 201, sale.text
+        movement_costs = client.get(
+            "/api/procurement/valuation/movement-costs",
+            headers=headers,
+            params={"branch_id": branch_id, "item_id": item_id},
+        )
+        assert movement_costs.status_code == 200, movement_costs.text
+        cost_report = movement_costs.json()
+        assert cost_report["currency_aggregation"] == "separate_currency_buckets_no_conversion"
+        assert {event["event_type"] for event in cost_report["events"]} == {
+            "cost_consumption",
+        }
+        assert cost_report["summary"][0]["consumed_quantity"] == "5.0000"
+        assert cost_report["summary"][0]["consumed_cost"] == "627.5000"
+        sale_costs = client.get(
+            "/api/procurement/valuation/movement-costs",
+            headers=headers,
+            params={"branch_id": branch_id, "item_id": item_id, "source_type": "sale"},
+        )
+        assert sale_costs.status_code == 200, sale_costs.text
+        assert sale_costs.json()["summary"][0]["consumed_quantity"] == "3.0000"
+        assert sale_costs.json()["summary"][0]["consumed_cost"] == "376.5000"
+        invalid_period = client.get(
+            "/api/procurement/valuation/movement-costs",
+            headers=headers,
+            params={"from_date": "2026-12-31", "to_date": "2026-01-01"},
+        )
+        assert invalid_period.status_code == 422
+
         valuation = client.get(
             "/api/procurement/valuation/on-hand",
             headers=headers,
