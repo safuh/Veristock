@@ -245,6 +245,44 @@ class InventoryCostAllocation(Base):
     )
 
 
+class InventoryCostRestoration(Base):
+    """Immutable audit record for FIFO cost returned by a stock reversal."""
+
+    __tablename__ = "inventory_cost_restorations"
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_cost_restorations_quantity_positive"),
+        CheckConstraint("unit_cost >= 0", name="ck_cost_restorations_unit_cost_nonnegative"),
+        CheckConstraint("extended_cost >= 0", name="ck_cost_restorations_extended_nonnegative"),
+        UniqueConstraint(
+            "reversal_movement_id",
+            "original_allocation_id",
+            name="uq_cost_restoration_reversal_allocation",
+        ),
+        Index("ix_cost_restorations_org_layer", "organization_id", "cost_layer_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    reversal_movement_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("stock_movements.id", ondelete="RESTRICT"), nullable=False
+    )
+    original_allocation_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inventory_cost_allocations.id", ondelete="RESTRICT"), nullable=False
+    )
+    cost_layer_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inventory_cost_layers.id", ondelete="RESTRICT"), nullable=False
+    )
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    extended_cost: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    restored_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class SupplierReturn(Base):
     __tablename__ = "supplier_returns"
     __table_args__ = (

@@ -35,7 +35,11 @@ from veristock.inventory.models import (
     StockBalance,
     StockMovement,
 )
-from veristock.inventory.procurement import InventoryCostAllocation, InventoryCostLayer
+from veristock.inventory.procurement import (
+    InventoryCostAllocation,
+    InventoryCostLayer,
+    InventoryCostRestoration,
+)
 from veristock.organizations.models import Branch
 
 router = APIRouter(tags=["sales"])
@@ -639,6 +643,18 @@ async def reverse_manual_stock_adjustment(
                     detail="Original FIFO cost layer cannot be restored safely",
                 )
             layer.remaining_quantity += allocation.quantity
+            session.add(
+                InventoryCostRestoration(
+                    organization_id=organization.id,
+                    reversal_movement_id=reversal.id,
+                    original_allocation_id=allocation.id,
+                    cost_layer_id=layer.id,
+                    quantity=allocation.quantity,
+                    unit_cost=allocation.unit_cost,
+                    extended_cost=allocation.extended_cost,
+                    currency=allocation.currency,
+                )
+            )
 
     try:
         await session.commit()

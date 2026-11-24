@@ -1,11 +1,11 @@
 """Purchase-order issue and partial goods-receipt workflows."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -31,7 +31,9 @@ from veristock.inventory.models import (
 from veristock.inventory.procurement import (
     GoodsReceipt,
     GoodsReceiptLine,
+    InventoryCostAllocation,
     InventoryCostLayer,
+    InventoryCostRestoration,
     PurchaseOrder,
     PurchaseOrderLine,
 )
@@ -406,6 +408,179 @@ async def get_on_hand_inventory_valuation(
         "valuation_method": "fifo_receipt_cost_layers",
         "valuation_status": "partial" if has_uncosted_stock else "costed_stock_only",
         "currency_aggregation": "separate_currency_buckets_no_conversion",
+    }
+
+
+@router.get("/valuation/movement-costs")
+async def get_inventory_movement_costs(
+    organization: Reader,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    branch_id: str | None = None,
+    item_id: str | None = None,
+    source_type: str | None = Query(default=None, min_length=1, max_length=40),
+    from_date: date | None = None,
+    to_date: date | None = None,
+    limit: int = Query(default=200, ge=1, le=1000),
+) -> dict[str, object]:
+    """Audit FIFO cost consumption and subsequent cost restorations without FX netting."""
+    if from_date and to_date and from_date > to_date:
+        raise HTTPException(status_code=422, detail="from_date must not follow to_date")
+
+    movement_query = (
+        select(StockMovement, InventoryItem.name, InventoryItem.sku)
+        .join(
+            InventoryItem,
+            (InventoryItem.id == StockMovement.item_id)
+            & (InventoryItem.organization_id == StockMovement.organization_id),
+        )
+        .where(StockMovement.organization_id == organization.id)
+    )
+    if branch_id is not None:
+        await require_branch_assignment(session, user, organization, branch_id)
+        movement_query = movement_query.where(StockMovement.branch_id == branch_id)
+    if item_id is not None:
+        movement_query = movement_query.where(StockMovement.item_id == item_id)
+    if source_type is not None:
+        movement_query = movement_query.where(StockMovement.source_type == source_type)
+    if from_date is not None:
+        movement_query = movement_query.where(
+            StockMovement.occurred_at >= datetime.combine(from_date, time.min, tzinfo=UTC)
+        )
+    if to_date is not None:
+        movement_query = movement_query.where(
+            StockMovement.occurred_at
+            < datetime.combine(to_date + timedelta(days=1), time.min, tzinfo=UTC)
+        )
+    movement_query = movement_query.order_by(StockMovement.occurred_at.desc()).limit(limit)
+    movement_rows = (await session.execute(movement_query)).all()
+
+    movement_ids = [row[0].id for row in movement_rows]
+    allocation_rows = []
+    restoration_rows = []
+    if movement_ids:
+        allocation_rows = list(
+            (
+                await session.scalars(
+                    select(InventoryCostAllocation).where(
+                        InventoryCostAllocation.organization_id == organization.id,
+                        InventoryCostAllocation.stock_movement_id.in_(movement_ids),
+                    )
+                )
+            ).all()
+        )
+        restoration_rows = list(
+            (
+                await session.scalars(
+                    select(InventoryCostRestoration).where(
+                        InventoryCostRestoration.organization_id == organization.id,
+                        InventoryCostRestoration.reversal_movement_id.in_(movement_ids),
+                    )
+                )
+            ).all()
+        )
+
+    allocations_by_movement: dict[str, list[InventoryCostAllocation]] = {}
+    for allocation in allocation_rows:
+        allocations_by_movement.setdefault(allocation.stock_movement_id, []).append(allocation)
+    restorations_by_movement: dict[str, list[InventoryCostRestoration]] = {}
+    for restoration in restoration_rows:
+        restorations_by_movement.setdefault(restoration.reversal_movement_id, []).append(
+            restoration
+        )
+
+    events: list[dict[str, object]] = []
+    buckets: dict[tuple[str, str, str, str], dict[str, Decimal]] = {}
+    for movement, item_name, sku in movement_rows:
+        for allocation in allocations_by_movement.get(movement.id, []):
+            events.append(
+                {
+                    "event_type": "cost_consumption",
+                    "movement_id": movement.id,
+                    "source_type": movement.source_type,
+                    "source_id": movement.source_id,
+                    "branch_id": movement.branch_id,
+                    "item_id": movement.item_id,
+                    "sku": sku,
+                    "item_name": item_name,
+                    "unit_code": movement.unit_code,
+                    "quantity": allocation.quantity,
+                    "unit_cost": allocation.unit_cost,
+                    "extended_cost": allocation.extended_cost,
+                    "currency": allocation.currency,
+                    "occurred_at": allocation.allocated_at,
+                    "cost_layer_id": allocation.cost_layer_id,
+                }
+            )
+            key = (movement.branch_id, movement.item_id, movement.unit_code, allocation.currency)
+            bucket = buckets.setdefault(
+                key,
+                {
+                    "consumed_quantity": Decimal(0),
+                    "consumed_cost": Decimal(0),
+                    "restored_quantity": Decimal(0),
+                    "restored_cost": Decimal(0),
+                },
+            )
+            bucket["consumed_quantity"] += allocation.quantity
+            bucket["consumed_cost"] += allocation.extended_cost
+        for restoration in restorations_by_movement.get(movement.id, []):
+            events.append(
+                {
+                    "event_type": "cost_restoration",
+                    "movement_id": movement.id,
+                    "source_type": movement.source_type,
+                    "source_id": movement.source_id,
+                    "branch_id": movement.branch_id,
+                    "item_id": movement.item_id,
+                    "sku": sku,
+                    "item_name": item_name,
+                    "unit_code": movement.unit_code,
+                    "quantity": restoration.quantity,
+                    "unit_cost": restoration.unit_cost,
+                    "extended_cost": restoration.extended_cost,
+                    "currency": restoration.currency,
+                    "occurred_at": restoration.restored_at,
+                    "cost_layer_id": restoration.cost_layer_id,
+                    "original_allocation_id": restoration.original_allocation_id,
+                }
+            )
+            key = (movement.branch_id, movement.item_id, movement.unit_code, restoration.currency)
+            bucket = buckets.setdefault(
+                key,
+                {
+                    "consumed_quantity": Decimal(0),
+                    "consumed_cost": Decimal(0),
+                    "restored_quantity": Decimal(0),
+                    "restored_cost": Decimal(0),
+                },
+            )
+            bucket["restored_quantity"] += restoration.quantity
+            bucket["restored_cost"] += restoration.extended_cost
+
+    events.sort(key=lambda event: str(event["occurred_at"]), reverse=True)
+    summaries = [
+        {
+            "branch_id": key[0],
+            "item_id": key[1],
+            "unit_code": key[2],
+            "currency": key[3],
+            **values,
+            "net_consumed_quantity": values["consumed_quantity"] - values["restored_quantity"],
+            "net_consumed_cost": values["consumed_cost"] - values["restored_cost"],
+        }
+        for key, values in sorted(buckets.items())
+    ]
+    return {
+        "events": events,
+        "count": len(events),
+        "summary": summaries,
+        "summary_count": len(summaries),
+        "currency_aggregation": "separate_currency_buckets_no_conversion",
+        "scope_note": (
+            "Only movements with FIFO allocations or audited restorations appear; "
+            "uncosted quantities remain visible in the on-hand valuation report."
+        ),
     }
 
 
