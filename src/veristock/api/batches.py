@@ -1,6 +1,6 @@
 """Tenant- and branch-scoped batch receiving, FEFO issue and expiry visibility."""
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import uuid4
@@ -27,6 +27,7 @@ from veristock.inventory.models import (
     StockBalance,
     StockMovement,
 )
+from veristock.inventory.procurement import InventoryCostLayer
 from veristock.organizations.models import Branch
 
 router = APIRouter(prefix="/inventory/batches", tags=["inventory-batches"])
@@ -382,8 +383,6 @@ async def list_batches(
     expiring_within_days: int | None = Query(default=None, ge=0, le=3650),
     limit: int = Query(default=100, ge=1, le=500),
 ) -> list[BatchRead]:
-    from datetime import timedelta
-
     allowed = await accessible_branch_ids(session, user, organization)
     if branch_id and allowed is not None and branch_id not in allowed:
         raise HTTPException(status_code=404, detail="Branch not found")
@@ -431,6 +430,136 @@ async def list_batches(
         )
         for b, bal in rows
     ]
+
+
+@router.get("/expiry-risk")
+async def expiry_risk_report(
+    organization: BatchReader,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    branch_id: str | None = None,
+    item_id: str | None = None,
+    as_of_date: date | None = None,
+) -> dict[str, object]:
+    """Show expiring stock and substantiated remaining cost without currency conversion."""
+    as_of_date = as_of_date or date.today()
+    allowed = await accessible_branch_ids(session, user, organization)
+    if branch_id and allowed is not None and branch_id not in allowed:
+        raise HTTPException(status_code=404, detail="Branch not found")
+    stmt = (
+        select(InventoryBatch, BatchStockBalance, InventoryItem)
+        .join(BatchStockBalance, BatchStockBalance.batch_id == InventoryBatch.id)
+        .join(InventoryItem, InventoryItem.id == InventoryBatch.item_id)
+        .where(
+            InventoryBatch.organization_id == organization.id,
+            BatchStockBalance.organization_id == organization.id,
+            InventoryBatch.status != "closed",
+            BatchStockBalance.quantity_on_hand > 0,
+            InventoryBatch.expiry_date.is_not(None),
+        )
+    )
+    if branch_id:
+        stmt = stmt.where(InventoryBatch.branch_id == branch_id)
+    elif allowed is not None:
+        stmt = stmt.where(InventoryBatch.branch_id.in_(allowed))
+    if item_id:
+        stmt = stmt.where(InventoryBatch.item_id == item_id)
+    rows = (
+        await session.execute(stmt.order_by(InventoryBatch.expiry_date, InventoryBatch.lot_code))
+    ).all()
+    batch_ids = [batch.id for batch, _, _ in rows]
+    layers = []
+    if batch_ids:
+        layers = list(
+            (
+                await session.scalars(
+                    select(InventoryCostLayer)
+                    .where(
+                        InventoryCostLayer.organization_id == organization.id,
+                        InventoryCostLayer.batch_id.in_(batch_ids),
+                        InventoryCostLayer.remaining_quantity > 0,
+                    )
+                    .order_by(InventoryCostLayer.received_at, InventoryCostLayer.id)
+                )
+            ).all()
+        )
+    by_batch: dict[str, list[InventoryCostLayer]] = {}
+    for layer in layers:
+        by_batch.setdefault(layer.batch_id or "", []).append(layer)
+    lines: list[dict[str, object]] = []
+    totals: dict[str, dict[str, int | Decimal]] = {}
+    for batch, balance, item in rows:
+        days = (batch.expiry_date - as_of_date).days
+        if days < 0:
+            bucket = "expired"
+        elif days <= 30:
+            bucket = "0_30_days"
+        elif days <= 60:
+            bucket = "31_60_days"
+        elif days <= 90:
+            bucket = "61_90_days"
+        else:
+            bucket = "over_90_days"
+        cost_buckets: dict[str, dict[str, str]] = {}
+        costed_qty = Decimal("0")
+        for layer in by_batch.get(batch.id, []):
+            costed_qty += layer.remaining_quantity
+            currency = layer.currency
+            current = cost_buckets.setdefault(currency, {"quantity": "0", "carrying_value": "0"})
+            current["quantity"] = str(Decimal(current["quantity"]) + layer.remaining_quantity)
+            current["carrying_value"] = str(
+                Decimal(current["carrying_value"]) + layer.remaining_quantity * layer.unit_cost
+            )
+        quantity = balance.quantity_on_hand
+        # Cost layers are evidence, not a substitute for the stock ledger. Flag any mismatch.
+        uncosted = max(Decimal("0"), quantity - costed_qty)
+        line = {
+            "batch_id": batch.id,
+            "branch_id": batch.branch_id,
+            "item_id": item.id,
+            "sku": item.sku,
+            "item_name": item.name,
+            "unit_code": item.base_unit_code,
+            "lot_code": batch.lot_code,
+            "batch_status": batch.status,
+            "expiry_date": batch.expiry_date,
+            "days_to_expiry": days,
+            "risk_bucket": bucket,
+            "quantity_on_hand": quantity,
+            "costed_quantity": costed_qty,
+            "uncosted_quantity": uncosted,
+            "cost_by_currency": cost_buckets,
+            "cost_coverage_mismatch": costed_qty > quantity,
+        }
+        lines.append(line)
+        summary = totals.setdefault(
+            bucket,
+            {
+                "batch_count": 0,
+                "quantity_on_hand": Decimal("0"),
+                "costed_quantity": Decimal("0"),
+                "uncosted_quantity": Decimal("0"),
+            },
+        )
+        count = summary["batch_count"]
+        on_hand = summary["quantity_on_hand"]
+        costed = summary["costed_quantity"]
+        uncosted_total = summary["uncosted_quantity"]
+        assert isinstance(count, int)
+        assert isinstance(on_hand, Decimal)
+        assert isinstance(costed, Decimal)
+        assert isinstance(uncosted_total, Decimal)
+        summary["batch_count"] = count + 1
+        summary["quantity_on_hand"] = on_hand + quantity
+        summary["costed_quantity"] = costed + min(costed_qty, quantity)
+        summary["uncosted_quantity"] = uncosted_total + uncosted
+    return {
+        "as_of_date": as_of_date,
+        "valuation_policy": "remaining_fifo_cost_layers_only; currencies_separate; no_conversion",
+        "lines": lines,
+        "summary": {key: value for key, value in totals.items()},
+        "line_count": len(lines),
+    }
 
 
 @router.patch("/{batch_id}/status", response_model=BatchRead)

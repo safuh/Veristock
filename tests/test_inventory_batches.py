@@ -168,6 +168,34 @@ def test_batch_receiving_fefo_issue_and_quarantine(tmp_path) -> None:
         )
         assert Decimal(late_after_reversal["quantity_on_hand"]) == Decimal("5.0000")
 
+        expired = client.post(
+            "/api/inventory/batches/receive",
+            headers=headers,
+            json={
+                "branch_id": branch_id,
+                "item_id": item_id,
+                "lot_code": "LOT-EXPIRED",
+                "quantity": "2",
+                "expiry_date": (today - timedelta(days=1)).isoformat(),
+                "idempotency_key": "batch-receive-expired-01",
+            },
+        )
+        assert expired.status_code == 201, expired.text
+        expiry_report = client.get(
+            "/api/inventory/batches/expiry-risk",
+            headers=headers,
+            params={"item_id": item_id, "as_of_date": today.isoformat()},
+        )
+        assert expiry_report.status_code == 200, expiry_report.text
+        expiry_data = expiry_report.json()
+        assert expiry_data["line_count"] == 3
+        expired_line = next(
+            row for row in expiry_data["lines"] if row["batch_id"] == expired.json()["id"]
+        )
+        assert expired_line["risk_bucket"] == "expired"
+        assert Decimal(expired_line["uncosted_quantity"]) == Decimal("2.0000")
+        assert expiry_data["valuation_policy"].startswith("remaining_fifo_cost_layers_only")
+
         issue_payload = {
             "branch_id": branch_id,
             "item_id": item_id,
