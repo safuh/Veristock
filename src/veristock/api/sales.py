@@ -25,6 +25,7 @@ from veristock.identity.authorization_dependencies import (
 )
 from veristock.identity.models import User
 from veristock.inventory.batches import allocate_fefo
+from veristock.inventory.costing import allocate_fifo_cost
 from veristock.inventory.models import (
     BatchStockBalance,
     InventoryBatch,
@@ -786,37 +787,37 @@ async def post_sale(
         movement_index = 0
         for batch_balance, allocated_quantity in allocations:
             batch_balance.quantity_on_hand -= allocated_quantity
-            session.add(
-                StockMovement(
-                    id=str(uuid4()),
-                    organization_id=organization.id,
-                    branch_id=branch.id,
-                    item_id=item.id,
-                    batch_id=batch_balance.batch_id,
-                    quantity_delta=-allocated_quantity,
-                    unit_code=item.base_unit_code,
-                    source_type="sale",
-                    source_id=sale_id,
-                    idempotency_key=f"sale:{sale_id}:{index}:batch:{movement_index}",
-                    actor_user_id=user.id,
-                )
+            movement = StockMovement(
+                id=str(uuid4()),
+                organization_id=organization.id,
+                branch_id=branch.id,
+                item_id=item.id,
+                batch_id=batch_balance.batch_id,
+                quantity_delta=-allocated_quantity,
+                unit_code=item.base_unit_code,
+                source_type="sale",
+                source_id=sale_id,
+                idempotency_key=f"sale:{sale_id}:{index}:batch:{movement_index}",
+                actor_user_id=user.id,
             )
+            session.add(movement)
+            await allocate_fifo_cost(session, movement)
             movement_index += 1
         if legacy_quantity > 0:
-            session.add(
-                StockMovement(
-                    id=str(uuid4()),
-                    organization_id=organization.id,
-                    branch_id=branch.id,
-                    item_id=item.id,
-                    quantity_delta=-legacy_quantity,
-                    unit_code=item.base_unit_code,
-                    source_type="sale",
-                    source_id=sale_id,
-                    idempotency_key=f"sale:{sale_id}:{index}:legacy",
-                    actor_user_id=user.id,
-                )
+            movement = StockMovement(
+                id=str(uuid4()),
+                organization_id=organization.id,
+                branch_id=branch.id,
+                item_id=item.id,
+                quantity_delta=-legacy_quantity,
+                unit_code=item.base_unit_code,
+                source_type="sale",
+                source_id=sale_id,
+                idempotency_key=f"sale:{sale_id}:{index}:legacy",
+                actor_user_id=user.id,
             )
+            session.add(movement)
+            await allocate_fifo_cost(session, movement)
     try:
         await session.commit()
     except IntegrityError as exc:

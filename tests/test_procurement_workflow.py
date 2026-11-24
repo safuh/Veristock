@@ -32,6 +32,7 @@ from veristock.inventory.models import (
 )
 from veristock.inventory.procurement import (
     GoodsReceipt,
+    InventoryCostAllocation,
     InventoryCostLayer,
     PurchaseOrder,
 )
@@ -82,7 +83,7 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
                     ),
                 ]
             )
-            for code in ("inventory.manage", "inventory.read"):
+            for code in ("inventory.manage", "inventory.read", "sales.record"):
                 permission = Permission(id=str(uuid4()), code=code, description=code)
                 session.add(permission)
                 session.add(RolePermission(role_id=role_id, permission_id=permission.id))
@@ -304,6 +305,26 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
             == 409
         )
 
+        sale = client.post(
+            "/api/sales",
+            headers=headers,
+            json={
+                "branch_id": branch_id,
+                "idempotency_key": "sale-cost-layer-0001",
+                "reference": "POS-COST-001",
+                "lines": [
+                    {
+                        "item_id": item_id,
+                        "quantity": "3",
+                        "unit_code": "KG",
+                        "unit_price": "150",
+                        "currency": "KES",
+                    }
+                ],
+            },
+        )
+        assert sale.status_code == 201, sale.text
+
     async def verify_ledger() -> None:
         async with factory() as session:
             balance = await session.scalar(
@@ -357,8 +378,8 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
                 and batch_balance is not None
                 and po is not None
             )
-            assert balance.quantity_on_hand == Decimal("8.0000")
-            assert batch_balance.quantity_on_hand == Decimal("8.0000")
+            assert balance.quantity_on_hand == Decimal("5.0000")
+            assert batch_balance.quantity_on_hand == Decimal("5.0000")
             return_movements = list(
                 (
                     await session.scalars(
@@ -376,7 +397,21 @@ def test_purchase_order_partial_receipts_update_stock_and_are_idempotent(tmp_pat
             assert len(receipts) == 2
             assert len(cost_layers) == 2
             assert sum(layer.received_quantity for layer in cost_layers) == Decimal("10.0000")
-            assert all(layer.remaining_quantity == layer.received_quantity for layer in cost_layers)
+            assert sum(layer.remaining_quantity for layer in cost_layers) == Decimal("7.0000")
+            allocations = list(
+                (
+                    await session.scalars(
+                        select(InventoryCostAllocation).where(
+                            InventoryCostAllocation.organization_id == org_id
+                        )
+                    )
+                ).all()
+            )
+            assert len(allocations) == 1
+            assert allocations[0].quantity == Decimal("3.0000")
+            assert allocations[0].unit_cost == Decimal("125.5000")
+            assert allocations[0].extended_cost == Decimal("376.5000")
+            assert allocations[0].currency == "KES"
 
     asyncio.run(verify_ledger())
     asyncio.run(engine.dispose())
