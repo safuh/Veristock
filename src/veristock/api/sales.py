@@ -130,6 +130,7 @@ class OpeningBalanceRead(BaseModel):
 class StockAdjustmentCreate(BaseModel):
     branch_id: str
     item_id: str
+    batch_id: str | None = None
     quantity_delta: Decimal = Field(max_digits=18, decimal_places=4)
     unit_code: str = Field(min_length=1, max_length=24)
     reason: str = Field(min_length=10, max_length=500)
@@ -153,6 +154,7 @@ class StockAdjustmentRead(BaseModel):
     movement_id: str
     branch_id: str
     item_id: str
+    batch_id: str | None
     quantity_delta: Decimal
     quantity_on_hand: Decimal
     unit_code: str
@@ -398,6 +400,7 @@ async def record_stock_adjustment(
             existing.source_type != "manual_adjustment"
             or existing.branch_id != payload.branch_id
             or existing.item_id != payload.item_id
+            or existing.batch_id != payload.batch_id
             or existing.quantity_delta != payload.quantity_delta
             or existing.unit_code != payload.unit_code
             or existing.reason != payload.reason
@@ -419,6 +422,7 @@ async def record_stock_adjustment(
             movement_id=existing.id,
             branch_id=existing.branch_id,
             item_id=existing.item_id,
+            batch_id=existing.batch_id,
             quantity_delta=existing.quantity_delta,
             quantity_on_hand=balance.quantity_on_hand,
             unit_code=existing.unit_code,
@@ -444,6 +448,51 @@ async def record_stock_adjustment(
     if payload.unit_code != item.base_unit_code.upper():
         raise HTTPException(status_code=422, detail="Unit does not match the item's base unit")
 
+    tracked_batch_id = await session.scalar(
+        select(InventoryBatch.id)
+        .where(
+            InventoryBatch.organization_id == organization.id,
+            InventoryBatch.branch_id == branch.id,
+            InventoryBatch.item_id == item.id,
+        )
+        .limit(1)
+    )
+    if tracked_batch_id is not None and payload.batch_id is None:
+        raise HTTPException(
+            status_code=422, detail="Batch ID is required for batch-tracked inventory adjustments"
+        )
+    batch_balance = None
+    if payload.batch_id is not None:
+        batch = await session.scalar(
+            select(InventoryBatch)
+            .where(
+                InventoryBatch.id == payload.batch_id,
+                InventoryBatch.organization_id == organization.id,
+                InventoryBatch.branch_id == branch.id,
+                InventoryBatch.item_id == item.id,
+                InventoryBatch.status != "closed",
+            )
+            .with_for_update()
+        )
+        if batch is None:
+            raise HTTPException(status_code=404, detail="Eligible inventory batch not found")
+        batch_balance = await session.scalar(
+            select(BatchStockBalance)
+            .where(
+                BatchStockBalance.organization_id == organization.id,
+                BatchStockBalance.branch_id == branch.id,
+                BatchStockBalance.item_id == item.id,
+                BatchStockBalance.batch_id == batch.id,
+            )
+            .with_for_update()
+        )
+        if batch_balance is None:
+            raise HTTPException(status_code=409, detail="Batch stock balance is unavailable")
+        if batch_balance.quantity_on_hand + payload.quantity_delta < 0:
+            raise HTTPException(
+                status_code=409, detail="Adjustment would make batch stock negative"
+            )
+
     balance = await session.scalar(
         select(StockBalance)
         .where(
@@ -467,6 +516,7 @@ async def record_stock_adjustment(
         organization_id=organization.id,
         branch_id=branch.id,
         item_id=item.id,
+        batch_id=payload.batch_id,
         quantity_delta=payload.quantity_delta,
         unit_code=item.base_unit_code,
         source_type="manual_adjustment",
@@ -476,6 +526,8 @@ async def record_stock_adjustment(
     )
     balance.quantity_on_hand = adjusted_quantity
     balance.version += 1
+    if batch_balance is not None:
+        batch_balance.quantity_on_hand += payload.quantity_delta
     session.add(movement)
     if movement.quantity_delta < 0:
         await allocate_fifo_cost(session, movement)
@@ -492,6 +544,7 @@ async def record_stock_adjustment(
         movement_id=movement.id,
         branch_id=branch.id,
         item_id=item.id,
+        batch_id=movement.batch_id,
         quantity_delta=movement.quantity_delta,
         quantity_on_hand=balance.quantity_on_hand,
         unit_code=item.base_unit_code,
@@ -591,6 +644,23 @@ async def reverse_manual_stock_adjustment(
 
     reversal_delta = -original.quantity_delta
     resulting_quantity = balance.quantity_on_hand + reversal_delta
+    batch_balance = None
+    if original.batch_id is not None:
+        batch_balance = await session.scalar(
+            select(BatchStockBalance)
+            .where(
+                BatchStockBalance.organization_id == organization.id,
+                BatchStockBalance.branch_id == original.branch_id,
+                BatchStockBalance.item_id == original.item_id,
+                BatchStockBalance.batch_id == original.batch_id,
+            )
+            .with_for_update()
+        )
+        if batch_balance is None or batch_balance.quantity_on_hand + reversal_delta < 0:
+            raise HTTPException(
+                status_code=409,
+                detail="Reversal would make batch stock negative or its balance is unavailable",
+            )
     if resulting_quantity < 0:
         raise HTTPException(
             status_code=409,
@@ -614,6 +684,8 @@ async def reverse_manual_stock_adjustment(
     )
     balance.quantity_on_hand = resulting_quantity
     balance.version += 1
+    if batch_balance is not None:
+        batch_balance.quantity_on_hand += reversal_delta
     session.add(reversal)
 
     # Reversing a shortage restores the exact FIFO layers consumed by the

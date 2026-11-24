@@ -122,6 +122,52 @@ def test_batch_receiving_fefo_issue_and_quarantine(tmp_path) -> None:
         early_balance = next(row for row in listed.json() if row["id"] == earlier.json()["id"])
         assert Decimal(early_balance["quantity_on_hand"]) == Decimal("2.0000")
 
+        missing_batch = client.post(
+            "/api/inventory/adjustments",
+            headers=headers,
+            json={
+                "branch_id": branch_id,
+                "item_id": item_id,
+                "quantity_delta": "-1",
+                "unit_code": "EA",
+                "reason": "Correct a verified batch count discrepancy",
+                "idempotency_key": "batch-adjustment-missing-01",
+            },
+        )
+        assert missing_batch.status_code == 422
+        batch_adjustment = client.post(
+            "/api/inventory/adjustments",
+            headers=headers,
+            json={
+                "branch_id": branch_id,
+                "item_id": item_id,
+                "batch_id": later.json()["id"],
+                "quantity_delta": "-1",
+                "unit_code": "EA",
+                "reason": "Write off one damaged unit from this lot",
+                "idempotency_key": "batch-adjustment-late-01",
+            },
+        )
+        assert batch_adjustment.status_code == 201, batch_adjustment.text
+        assert batch_adjustment.json()["batch_id"] == later.json()["id"]
+        batch_reversal = client.post(
+            f"/api/inventory/movements/{batch_adjustment.json()['movement_id']}/reversal",
+            headers=headers,
+            json={
+                "reason": "Restore the unit after correcting the damage record",
+                "idempotency_key": "batch-adjustment-reversal-01",
+            },
+        )
+        assert batch_reversal.status_code == 201, batch_reversal.text
+        assert batch_reversal.json()["batch_id"] == later.json()["id"]
+        listed_after_reversal = client.get(
+            "/api/inventory/batches", headers=headers, params={"item_id": item_id}
+        )
+        late_after_reversal = next(
+            row for row in listed_after_reversal.json() if row["id"] == later.json()["id"]
+        )
+        assert Decimal(late_after_reversal["quantity_on_hand"]) == Decimal("5.0000")
+
         issue_payload = {
             "branch_id": branch_id,
             "item_id": item_id,
